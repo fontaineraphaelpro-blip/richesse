@@ -1,11 +1,12 @@
 """
-Module pour récupérer les données OHLCV depuis Binance.
-Utilise l'API publique REST (pas besoin de clé API).
+Module pour récupérer les données OHLCV depuis Binance ou CoinGecko (fallback).
+Utilise l'API publique REST (pas besoin de clé).
 """
 
 import pandas as pd
 import time
 from binance_api import get_klines
+from coingecko_api import get_klines_coingecko
 from typing import Optional
 
 
