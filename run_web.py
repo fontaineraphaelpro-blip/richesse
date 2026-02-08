@@ -21,6 +21,8 @@ print(f"📂 Fichier web_app.py existe: {os.path.exists(os.path.join(src_path, '
 try:
     from web_app import app
     print("✅ Import de web_app réussi")
+    # Exporter l'app pour Gunicorn
+    application = app
 except ImportError as e:
     print(f"❌ Erreur d'import: {e}")
     print(f"📂 sys.path: {sys.path}")
