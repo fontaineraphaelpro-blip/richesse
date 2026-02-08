@@ -23,8 +23,13 @@ def get_top_usdt_pairs(client: Client, limit: int = 50) -> List[str]:
         Liste des symboles de paires (ex: ['BTCUSDT', 'ETHUSDT', ...])
     """
     try:
-        # Récupérer toutes les paires de trading
-        ticker_24h = client.get_ticker()
+        # Récupérer toutes les paires de trading avec gestion d'erreur
+        try:
+            ticker_24h = client.get_ticker()
+        except Exception as api_error:
+            print(f"⚠️ Erreur API Binance lors de la récupération des paires: {api_error}")
+            # Retourner la liste de fallback
+            raise api_error
         
         # Filtrer les paires USDT et exclure les stablecoins
         usdt_pairs = []

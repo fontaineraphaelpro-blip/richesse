@@ -30,9 +30,32 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # Initialiser le client Binance (pas besoin d'API key pour les données publiques)
+        # Initialiser le client Binance avec gestion d'erreur
         # Si vous avez des limites de rate, vous pouvez ajouter vos clés API
-        client = Client()
+        try:
+            api_key = os.environ.get('BINANCE_API_KEY')
+            api_secret = os.environ.get('BINANCE_API_SECRET')
+            
+            if api_key and api_secret:
+                client = Client(api_key=api_key, api_secret=api_secret, requests_params={'timeout': 10})
+                print("✅ Client Binance initialisé avec clés API")
+            else:
+                # Désactiver le ping automatique et ajouter timeout
+                client = Client(requests_params={'timeout': 10})
+                print("✅ Client Binance initialisé (mode public)")
+            
+            # Tester la connexion avec un ping (optionnel, ne bloque pas si échoue)
+            try:
+                client.ping()
+                print("✅ Connexion Binance OK")
+            except Exception as ping_error:
+                print(f"⚠️ Ping Binance échoué: {str(ping_error)[:100]}")
+                print("⚠️ Continuons quand même, le ping n'est pas critique...")
+        
+        except Exception as client_error:
+            print(f"❌ Erreur lors de l'initialisation du client Binance: {client_error}")
+            print("❌ Impossible de continuer sans connexion Binance")
+            return
         
         # 1. Récupérer les principales paires USDT
         print("📋 Étape 1: Récupération des paires USDT...")

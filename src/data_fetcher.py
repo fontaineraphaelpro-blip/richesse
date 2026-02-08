@@ -3,6 +3,7 @@ Module pour récupérer les données OHLCV depuis Binance.
 """
 
 import pandas as pd
+import time
 from binance.client import Client
 from typing import Optional
 
@@ -22,8 +23,17 @@ def fetch_klines(client: Client, symbol: str, interval: str = '1h', limit: int =
         Retourne None en cas d'erreur
     """
     try:
-        # Récupérer les klines depuis Binance
-        klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
+        # Récupérer les klines depuis Binance avec retry
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
+                break
+            except Exception as api_error:
+                if attempt == max_retries - 1:
+                    raise api_error
+                print(f"⚠️ Tentative {attempt + 1}/{max_retries} échouée pour {symbol}, retry...")
+                time.sleep(1)  # Attendre 1 seconde avant retry
         
         # Convertir en DataFrame
         df = pd.DataFrame(klines, columns=[
