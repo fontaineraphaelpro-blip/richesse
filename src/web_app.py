@@ -409,6 +409,16 @@ def home():
     return render_template_string(HOME_TEMPLATE)
 
 
+@app.route('/health')
+def health():
+    """Route de santé pour Railway."""
+    return jsonify({
+        'status': 'ok',
+        'service': 'Crypto Signal Scanner Web',
+        'data_file_exists': os.path.exists(DATA_FILE)
+    }), 200
+
+
 @app.route('/api/opportunities')
 def api_opportunities():
     """API endpoint pour récupérer les opportunités en JSON."""
@@ -432,5 +442,12 @@ def api_opportunities():
 if __name__ == '__main__':
     # Pour Railway, utiliser le PORT de l'environnement
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print(f"🌐 Démarrage du serveur web Flask sur le port {port}")
+    print(f"📱 Dashboard accessible sur http://0.0.0.0:{port}")
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        print(f"❌ Erreur au démarrage: {e}")
+        import traceback
+        traceback.print_exc()
 

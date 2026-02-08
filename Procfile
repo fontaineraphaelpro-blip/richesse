@@ -1,3 +1,3 @@
 worker: python src/main.py
-web: python src/run_web.py
+web: python run_web.py
 
