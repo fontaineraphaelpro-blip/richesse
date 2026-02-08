@@ -1,3 +1,3 @@
 worker: python src/main.py
-web: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile - --log-level info run_web:application
+web: gunicorn -c gunicorn_config.py run_web:application
 
