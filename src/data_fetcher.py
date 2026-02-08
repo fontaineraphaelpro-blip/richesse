@@ -86,8 +86,9 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
         if df is not None:
             data[symbol] = df
         # Délai entre chaque paire pour éviter le rate limiting
+        # CoinGecko limite à 10-50 requêtes/minute, donc on attend plus longtemps
         if i < total:
-            time.sleep(0.2)
+            time.sleep(2.0)  # 2 secondes entre chaque requête CoinGecko
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data

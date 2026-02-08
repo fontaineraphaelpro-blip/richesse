@@ -81,10 +81,11 @@ def get_coingecko_id(symbol: str) -> Optional[str]:
 def get_klines_coingecko(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
     """
     Récupère les données OHLCV depuis CoinGecko.
+    Utilise l'endpoint market_chart qui est plus fiable.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
-        interval: Intervalle (CoinGecko supporte: 1m, 5m, 15m, 30m, 1h, 4h, 12h, 1d)
+        interval: Intervalle (1h = hourly data)
         limit: Nombre de bougies
     
     Returns:
@@ -95,50 +96,78 @@ def get_klines_coingecko(symbol: str, interval: str = '1h', limit: int = 200) ->
         if not coin_id:
             return None
         
-        # Convertir interval Binance vers CoinGecko
-        interval_map = {
-            '1h': 'hourly',
-            '4h': '4hourly',
-            '1d': 'daily'
-        }
-        vs_currency = 'usd'
-        days = max(1, limit // 24) if interval == '1h' else max(1, limit)
+        # Calculer le nombre de jours nécessaire
+        # Pour 200 bougies 1h = ~8 jours
+        days = max(1, (limit * 1) // 24 + 1)  # +1 pour marge
+        days = min(days, 365)  # Max 365 jours (limite CoinGecko)
         
-        url = f"{COINGECKO_API_BASE}/coins/{coin_id}/ohlc"
+        url = f"{COINGECKO_API_BASE}/coins/{coin_id}/market_chart"
         params = {
-            'vs_currency': vs_currency,
-            'days': min(days, 365)  # Max 365 jours
+            'vs_currency': 'usd',
+            'days': days,
+            'interval': 'hourly' if interval == '1h' else 'daily'
         }
         
-        time.sleep(0.5)  # Rate limiting CoinGecko
-        response = requests.get(url, params=params, headers=HEADERS, timeout=15)
-        response.raise_for_status()
+        # Délai important pour éviter rate limiting (CoinGecko limite à 10-50 req/min)
+        time.sleep(1.5)
         
+        response = requests.get(url, params=params, headers=HEADERS, timeout=20)
+        
+        # Gérer rate limiting
+        if response.status_code == 429:
+            print(f"  ⏳ Rate limit CoinGecko, attente...", end='\r')
+            time.sleep(5)
+            response = requests.get(url, params=params, headers=HEADERS, timeout=20)
+        
+        response.raise_for_status()
         data = response.json()
-        if not data:
+        
+        if not data or 'prices' not in data:
             return None
         
-        # Convertir en DataFrame
-        # Format CoinGecko: [timestamp, open, high, low, close]
-        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close'])
+        # Extraire les prix (format: [[timestamp_ms, price], ...])
+        prices = data.get('prices', [])
+        market_caps = data.get('market_caps', [])
+        total_volumes = data.get('total_volumes', [])
         
-        # Ajouter volume (0 car CoinGecko ne fournit pas de volume dans OHLC)
-        df['volume'] = 0
+        if not prices or len(prices) < 2:
+            return None
         
-        # Convertir timestamp (millisecondes)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        # Créer DataFrame avec les prix
+        df_prices = pd.DataFrame(prices, columns=['timestamp', 'close'])
+        df_prices['timestamp'] = pd.to_datetime(df_prices['timestamp'], unit='ms')
+        
+        # Calculer open, high, low à partir des prix
+        # Pour simplifier, on utilise le prix comme open/high/low/close
+        # (CoinGecko market_chart ne donne que le prix de clôture)
+        df_prices['open'] = df_prices['close'].shift(1).fillna(df_prices['close'])
+        df_prices['high'] = df_prices[['open', 'close']].max(axis=1)
+        df_prices['low'] = df_prices[['open', 'close']].min(axis=1)
+        
+        # Ajouter volume si disponible
+        if total_volumes and len(total_volumes) == len(prices):
+            df_volumes = pd.DataFrame(total_volumes, columns=['timestamp', 'volume'])
+            df_prices['volume'] = df_volumes['volume'].values
+        else:
+            df_prices['volume'] = 0
         
         # Filtrer pour avoir le bon nombre de bougies
-        if len(df) > limit:
-            df = df.tail(limit)
+        if len(df_prices) > limit:
+            df_prices = df_prices.tail(limit)
         
         # Trier par timestamp
-        df = df.sort_values('timestamp').reset_index(drop=True)
+        df_prices = df_prices.sort_values('timestamp').reset_index(drop=True)
         
-        return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+        return df_prices[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
     
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            print(f"  ⚠️ Rate limit CoinGecko atteint pour {symbol}")
+        else:
+            print(f"  ⚠️ Erreur HTTP CoinGecko pour {symbol}: {e.response.status_code}")
+        return None
     except Exception as e:
-        print(f"⚠️ Erreur CoinGecko pour {symbol}: {e}")
+        print(f"  ⚠️ Erreur CoinGecko pour {symbol}: {str(e)[:100]}")
         return None
 
 
