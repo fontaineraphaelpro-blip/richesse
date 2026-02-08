@@ -7,7 +7,11 @@ import os
 from flask import Flask, render_template_string, jsonify
 from datetime import datetime
 
+# Créer l'application Flask
 app = Flask(__name__)
+
+# Configuration pour Railway
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
 # Chemin vers le fichier JSON des données
 DATA_FILE = 'opportunities_data.json'

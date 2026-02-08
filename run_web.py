@@ -6,22 +6,38 @@ import os
 import sys
 
 # S'assurer qu'on est dans le bon répertoire
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
 
 # Ajouter src au path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+src_path = os.path.join(script_dir, 'src')
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
-from web_app import app
+print(f"📂 Répertoire de travail: {os.getcwd()}")
+print(f"📂 Chemin src: {src_path}")
+print(f"📂 Fichier web_app.py existe: {os.path.exists(os.path.join(src_path, 'web_app.py'))}")
+
+try:
+    from web_app import app
+    print("✅ Import de web_app réussi")
+except ImportError as e:
+    print(f"❌ Erreur d'import: {e}")
+    print(f"📂 sys.path: {sys.path}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
 if __name__ == '__main__':
     # Pour Railway, utiliser le PORT de l'environnement
     port = int(os.environ.get('PORT', 5000))
     print(f"🌐 Démarrage du serveur web Flask")
     print(f"📱 Port: {port}")
-    print(f"📂 Répertoire: {os.getcwd()}")
+    print(f"🌍 Host: 0.0.0.0")
+    print(f"✅ Serveur prêt à recevoir des requêtes!")
     
     try:
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
     except Exception as e:
         print(f"❌ Erreur au démarrage: {e}")
         import traceback
