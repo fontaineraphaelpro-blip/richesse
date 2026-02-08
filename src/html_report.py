@@ -153,25 +153,32 @@ def generate_html_report(opportunities: List[Dict], output_file: str = 'report.h
                         <th>Score</th>
                         <th>Trend</th>
                         <th>RSI</th>
+                        <th>Volume Ratio</th>
+                        <th>Trend Confirmation</th>
                         <th>Signal</th>
                     </tr>
                 </thead>
                 <tbody>
 """
     
+    # Trier par score décroissant (au cas où)
+    opportunities_sorted = sorted(opportunities, key=lambda x: x.get('score', 0), reverse=True)
+    
     # Ajouter les lignes du tableau
-    for opp in opportunities:
+    for opp in opportunities_sorted:
         rank = opp.get('rank', 0)
         pair = opp.get('pair', 'N/A')
         score = opp.get('score', 0)
         trend = opp.get('trend', 'N/A')
         rsi = opp.get('rsi', None)
         signal = opp.get('signal', 'N/A')
+        volume_ratio = opp.get('volume_ratio', None)
+        trend_confirmation = opp.get('trend_confirmation', 'N/A')
         
-        # Classes CSS pour le score
-        if score >= 70:
+        # Classes CSS pour le score (vert > 80, jaune 60-80, rouge < 60)
+        if score >= 80:
             score_class = 'score-high'
-        elif score >= 40:
+        elif score >= 60:
             score_class = 'score-medium'
         else:
             score_class = 'score-low'
@@ -182,6 +189,9 @@ def generate_html_report(opportunities: List[Dict], output_file: str = 'report.h
         # Format RSI
         rsi_display = f"{rsi:.1f}" if rsi is not None else "N/A"
         
+        # Format volume ratio
+        volume_ratio_display = f"{volume_ratio:.2f}x" if volume_ratio is not None else "N/A"
+        
         html_content += f"""
                     <tr>
                         <td class="rank">#{rank}</td>
@@ -189,6 +199,8 @@ def generate_html_report(opportunities: List[Dict], output_file: str = 'report.h
                         <td class="score {score_class}">{score}</td>
                         <td class="{trend_class}">{trend}</td>
                         <td>{rsi_display}</td>
+                        <td>{volume_ratio_display}</td>
+                        <td>{trend_confirmation}</td>
                         <td class="signal">{signal}</td>
                     </tr>
 """

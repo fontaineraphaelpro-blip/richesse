@@ -10,13 +10,37 @@ Ce projet scanne automatiquement les 50 principales paires USDT sur Binance, cal
 
 ## ✨ Fonctionnalités
 
+### Scanner de base
 - ✅ Scanner multi-coins (50 principales paires USDT)
 - ✅ Exclusion automatique des stablecoins
 - ✅ Calcul d'indicateurs techniques (SMA20, SMA50, RSI14, Volume)
-- ✅ Détection de niveaux de support
+- ✅ Détection de niveaux de support et résistance
+
+### Signaux avancés (Nouveau ✨)
+- ✅ **Détection de breakout** : Prix casse résistance avec volume élevé
+- ✅ **Détection de pullback** : Prix revient sur support/SMA20 en tendance bullish
+- ✅ **Divergence RSI** : Détection automatique des divergences haussières/baissières
+- ✅ **Multi-timeframe** : Confirmation de tendance sur 4H et 15min
+
+### Scoring amélioré
 - ✅ Scoring d'opportunité (0-100) avec critères multiples
-- ✅ Génération de rapport HTML lisible
+- ✅ Bonus pour breakout (+15), pullback (+10), divergence RSI (+10)
+- ✅ Confirmation multi-timeframe (+5)
+
+### Alertes et rapports
+- ✅ **Alertes Telegram** : Notifications automatiques pour scores > 85
+- ✅ Génération de rapport HTML avec colonnes Volume Ratio et Trend Confirmation
+- ✅ **Dashboard web interactif** avec actualisation automatique
+- ✅ Tri automatique par score décroissant
+- ✅ Codes couleur (vert > 80, jaune 60-80, rouge < 60)
+
+### Backtesting
+- ✅ **Backtesting simple** : Test du scoring sur données historiques (3 mois)
+- ✅ Métriques de performance (retour moyen, taux de réussite)
+
+### Déploiement
 - ✅ Boucle continue pour fonctionnement 24/7
+- ✅ Prêt pour déploiement Railway
 
 ## 🛠️ Installation
 
@@ -36,7 +60,7 @@ pip install -r requirements.txt
 
 ## 🚀 Utilisation
 
-### Lancer le scanner
+### Option 1: Scanner seul (sans interface web)
 
 ```bash
 python src/main.py
@@ -50,18 +74,87 @@ Le script va:
 5. Créer un fichier `report.html`
 6. Attendre 1 heure et recommencer
 
-### Arrêter le scanner
+### Option 2: Dashboard web (recommandé)
 
-Appuyez sur `Ctrl+C` pour arrêter la boucle.
+Pour afficher le dashboard dans votre navigateur, lancez le serveur web:
+
+```bash
+python src/run_web.py
+```
+
+Puis ouvrez votre navigateur à l'adresse: **http://localhost:5000**
+
+Le dashboard affiche:
+- 📊 Statistiques en temps réel
+- 🏆 Top 10 des opportunités
+- 🔄 Actualisation automatique toutes les 30 secondes
+- 📱 Interface responsive et moderne
+
+### Option 3: Scanner + Web (tout-en-un)
+
+Pour lancer à la fois le scanner et le serveur web:
+
+```bash
+python src/run_all.py
+```
+
+### Arrêter
+
+Appuyez sur `Ctrl+C` pour arrêter.
 
 ## 📊 Critères de Scoring
 
 Le score d'opportunité (0-100) est calculé selon:
 
+### Critères de base
 - **Trend bullish** (SMA20 > SMA50) → +30 points
 - **RSI favorable** (entre 35 et 50) → +25 points
 - **Prix proche support** (<2%) → +25 points
 - **Volume élevé** (>1.5× volume moyen) → +20 points
+
+### Signaux avancés (bonus)
+- **Breakout détecté** (prix > résistance + volume élevé) → +15 points
+- **Pullback détecté** (prix proche support/SMA20 en tendance bullish) → +10 points
+- **Divergence RSI haussière** → +10 points
+- **Confirmation multi-timeframe bullish** → +5 points
+
+**Score maximum: 100 points**
+
+## 📱 Configuration Telegram (Optionnel)
+
+Pour activer les alertes Telegram:
+
+1. **Créer un bot Telegram:**
+   - Ouvrez Telegram et cherchez `@BotFather`
+   - Envoyez `/newbot` et suivez les instructions
+   - Copiez le token fourni
+
+2. **Obtenir votre Chat ID:**
+   - Cherchez `@userinfobot` sur Telegram
+   - Envoyez `/start` pour obtenir votre Chat ID
+
+3. **Configurer les variables d'environnement:**
+   ```bash
+   export TELEGRAM_TOKEN="votre_token_ici"
+   export TELEGRAM_CHAT_ID="votre_chat_id_ici"
+   ```
+
+   Ou sur Railway, ajoutez ces variables dans les paramètres du projet.
+
+Les alertes seront envoyées automatiquement pour toutes les opportunités avec un score ≥ 85.
+
+## 🔬 Backtesting
+
+Pour tester la performance historique du système de scoring:
+
+```bash
+python src/run_backtest.py
+```
+
+Le backtest analyse les 3 derniers mois et génère:
+- Retour moyen par range de score
+- Taux de réussite (win rate)
+- Fichier CSV avec les résultats détaillés (`backtest_results.csv`)
 
 ## 📁 Structure du Projet
 
@@ -73,11 +166,18 @@ crypto_signal_scanner/
 └── src/
     ├── fetch_pairs.py        # Récupération des paires USDT
     ├── data_fetcher.py       # Récupération données OHLCV
-    ├── indicators.py         # Calcul indicateurs techniques
+    ├── indicators.py         # Calcul indicateurs techniques + divergence RSI
     ├── support.py            # Détection des supports
-    ├── scorer.py             # Calcul des scores
-    ├── html_report.py        # Génération rapport HTML
-    └── main.py               # Script principal
+    ├── breakout.py           # Détection breakout et pullback (Nouveau)
+    ├── multi_timeframe.py    # Analyse multi-timeframe (Nouveau)
+    ├── scorer.py             # Calcul des scores amélioré
+    ├── alerts.py             # Alertes Telegram (Nouveau)
+    ├── backtest.py           # Backtesting (Nouveau)
+    ├── html_report.py        # Génération rapport HTML amélioré
+    ├── web_app.py            # Application web Flask
+    ├── main.py               # Script principal
+    ├── run_web.py            # Lanceur serveur web
+    └── run_backtest.py       # Lanceur backtesting (Nouveau)
 ```
 
 ## 🚂 Déploiement sur Railway
@@ -96,26 +196,35 @@ Allez sur [railway.app](https://railway.app) et créez un compte.
 Le fichier `Procfile` est déjà configuré:
 ```
 worker: python src/main.py
+web: python src/run_web.py
 ```
 
-Railway détectera automatiquement le Procfile et lancera le worker.
+Railway détectera automatiquement le Procfile et lancera les deux services.
 
-### 4. Variables d'environnement (optionnel)
+### 4. Variables d'environnement
 
-Si vous avez des limites de rate avec l'API Binance publique, vous pouvez ajouter vos clés API dans Railway:
+**Optionnel - API Binance:**
+- `BINANCE_API_KEY` (optionnel, pour éviter les limites de rate)
 
-- `BINANCE_API_KEY` (optionnel)
-- `BINANCE_API_SECRET` (optionnel)
+**Optionnel - Alertes Telegram:**
+- `TELEGRAM_TOKEN` : Token de votre bot Telegram
+- `TELEGRAM_CHAT_ID` : Votre Chat ID Telegram
 
 Le script fonctionne sans clés API pour les données publiques.
 
 ### 5. Déployer
 
-Railway déploiera automatiquement votre application. Le worker tournera en continu et mettra à jour les résultats toutes les heures.
+Railway déploiera automatiquement votre application avec deux services:
+- **Worker**: Scanner qui tourne en continu et met à jour les résultats toutes les heures
+- **Web**: Serveur web Flask qui sert le dashboard accessible via l'URL publique Railway
+
+Le dashboard sera accessible via l'URL publique fournie par Railway (ex: `https://votre-projet.railway.app`)
 
 ## 📄 Fichiers Générés
 
-- `report.html`: Rapport HTML avec le Top 10 des opportunités, mis à jour toutes les heures
+- `report.html`: Rapport HTML statique avec le Top 10 des opportunités
+- `opportunities_data.json`: Données JSON pour l'API web (mis à jour toutes les heures)
+- **Dashboard web**: Interface interactive accessible sur http://localhost:5000
 
 ## 🔮 Améliorations Futures
 
