@@ -271,7 +271,7 @@ HOME_TEMPLATE = """
                 <strong>Dernière mise à jour:</strong> 
                 <span id="last-update-time">Chargement...</span>
                 <br>
-                <a href="/" class="refresh-btn" onclick="location.reload()">🔄 Actualiser</a>
+                <button class="refresh-btn" onclick="loadData(); return false;">🔄 Actualiser</button>
             </div>
 
             <div id="content">
@@ -306,6 +306,13 @@ HOME_TEMPLATE = """
         }
 
         function loadData() {
+            // Désactiver le bouton pendant le chargement
+            const refreshBtn = document.querySelector('.refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.classList.add('loading');
+                refreshBtn.disabled = true;
+            }
+            
             fetch('/api/opportunities')
                 .then(response => response.json())
                 .then(data => {
@@ -393,6 +400,14 @@ HOME_TEMPLATE = """
                             <p>Impossible de charger les données. Veuillez réessayer plus tard.</p>
                         </div>
                     `;
+                })
+                .finally(() => {
+                    // Réactiver le bouton après le chargement
+                    const refreshBtn = document.querySelector('.refresh-btn');
+                    if (refreshBtn) {
+                        refreshBtn.classList.remove('loading');
+                        refreshBtn.disabled = false;
+                    }
                 });
         }
 
