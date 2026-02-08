@@ -49,8 +49,9 @@ def run_scanner():
             print("⚠️ API CoinGecko indisponible")
         
         # 1. Récupérer les principales paires USDT (API publique)
+        # Réduire à 20 paires pour éviter le rate limiting CoinGecko
         print("\n📋 Étape 1: Récupération des paires USDT...")
-        pairs = get_top_usdt_pairs(limit=50)
+        pairs = get_top_usdt_pairs(limit=20)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
