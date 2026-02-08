@@ -1,19 +1,18 @@
 """
 Module pour l'analyse multi-timeframe (confirmation de tendance).
+Utilise l'API publique Binance (pas besoin de clé).
 """
 
-from binance.client import Client
 from data_fetcher import fetch_klines
 from indicators import calculate_indicators
 from typing import Optional, Dict
 
 
-def analyze_timeframe(client: Client, symbol: str, interval: str, limit: int = 100) -> Optional[str]:
+def analyze_timeframe(symbol: str, interval: str, limit: int = 100) -> Optional[str]:
     """
-    Analyse un timeframe spécifique pour déterminer la tendance.
+    Analyse un timeframe spécifique pour déterminer la tendance (API publique).
     
     Args:
-        client: Client Binance
         symbol: Symbole de la paire
         interval: Timeframe ('15m', '4h', '1d', etc.)
         limit: Nombre de bougies à récupérer
@@ -22,7 +21,7 @@ def analyze_timeframe(client: Client, symbol: str, interval: str, limit: int = 1
         'Bullish', 'Bearish', ou None si indéterminé
     """
     try:
-        df = fetch_klines(client, symbol, interval=interval, limit=limit)
+        df = fetch_klines(symbol, interval=interval, limit=limit)
         
         if df is None or len(df) < 50:
             return None
@@ -44,14 +43,13 @@ def analyze_timeframe(client: Client, symbol: str, interval: str, limit: int = 1
         return None
 
 
-def get_multi_timeframe_confirmation(client: Client, symbol: str) -> Optional[str]:
+def get_multi_timeframe_confirmation(symbol: str) -> Optional[str]:
     """
-    Analyse plusieurs timeframes pour confirmer la tendance.
+    Analyse plusieurs timeframes pour confirmer la tendance (API publique).
     
     Analyse 4H et 15min pour confirmer la tendance principale (1H).
     
     Args:
-        client: Client Binance
         symbol: Symbole de la paire
     
     Returns:
@@ -59,8 +57,8 @@ def get_multi_timeframe_confirmation(client: Client, symbol: str) -> Optional[st
     """
     try:
         # Analyser 4H et 15min
-        tf_4h = analyze_timeframe(client, symbol, '4h', limit=100)
-        tf_15m = analyze_timeframe(client, symbol, '15m', limit=100)
+        tf_4h = analyze_timeframe(symbol, '4h', limit=100)
+        tf_15m = analyze_timeframe(symbol, '15m', limit=100)
         
         # Compter les votes
         bullish_votes = 0

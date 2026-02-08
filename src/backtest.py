@@ -7,18 +7,18 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from data_fetcher import fetch_klines
+# Plus besoin du client Binance, on utilise l'API REST publique
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
 from scorer import calculate_opportunity_score
 from breakout import get_breakout_signals
 
 
-def calculate_historical_performance(client, symbol: str, days: int = 90) -> Dict:
+def calculate_historical_performance(symbol: str, days: int = 90) -> Dict:
     """
-    Calcule la performance historique du scoring sur les 3 derniers mois.
+    Calcule la performance historique du scoring sur les 3 derniers mois (API publique).
     
     Args:
-        client: Client Binance
         symbol: Symbole de la paire (ex: 'BTCUSDT')
         days: Nombre de jours à analyser (défaut: 90)
     
@@ -28,7 +28,7 @@ def calculate_historical_performance(client, symbol: str, days: int = 90) -> Dic
     try:
         # Récupérer plus de données pour le backtest (1 bougie par heure sur 90 jours = ~2160 bougies)
         # On prend 1H timeframe pour avoir assez de données
-        df = fetch_klines(client, symbol, interval='1h', limit=min(days * 24, 1000))
+        df = fetch_klines(symbol, interval='1h', limit=min(days * 24, 1000))
         
         if df is None or len(df) < 100:
             return None
@@ -110,12 +110,11 @@ def calculate_historical_performance(client, symbol: str, days: int = 90) -> Dic
         return None
 
 
-def run_backtest(client, symbols: List[str], days: int = 90) -> pd.DataFrame:
+def run_backtest(symbols: List[str], days: int = 90) -> pd.DataFrame:
     """
-    Lance un backtest sur plusieurs symboles.
+    Lance un backtest sur plusieurs symboles (API publique).
     
     Args:
-        client: Client Binance
         symbols: Liste des symboles à tester
         days: Nombre de jours à analyser
     
@@ -128,7 +127,7 @@ def run_backtest(client, symbols: List[str], days: int = 90) -> pd.DataFrame:
     
     for i, symbol in enumerate(symbols, 1):
         print(f"📊 Backtest {symbol} ({i}/{len(symbols)})...", end='\r')
-        result = calculate_historical_performance(client, symbol, days)
+        result = calculate_historical_performance(symbol, days)
         if result:
             results.append(result)
     

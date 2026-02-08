@@ -6,7 +6,7 @@ Scanne les cryptos sur Binance, calcule les opportunités et génère un rapport
 import time
 import os
 import json
-from binance.client import Client
+# Plus besoin du client Binance, on utilise l'API REST publique directement
 from datetime import datetime
 
 from fetch_pairs import get_top_usdt_pairs
@@ -30,27 +30,26 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # Initialiser le client Binance avec gestion d'erreur améliorée
-        from binance_helper import create_binance_client
+        # Tester la connexion à l'API publique Binance (pas besoin de clé API)
+        from binance_api import test_connection
         
-        client = create_binance_client()
+        print("🔌 Test de connexion à l'API publique Binance...")
+        if test_connection():
+            print("✅ Connexion à l'API Binance OK (API publique, pas de clé nécessaire)")
+        else:
+            print("⚠️ Connexion à l'API Binance échouée, continuons quand même...")
         
-        if client is None:
-            print("❌ Impossible d'initialiser le client Binance")
-            print("❌ Vérifiez votre connexion internet et les logs ci-dessus")
-            return
-        
-        # 1. Récupérer les principales paires USDT
-        print("📋 Étape 1: Récupération des paires USDT...")
-        pairs = get_top_usdt_pairs(client, limit=50)
+        # 1. Récupérer les principales paires USDT (API publique)
+        print("\n📋 Étape 1: Récupération des paires USDT...")
+        pairs = get_top_usdt_pairs(limit=50)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return
         
-        # 2. Récupérer les données OHLCV
+        # 2. Récupérer les données OHLCV (API publique)
         print("\n📊 Étape 2: Récupération des données OHLCV (1H, 200 bougies)...")
-        data = fetch_multiple_pairs(client, pairs, interval='1h', limit=200)
+        data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
         
         if not data:
             print("❌ Aucune donnée récupérée. Arrêt du scanner.")
@@ -91,7 +90,7 @@ def run_scanner():
             multi_timeframe_confirmation = None
             if i <= 20:  # Limiter pour éviter trop de requêtes API
                 try:
-                    multi_timeframe_confirmation = get_multi_timeframe_confirmation(client, symbol)
+                    multi_timeframe_confirmation = get_multi_timeframe_confirmation(symbol)
                 except:
                     pass  # Ignorer les erreurs de multi-timeframe
             

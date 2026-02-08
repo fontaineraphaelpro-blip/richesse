@@ -1,19 +1,19 @@
 """
 Module pour récupérer les données OHLCV depuis Binance.
+Utilise l'API publique REST (pas besoin de clé API).
 """
 
 import pandas as pd
 import time
-from binance.client import Client
+from binance_api import get_klines
 from typing import Optional
 
 
-def fetch_klines(client: Client, symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
+def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
     """
-    Récupère les données OHLCV (bougies) pour une paire donnée.
+    Récupère les données OHLCV (bougies) pour une paire donnée (API publique, pas besoin de clé).
     
     Args:
-        client: Instance du client Binance
         symbol: Symbole de la paire (ex: 'BTCUSDT')
         interval: Intervalle de temps ('1h', '4h', '1d', etc.)
         limit: Nombre de bougies à récupérer (max 1000)
@@ -23,17 +23,11 @@ def fetch_klines(client: Client, symbol: str, interval: str = '1h', limit: int =
         Retourne None en cas d'erreur
     """
     try:
-        # Récupérer les klines depuis Binance avec retry
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
-                break
-            except Exception as api_error:
-                if attempt == max_retries - 1:
-                    raise api_error
-                print(f"⚠️ Tentative {attempt + 1}/{max_retries} échouée pour {symbol}, retry...")
-                time.sleep(1)  # Attendre 1 seconde avant retry
+        # Récupérer les klines via API publique (retry géré dans binance_api)
+        klines = get_klines(symbol=symbol, interval=interval, limit=limit)
+        
+        if klines is None or len(klines) == 0:
+            return None
         
         # Convertir en DataFrame
         df = pd.DataFrame(klines, columns=[
@@ -65,12 +59,11 @@ def fetch_klines(client: Client, symbol: str, interval: str = '1h', limit: int =
         return None
 
 
-def fetch_multiple_pairs(client: Client, symbols: list, interval: str = '1h', limit: int = 200) -> dict:
+def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) -> dict:
     """
-    Récupère les données OHLCV pour plusieurs paires.
+    Récupère les données OHLCV pour plusieurs paires (API publique, pas besoin de clé).
     
     Args:
-        client: Instance du client Binance
         symbols: Liste des symboles de paires
         interval: Intervalle de temps
         limit: Nombre de bougies par paire
@@ -83,7 +76,7 @@ def fetch_multiple_pairs(client: Client, symbols: list, interval: str = '1h', li
     
     for i, symbol in enumerate(symbols, 1):
         print(f"📊 Récupération {symbol} ({i}/{total})...", end='\r')
-        df = fetch_klines(client, symbol, interval, limit)
+        df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
     
