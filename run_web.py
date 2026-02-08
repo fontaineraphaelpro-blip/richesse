@@ -21,14 +21,19 @@ print(f"📂 Fichier web_app.py existe: {os.path.exists(os.path.join(src_path, '
 try:
     from web_app import app
     print("✅ Import de web_app réussi")
-    # Exporter l'app pour Gunicorn
+    # Exporter l'app pour Gunicorn (toujours disponible au niveau module)
     application = app
 except ImportError as e:
     print(f"❌ Erreur d'import: {e}")
     print(f"📂 sys.path: {sys.path}")
     import traceback
     traceback.print_exc()
-    sys.exit(1)
+    # Créer une application vide pour éviter l'erreur Gunicorn
+    from flask import Flask
+    application = Flask(__name__)
+    @application.route('/')
+    def error():
+        return "❌ Erreur: Impossible de charger l'application", 500
 
 if __name__ == '__main__':
     # Détecter si on est en production (Railway, Heroku, etc.)
