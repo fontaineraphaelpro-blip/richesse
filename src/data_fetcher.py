@@ -79,6 +79,9 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
         df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
+        # Délai entre chaque paire pour éviter le rate limiting
+        if i < total:
+            time.sleep(0.2)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data
