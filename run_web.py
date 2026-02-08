@@ -29,12 +29,12 @@ except ImportError as e:
     sys.exit(1)
 
 if __name__ == '__main__':
-    # Pour Railway, utiliser le PORT de l'environnement
+    # En production, utiliser Gunicorn (défini dans Procfile)
+    # Ce code ne sera utilisé qu'en développement local
     port = int(os.environ.get('PORT', 5000))
-    print(f"🌐 Démarrage du serveur web Flask")
+    print(f"🌐 Démarrage du serveur web Flask (mode développement)")
     print(f"📱 Port: {port}")
-    print(f"🌍 Host: 0.0.0.0")
-    print(f"✅ Serveur prêt à recevoir des requêtes!")
+    print(f"⚠️ Pour la production, utilisez Gunicorn via le Procfile")
     
     try:
         app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
