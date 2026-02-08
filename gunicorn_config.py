@@ -14,8 +14,8 @@ threads = int(os.environ.get('GUNICORN_THREADS', 2))
 # Timeout
 timeout = int(os.environ.get('GUNICORN_TIMEOUT', 120))
 
-# Bind
-bind = f"0.0.0.0:{os.environ.get('PORT', 8080)}"
+# Bind (utilise PORT de Railway)
+bind = f"0.0.0.0:{os.environ.get('PORT', '8080')}"
 
 # Logging
 accesslog = "-"
