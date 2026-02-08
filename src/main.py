@@ -30,14 +30,23 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # Tester la connexion à l'API publique Binance (pas besoin de clé API)
+        # Tester les connexions aux APIs
         from binance_api import test_connection
+        from coingecko_api import test_coingecko_connection
         
-        print("🔌 Test de connexion à l'API publique Binance...")
-        if test_connection():
-            print("✅ Connexion à l'API Binance OK (API publique, pas de clé nécessaire)")
+        print("🔌 Test de connexion aux APIs...")
+        binance_ok = test_connection()
+        coingecko_ok = test_coingecko_connection()
+        
+        if binance_ok:
+            print("✅ Connexion à l'API Binance OK")
         else:
-            print("⚠️ Connexion à l'API Binance échouée, continuons quand même...")
+            print("⚠️ API Binance bloquée")
+        
+        if coingecko_ok:
+            print("✅ Connexion à l'API CoinGecko OK (fallback disponible)")
+        else:
+            print("⚠️ API CoinGecko indisponible")
         
         # 1. Récupérer les principales paires USDT (API publique)
         print("\n📋 Étape 1: Récupération des paires USDT...")

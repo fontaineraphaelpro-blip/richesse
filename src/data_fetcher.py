@@ -23,10 +23,15 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
         Retourne None en cas d'erreur
     """
     try:
-        # Récupérer les klines via API publique (retry géré dans binance_api)
+        # Essayer d'abord Binance
         klines = get_klines(symbol=symbol, interval=interval, limit=limit)
         
+        # Si Binance échoue (erreur 451), utiliser CoinGecko comme fallback
         if klines is None or len(klines) == 0:
+            print(f"  → Fallback CoinGecko pour {symbol}...", end='\r')
+            df_coingecko = get_klines_coingecko(symbol=symbol, interval=interval, limit=limit)
+            if df_coingecko is not None and len(df_coingecko) > 0:
+                return df_coingecko
             return None
         
         # Convertir en DataFrame
