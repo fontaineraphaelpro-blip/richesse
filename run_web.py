@@ -31,18 +31,53 @@ except ImportError as e:
     sys.exit(1)
 
 if __name__ == '__main__':
-    # En production, utiliser Gunicorn (défini dans Procfile)
-    # Ce code ne sera utilisé qu'en développement local
-    port = int(os.environ.get('PORT', 5000))
-    print(f"🌐 Démarrage du serveur web Flask (mode développement)")
-    print(f"📱 Port: {port}")
-    print(f"⚠️ Pour la production, utilisez Gunicorn via le Procfile")
+    # Détecter si on est en production (Railway, Heroku, etc.)
+    is_production = os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('DYNO') or os.environ.get('PORT')
     
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-    except Exception as e:
-        print(f"❌ Erreur au démarrage: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    if is_production:
+        # En production, lancer Gunicorn automatiquement
+        print("🚀 Mode PRODUCTION détecté - Lancement de Gunicorn")
+        port = int(os.environ.get('PORT', 8080))
+        
+        try:
+            import gunicorn.app.wsgiapp as wsgi
+            
+            # Configuration Gunicorn
+            sys.argv = [
+                'gunicorn',
+                '--bind', f'0.0.0.0:{port}',
+                '--workers', '2',
+                '--threads', '2',
+                '--timeout', '120',
+                '--access-logfile', '-',
+                '--error-logfile', '-',
+                '--log-level', 'info',
+                '--worker-class', 'gthread',
+                'run_web:application'
+            ]
+            
+            wsgi.run()
+        except ImportError:
+            print("❌ Gunicorn non installé, utilisation du serveur Flask (non recommandé en production)")
+            app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+        except Exception as e:
+            print(f"❌ Erreur au démarrage Gunicorn: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback sur Flask si Gunicorn échoue
+            print("⚠️ Fallback sur serveur Flask...")
+            app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    else:
+        # Mode développement local
+        port = int(os.environ.get('PORT', 5000))
+        print(f"🌐 Démarrage du serveur web Flask (mode développement)")
+        print(f"📱 Port: {port}")
+        
+        try:
+            app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+        except Exception as e:
+            print(f"❌ Erreur au démarrage: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
