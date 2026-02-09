@@ -34,15 +34,24 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     # Récupérer les indicateurs
     ema9 = indicators.get('ema9')
     ema21 = indicators.get('ema21')
+    sma20 = indicators.get('sma20')
+    sma50 = indicators.get('sma50')
     rsi14 = indicators.get('rsi14')
     macd = indicators.get('macd')
     macd_signal = indicators.get('macd_signal')
     macd_histogram = indicators.get('macd_histogram')
     bb_upper = indicators.get('bb_upper')
     bb_lower = indicators.get('bb_lower')
+    bb_middle = indicators.get('bb_middle')
     atr = indicators.get('atr')
     atr_percent = indicators.get('atr_percent')
     momentum = indicators.get('momentum')
+    momentum_percent = indicators.get('momentum_percent')
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    adx = indicators.get('adx')
+    rsi_divergence = indicators.get('rsi_divergence', False)
+    rsi_divergence_type = indicators.get('rsi_divergence_type')
     volume_ratio = None
     if indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0:
         volume_ratio = indicators.get('current_volume') / indicators.get('volume_ma20')
@@ -136,12 +145,94 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
             if momentum_percent and momentum_percent < -0.5:
                 confidence += 5
     
+    # 7. Stochastic (confirmation de surachat pour SHORT)
+    stoch_ok_bearish = False
+    if stoch_k is not None and stoch_d is not None:
+        # Pour SHORT: Stochastic > 80 = surachat confirmé
+        if stoch_k > 80 and stoch_d > 80:
+            if ema_bearish:
+                stoch_ok_bearish = True
+                bearish_confirmations += 1
+                confidence += 15  # Stochastic surachat = confirmation forte
+        elif stoch_k > 70 and stoch_d > 70:
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 10
+    
+    # 8. ADX (force de la tendance - nécessaire pour SHORT valide)
+    adx_ok = False
+    if adx is not None:
+        # ADX > 25 = tendance forte (bon pour SHORT)
+        if adx > 25:
+            adx_ok = True
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 15  # Tendance forte = signal SHORT plus fiable
+        elif adx > 20:
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 8
+        else:
+            # ADX faible = tendance faible, pénalité
+            confidence -= 10
+    
+    # 9. Divergence RSI bearish (signal très fort pour SHORT)
+    if rsi_divergence and rsi_divergence_type == 'bearish':
+        if ema_bearish:
+            bearish_confirmations += 2  # Divergence = double confirmation
+            confidence += 25  # Divergence bearish = signal très fort
+    
+    # 10. SMA20 vs SMA50 (confirmation tendance moyen terme)
+    sma_bearish = False
+    if sma20 and sma50:
+        if sma20 < sma50 and current_price < sma20:
+            sma_bearish = True
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 15
+    
+    # 11. Prix vs toutes les moyennes mobiles (confirmation globale)
+    price_below_all_ma = False
+    ma_count = 0
+    ma_below_count = 0
+    if ema9 and current_price < ema9:
+        ma_count += 1
+        ma_below_count += 1
+    if ema21 and current_price < ema21:
+        ma_count += 1
+        ma_below_count += 1
+    if sma20 and current_price < sma20:
+        ma_count += 1
+        ma_below_count += 1
+    if sma50 and current_price < sma50:
+        ma_count += 1
+        ma_below_count += 1
+    
+    if ma_count >= 3 and ma_below_count == ma_count:
+        price_below_all_ma = True
+        if ema_bearish:
+            bearish_confirmations += 1
+            confidence += 10
+    
+    # 12. Position dans Bollinger Bands (vérification supplémentaire)
+    if bb_middle and current_price:
+        if current_price > bb_middle:
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 5
+    
     # DÉCISION FINALE: UNIQUEMENT les signaux SHORT
-    # Nécessite AU MOINS 4 confirmations bearish pour un signal SHORT valide
-    # et confiance minimum de 60 (plus strict pour SHORT)
-    if bearish_confirmations >= 4 and confidence >= 60:
+    # Nécessite AU MOINS 6 confirmations bearish pour un signal SHORT valide
+    # et confiance minimum de 70 (encore plus strict)
+    # ET ADX > 20 (tendance doit être présente)
+    if bearish_confirmations >= 6 and confidence >= 70 and (adx is None or adx > 20):
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
+    elif bearish_confirmations >= 5 and confidence >= 65 and (adx is None or adx > 25):
+        # Signal SHORT acceptable mais moins fort
+        entry_signal = 'SHORT'
+        entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
+        confidence = min(confidence, 65)  # Limiter la confiance
     else:
         # Pas assez de confirmations ou pas bearish = pas de signal
         entry_signal = 'NEUTRAL'

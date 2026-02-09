@@ -135,6 +135,15 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     # Momentum
     momentum = calculate_momentum(close, period=10)
     
+    # Stochastic
+    stoch = calculate_stochastic(df, period=14)
+    
+    # ADX (force de la tendance)
+    adx = calculate_adx(df, period=14)
+    
+    # Divergence RSI
+    rsi_divergence = detect_rsi_divergence(df, rsi14, lookback=20)
+    
     # Volume
     volume_ma20 = calculate_sma(volume, 20)
     
@@ -166,6 +175,17 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         # Momentum
         'momentum': momentum.iloc[-1] if len(momentum) > 0 and not pd.isna(momentum.iloc[-1]) else None,
         'momentum_percent': (momentum.iloc[-1] / close.iloc[-10] * 100) if len(momentum) > 0 and len(close) > 10 and not pd.isna(momentum.iloc[-1]) and close.iloc[-10] > 0 else None,
+        
+        # Stochastic
+        'stoch_k': stoch['k'].iloc[-1] if len(stoch['k']) > 0 and not pd.isna(stoch['k'].iloc[-1]) else None,
+        'stoch_d': stoch['d'].iloc[-1] if len(stoch['d']) > 0 and not pd.isna(stoch['d'].iloc[-1]) else None,
+        
+        # ADX
+        'adx': adx.iloc[-1] if len(adx) > 0 and not pd.isna(adx.iloc[-1]) else None,
+        
+        # Divergence RSI
+        'rsi_divergence': rsi_divergence.get('has_divergence', False),
+        'rsi_divergence_type': rsi_divergence.get('type'),
         
         # Volume
         'volume_ma20': volume_ma20.iloc[-1] if len(volume_ma20) > 0 and not pd.isna(volume_ma20.iloc[-1]) else None,

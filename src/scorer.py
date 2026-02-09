@@ -153,7 +153,7 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     
     # UNIQUEMENT les signaux SHORT sont acceptés
     if entry_signal == 'SHORT':
-        if confidence >= 60:  # Confiance minimum plus élevée pour SHORT
+        if confidence >= 65:  # Confiance minimum encore plus élevée pour SHORT
             # Bonus si le signal SHORT est cohérent avec tendance Bearish
             if trend == 'Bearish':
                 score += 40  # Bonus important pour SHORT + tendance Bearish
@@ -247,6 +247,46 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
             details.append(f"Volume {volume_ratio:.2f}x")
     else:
         details.append("Volume N/A")
+    
+    # 9. Stochastic (surachat) → +15 pour SHORT
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    if stoch_k is not None and stoch_d is not None:
+        if entry_signal == 'SHORT':
+            if stoch_k > 80 and stoch_d > 80:
+                score += 20  # Stochastic surachat extrême = excellent pour SHORT
+                details.append(f"Stoch surachat ({stoch_k:.1f}/{stoch_d:.1f}) ✓✓")
+            elif stoch_k > 70 and stoch_d > 70:
+                score += 15
+                details.append(f"Stoch élevé ({stoch_k:.1f}/{stoch_d:.1f}) ✓")
+            else:
+                score -= 10  # Pénalité si Stochastic pas en surachat
+                details.append(f"Stoch modéré ({stoch_k:.1f}/{stoch_d:.1f}) ✗")
+    
+    # 10. ADX (force de la tendance) → +15 pour SHORT
+    adx = indicators.get('adx')
+    if adx is not None:
+        if entry_signal == 'SHORT':
+            if adx > 30:
+                score += 20  # Tendance très forte = signal SHORT très fiable
+                details.append(f"ADX très fort ({adx:.1f}) ✓✓")
+            elif adx > 25:
+                score += 15
+                details.append(f"ADX fort ({adx:.1f}) ✓")
+            elif adx > 20:
+                score += 10
+                details.append(f"ADX modéré ({adx:.1f})")
+            else:
+                score -= 15  # Pénalité si tendance faible
+                details.append(f"ADX faible ({adx:.1f}) ✗")
+    
+    # 11. Divergence RSI bearish → +25 pour SHORT (signal très fort)
+    rsi_divergence = indicators.get('rsi_divergence', False)
+    rsi_divergence_type = indicators.get('rsi_divergence_type')
+    if rsi_divergence and rsi_divergence_type == 'bearish':
+        if entry_signal == 'SHORT':
+            score += 25  # Divergence bearish = signal très fort
+            details.append("Divergence RSI bearish ✓✓✓")
     
     # 6. Prix proche support/résistance → +5
     if support_distance is not None:
