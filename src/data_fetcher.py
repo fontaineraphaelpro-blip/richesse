@@ -1,329 +1,131 @@
 """
-Module pour récupérer les prix réels et générer des données OHLCV réalistes.
+Module pour récupérer les VRAIES données de marché (OHLCV) depuis Binance.
+Inclut la liste des 50 principales paires pour le scalping.
 """
 
 import pandas as pd
-import numpy as np
 import requests
 import time
-from typing import Optional, Dict
-from datetime import datetime, timedelta
+from typing import Optional, Dict, Tuple, List
 
+# --- LISTE DES 50 PRINCIPALES PAIRES USDT (Liquidité élevée pour scalping) ---
+TOP_USDT_PAIRS = [
+    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
+    'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'TRXUSDT', 'DOTUSDT',
+    'MATICUSDT', 'LINKUSDT', 'SHIBUSDT', 'LTCUSDT', 'BCHUSDT',
+    'ATOMUSDT', 'UNIUSDT', 'XLMUSDT', 'ETCUSDT', 'FILUSDT',
+    'ICPUSDT', 'HBARUSDT', 'APTUSDT', 'VETUSDT', 'NEARUSDT',
+    'QNTUSDT', 'MKRUSDT', 'GRTUSDT', 'AAVEUSDT', 'ALGOUSDT',
+    'AXSUSDT', 'SANDUSDT', 'EGLDUSDT', 'EOSUSDT', 'THETAUSDT',
+    'FTMUSDT', 'SNXUSDT', 'NEOUSDT', 'FLOWUSDT', 'KAVAUSDT',
+    'XTZUSDT', 'GALAUSDT', 'CHZUSDT', 'MINAUSDT', 'ARBUSDT',
+    'OPUSDT', 'INJUSDT', 'RNDRUSDT', 'SUIUSDT', 'SEIUSDT'
+]
 
-# Prix de référence réalistes par crypto (basés sur données historiques)
-REFERENCE_PRICES = {
-    'BTCUSDT': 50000.0,
-    'ETHUSDT': 3000.0,
-    'BNBUSDT': 400.0,
-    'SOLUSDT': 120.0,
-    'XRPUSDT': 0.6,
-    'ADAUSDT': 0.5,
-    'DOGEUSDT': 0.08,
-    'DOTUSDT': 7.0,
-    'MATICUSDT': 0.8,
-    'AVAXUSDT': 35.0,
-    'LINKUSDT': 15.0,
-    'UNIUSDT': 6.0,
-    'LTCUSDT': 70.0,
-    'ATOMUSDT': 10.0,
-    'ETCUSDT': 20.0,
-    'XLMUSDT': 0.12,
-    'ALGOUSDT': 0.15,
-    'VETUSDT': 0.03,
-    'ICPUSDT': 12.0,
-    'FILUSDT': 5.0,
-    'TRXUSDT': 0.10,
-    'EOSUSDT': 0.8,
-    'AAVEUSDT': 80.0,
-    'THETAUSDT': 1.0,
-    'SANDUSDT': 0.5,
-    'MANAUSDT': 0.4,
-    'AXSUSDT': 6.0,
-    'NEARUSDT': 3.0,
-    'FTMUSDT': 0.3,
-    'GRTUSDT': 0.15,
-    'HBARUSDT': 0.08,
-    'EGLDUSDT': 40.0,
-    'ZECUSDT': 25.0,
-    'CHZUSDT': 0.10,
-    'ENJUSDT': 0.3,
-    'BATUSDT': 0.25,
-    'ZILUSDT': 0.02,
-    'IOTAUSDT': 0.2,
-    'ONTUSDT': 0.3,
-    'QTUMUSDT': 3.0,
-    'WAVESUSDT': 2.0,
-    'OMGUSDT': 0.8,
-    'SNXUSDT': 3.0,
-    'MKRUSDT': 2000.0,
-    'COMPUSDT': 50.0,
-    'YFIUSDT': 5000.0,
-    'SUSHIUSDT': 1.0,
-    'CRVUSDT': 0.5,
-    '1INCHUSDT': 0.4,
-    'RENUSDT': 0.1,
-    'LUNAUSDT': 0.5,
-    'USTCUSDT': 0.01,
-    'LUNCUSDT': 0.0001,
-    'APTUSDT': 8.0,
-    'ARBUSDT': 1.0
-}
-
-
-def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interval_minutes: int = 15) -> pd.DataFrame:
+def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
     """
-    Génère des données OHLC réalistes basées sur un prix de référence.
-    Optimisé pour le scalping (timeframe 15min).
-    
-    Args:
-        symbol: Symbole de la paire
-        base_price: Prix de référence
-        limit: Nombre de bougies
-        interval_minutes: Intervalle en minutes (défaut: 15 pour scalping)
-    
-    Returns:
-        DataFrame OHLCV avec colonnes: timestamp, open, high, low, close, volume
+    Récupère les bougies (Klines) historiques depuis l'API Binance (Publique).
     """
-    # Générer timestamps (15 minutes par bougie pour scalping)
-    timestamps = [datetime.now() - timedelta(minutes=interval_minutes*i) for i in range(limit-1, -1, -1)]
+    base_url = "https://api.binance.com/api/v3/klines"
     
-    # Générer prix avec tendance réaliste et volatilité
-    # Utiliser un seed basé sur le symbole pour avoir des prix cohérents
-    np.random.seed(hash(symbol) % (2**32))
-    
-    prices = []
-    price = base_price
-    
-    # Ajouter une tendance légère (bullish ou bearish) mais cohérente
-    trend = np.random.uniform(-0.0003, 0.0003)
-    
-    # Volatilité variable selon le type de crypto (plus élevée pour scalping)
-    volatility = 0.006 if base_price > 100 else 0.010  # Volatilité adaptée au timeframe 15min
-    
-    for i in range(limit):
-        # Variation aléatoire mais réaliste avec marche aléatoire
-        change = np.random.normal(0, volatility)  # Distribution normale
-        price = price * (1 + change + trend)
-        
-        # Garder dans une plage raisonnable (±20% du prix de base pour plus de cohérence)
-        price = max(base_price * 0.85, min(base_price * 1.15, price))
-        prices.append(price)
-    
-    # FORCER le dernier prix à être EXACTEMENT le prix réel récupéré
-    # C'est le prix actuel du marché, il ne doit pas être modifié
-    prices[-1] = base_price
-    
-    # Créer DataFrame OHLC
-    df_data = []
-    for i, (ts, close_price) in enumerate(zip(timestamps, prices)):
-        # Générer open (proche du close précédent ou du close actuel)
-        if i == 0:
-            open_price = close_price * np.random.uniform(0.995, 1.005)
-        else:
-            open_price = prices[i-1] * np.random.uniform(0.998, 1.002)
-        
-        # Générer high et low (variation de 0.5% à 2%)
-        price_range = close_price * np.random.uniform(0.005, 0.02)
-        high_price = max(open_price, close_price) + price_range * np.random.uniform(0.3, 0.7)
-        low_price = min(open_price, close_price) - price_range * np.random.uniform(0.3, 0.7)
-        
-        # Volume (plus élevé pour les grandes cryptos)
-        base_volume = 10000000 if base_price > 100 else 1000000
-        volume = base_volume * np.random.uniform(0.5, 2.0)
-        
-        df_data.append({
-            'timestamp': ts,
-            'open': open_price,
-            'high': high_price,
-            'low': low_price,
-            'close': close_price,
-            'volume': volume
-        })
-    
-    df = pd.DataFrame(df_data)
-    
-    # S'assurer que high >= max(open, close) et low <= min(open, close)
-    df['high'] = df[['open', 'close', 'high']].max(axis=1)
-    df['low'] = df[['open', 'close', 'low']].min(axis=1)
-    
-    return df
+    # Validation de l'intervalle
+    valid_intervals = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']
+    if interval not in valid_intervals:
+        interval = '15m'
 
-
-def get_real_price(symbol: str) -> Optional[float]:
-    """
-    Récupère le prix réel actuel d'une crypto depuis CryptoCompare (API publique gratuite).
-    CryptoCompare est accessible depuis partout, contrairement à Binance qui peut être bloqué.
-    
-    Args:
-        symbol: Symbole de la paire (ex: 'BTCUSDT')
-    
-    Returns:
-        Prix réel en USDT ou None
-    """
-    # Mapping des symboles Binance vers les symboles CryptoCompare
-    symbol_map = {
-        'BTCUSDT': 'BTC', 'ETHUSDT': 'ETH', 'BNBUSDT': 'BNB',
-        'SOLUSDT': 'SOL', 'XRPUSDT': 'XRP', 'ADAUSDT': 'ADA',
-        'DOGEUSDT': 'DOGE', 'DOTUSDT': 'DOT', 'MATICUSDT': 'MATIC',
-        'AVAXUSDT': 'AVAX', 'LINKUSDT': 'LINK', 'UNIUSDT': 'UNI',
-        'LTCUSDT': 'LTC', 'ATOMUSDT': 'ATOM', 'ETCUSDT': 'ETC',
-        'XLMUSDT': 'XLM', 'ALGOUSDT': 'ALGO', 'VETUSDT': 'VET',
-        'ICPUSDT': 'ICP', 'FILUSDT': 'FIL', 'TRXUSDT': 'TRX',
-        'EOSUSDT': 'EOS', 'AAVEUSDT': 'AAVE', 'THETAUSDT': 'THETA',
-        'SANDUSDT': 'SAND', 'MANAUSDT': 'MANA', 'AXSUSDT': 'AXS',
-        'NEARUSDT': 'NEAR', 'FTMUSDT': 'FTM', 'GRTUSDT': 'GRT',
-        'HBARUSDT': 'HBAR', 'EGLDUSDT': 'EGLD', 'ZECUSDT': 'ZEC',
-        'CHZUSDT': 'CHZ', 'ENJUSDT': 'ENJ', 'BATUSDT': 'BAT',
-        'ZILUSDT': 'ZIL', 'IOTAUSDT': 'IOTA', 'ONTUSDT': 'ONT',
-        'QTUMUSDT': 'QTUM', 'WAVESUSDT': 'WAVES', 'OMGUSDT': 'OMG',
-        'SNXUSDT': 'SNX', 'MKRUSDT': 'MKR', 'COMPUSDT': 'COMP',
-        'YFIUSDT': 'YFI', 'SUSHIUSDT': 'SUSHI', 'CRVUSDT': 'CRV',
-        '1INCHUSDT': '1INCH', 'RENUSDT': 'REN', 'APTUSDT': 'APT',
-        'ARBUSDT': 'ARB', 'LUNAUSDT': 'LUNA', 'USTCUSDT': 'USTC',
-        'LUNCUSDT': 'LUNC'
+    params = {
+        'symbol': symbol.upper(),
+        'interval': interval,
+        'limit': limit
     }
     
-    crypto_symbol = symbol_map.get(symbol)
-    if not crypto_symbol:
-        return None
-    
     try:
-        # API CryptoCompare - Price (gratuite, pas de clé API nécessaire)
-        # Documentation: https://min-api.cryptocompare.com/documentation
-        url = "https://min-api.cryptocompare.com/data/price"
-        params = {
-            'fsym': crypto_symbol,
-            'tsyms': 'USD'
-        }
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json'
-        }
-        
-        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response = requests.get(base_url, params=params, timeout=5)
         
         if response.status_code == 200:
             data = response.json()
-            if 'USD' in data and data['USD']:
-                price = float(data['USD'])
-                print(f"✓ {symbol}: ${price:,.8f} (CryptoCompare)")
-                return price
-            else:
-                print(f"⚠️ Réponse CryptoCompare invalide pour {symbol}: {data}")
+            
+            if not data:
                 return None
+                
+            # Colonnes API Binance
+            df = pd.DataFrame(data, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_asset_volume', 'trades', 
+                'taker_buy_base', 'taker_buy_quote', 'ignore'
+            ])
+            
+            # Nettoyage
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+            
+            # Conversion types (float)
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = df[col].astype(float)
+            
+            # Conversion timestamp
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            
+            return df
+            
         elif response.status_code == 429:
-            # Rate limit
-            print(f"⚠️ Rate limit CryptoCompare pour {symbol}, attente...")
-            time.sleep(1)
+            print(f"⚠️ Rate Limit Binance atteint. Pause de 2s...")
+            time.sleep(2)
             return None
         else:
-            print(f"⚠️ Erreur API CryptoCompare pour {symbol}: {response.status_code}")
+            print(f"⚠️ Erreur API Binance {symbol}: {response.status_code}")
             return None
-        
-    except requests.exceptions.Timeout:
-        print(f"⚠️ Timeout API CryptoCompare pour {symbol}")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️ Erreur réseau API CryptoCompare pour {symbol}: {e}")
-        return None
+            
     except Exception as e:
-        print(f"⚠️ Erreur API CryptoCompare pour {symbol}: {e}")
+        print(f"⚠️ Erreur réseau pour {symbol}: {e}")
         return None
 
 
-def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
+def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Tuple[Optional[pd.DataFrame], Optional[float]]:
     """
-    Récupère le prix réel et génère des données OHLCV réalistes.
-    
-    Args:
-        symbol: Symbole de la paire (ex: 'BTCUSDT')
-        interval: Intervalle de temps ('15m')
-        limit: Nombre de bougies à générer
-    
-    Returns:
-        Tuple (DataFrame, real_price) où:
-        - DataFrame avec colonnes: timestamp, open, high, low, close, volume
-        - real_price: Prix réel récupéré depuis CryptoCompare (ou None)
-        Le dernier prix (close) sera EXACTEMENT le prix réel récupéré
+    Récupère les données et le prix actuel pour une paire.
     """
-    try:
-        # 1. Récupérer le prix réel actuel (TOUJOURS à chaque appel)
-        real_price = get_real_price(symbol)
-        
-        if real_price and real_price > 0:
-            base_price = real_price
-        else:
-            # Fallback: utiliser le prix de référence
-            base_price = REFERENCE_PRICES.get(symbol, 100.0)
-            real_price = None  # Pas de prix réel disponible
-            print(f"⚠️ {symbol}: API CryptoCompare indisponible, utilisation prix référence ${base_price:.4f}")
-        
-        # Déterminer l'intervalle en minutes
-        interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
-        interval_minutes = interval_map.get(interval, 15)
-        
-        # Générer des données OHLC basées sur le prix réel
-        # Le dernier prix sera FORCÉ à être exactement le prix réel
-        df = generate_ohlc_data(symbol, base_price, limit, interval_minutes)
-        
-        # S'assurer que le dernier prix est EXACTEMENT le prix réel
-        if df is not None and len(df) > 0:
-            if real_price and real_price > 0:
-                # Forcer le prix réel dans le DataFrame
-                df.iloc[-1, df.columns.get_loc('close')] = real_price
-                # Ajuster aussi high et low pour être cohérents
-                last_high = df.iloc[-1]['high']
-                last_low = df.iloc[-1]['low']
-                if real_price > last_high:
-                    df.iloc[-1, df.columns.get_loc('high')] = real_price * 1.001
-                if real_price < last_low:
-                    df.iloc[-1, df.columns.get_loc('low')] = real_price * 0.999
-            else:
-                # Si pas de prix réel, utiliser le prix généré comme fallback
-                # Mais on garde real_price = None pour indiquer que ce n'est pas un prix réel
-                pass
-        
-        return df, real_price
+    df = get_binance_klines(symbol, interval, limit)
     
-    except Exception as e:
-        print(f"❌ Erreur lors de la génération des données pour {symbol}: {e}")
-        return None, None
+    real_price = None
+    if df is not None and not df.empty:
+        real_price = df.iloc[-1]['close']
+    
+    return df, real_price
 
 
-def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200) -> tuple:
+def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit: int = 200) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
     """
-    Récupère les prix réels et génère les données OHLCV pour plusieurs paires.
-    
-    Args:
-        symbols: Liste des symboles de paires
-        interval: Intervalle de temps
-        limit: Nombre de bougies par paire
-    
-    Returns:
-        Tuple (data_dict, prices_dict) où:
-        - data_dict: Dictionnaire {symbol: DataFrame}
-        - prices_dict: Dictionnaire {symbol: real_price} avec les prix réels
+    Récupère les données pour une liste de paires.
+    Utilise la liste TOP_USDT_PAIRS par défaut si 'symbols' est None.
     """
+    # Si aucune liste n'est fournie, on utilise la liste interne
+    if symbols is None or len(symbols) == 0:
+        symbols = TOP_USDT_PAIRS
+        
     data = {}
     real_prices = {}
     total = len(symbols)
+    success_count = 0
     
-    print(f"📊 Récupération des prix réels pour {total} paires...")
+    print(f"📊 Récupération des données réelles (Binance) pour {total} paires...")
     
     for i, symbol in enumerate(symbols, 1):
+        print(f"⏳ ({i}/{total}) Fetching {symbol}...", end='\r')
+        
         df, real_price = fetch_klines(symbol, interval, limit)
-        if df is not None:
+        
+        if df is not None and real_price is not None:
             data[symbol] = df
-            if real_price and real_price > 0:
-                real_prices[symbol] = real_price
-                print(f"✓ {symbol}: ${real_price:,.8f} récupéré")
-            else:
-                print(f"⚠️ {symbol}: Prix réel non disponible, utilisation du prix généré")
-        # Délai pour éviter rate limiting (CryptoCompare: gratuit, ~100k req/mois)
-        # On prend une marge de sécurité
-        if i < total:
-            time.sleep(0.2)  # 200ms entre chaque requête (300 req/min max)
+            real_prices[symbol] = real_price
+            success_count += 1
+        
+        # Petit délai pour éviter le ban IP (Rate Limit Binance)
+        time.sleep(0.15)
     
-    print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
+    print(f"\n✅ {success_count}/{total} paires récupérées avec succès.")
+    
     return data, real_prices
+
+def get_top_pairs() -> List[str]:
+    """Retourne simplement la liste des paires configurées."""
+    return TOP_USDT_PAIRS
