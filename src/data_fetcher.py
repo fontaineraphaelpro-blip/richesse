@@ -1,10 +1,11 @@
 """
-Module pour générer des données OHLCV réalistes (sans API).
-Utilise des données de démonstration basées sur des prix de référence.
+Module pour récupérer les prix réels et générer des données OHLCV réalistes.
 """
 
 import pandas as pd
 import numpy as np
+import requests
+import time
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 
@@ -152,27 +153,90 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interva
     return df
 
 
-def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
+def get_real_price(symbol: str) -> Optional[float]:
     """
-    Génère des données OHLCV (bougies) pour une paire donnée.
+    Récupère le prix réel actuel d'une crypto depuis CoinGecko (API publique gratuite).
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
-        interval: Intervalle de temps ('1h')
+    
+    Returns:
+        Prix réel en USD ou None
+    """
+    try:
+        # Convertir le symbole Binance en ID CoinGecko
+        symbol_map = {
+            'BTCUSDT': 'bitcoin', 'ETHUSDT': 'ethereum', 'BNBUSDT': 'binancecoin',
+            'SOLUSDT': 'solana', 'XRPUSDT': 'ripple', 'ADAUSDT': 'cardano',
+            'DOGEUSDT': 'dogecoin', 'DOTUSDT': 'polkadot', 'MATICUSDT': 'matic-network',
+            'AVAXUSDT': 'avalanche-2', 'LINKUSDT': 'chainlink', 'UNIUSDT': 'uniswap',
+            'LTCUSDT': 'litecoin', 'ATOMUSDT': 'cosmos', 'ETCUSDT': 'ethereum-classic',
+            'XLMUSDT': 'stellar', 'ALGOUSDT': 'algorand', 'VETUSDT': 'vechain',
+            'ICPUSDT': 'internet-computer', 'FILUSDT': 'filecoin', 'TRXUSDT': 'tron',
+            'EOSUSDT': 'eos', 'AAVEUSDT': 'aave', 'THETAUSDT': 'theta-token',
+            'SANDUSDT': 'the-sandbox', 'MANAUSDT': 'decentraland', 'AXSUSDT': 'axie-infinity',
+            'NEARUSDT': 'near', 'FTMUSDT': 'fantom', 'GRTUSDT': 'the-graph',
+            'HBARUSDT': 'hedera-hashgraph', 'EGLDUSDT': 'elrond-erd-2', 'ZECUSDT': 'zcash',
+            'CHZUSDT': 'chiliz', 'ENJUSDT': 'enjincoin', 'BATUSDT': 'basic-attention-token',
+            'ZILUSDT': 'zilliqa', 'IOTAUSDT': 'iota', 'ONTUSDT': 'ontology',
+            'QTUMUSDT': 'qtum', 'WAVESUSDT': 'waves', 'OMGUSDT': 'omisego',
+            'SNXUSDT': 'synthetix-network-token', 'MKRUSDT': 'maker', 'COMPUSDT': 'compound-governance-token',
+            'YFIUSDT': 'yearn-finance', 'SUSHIUSDT': 'sushi', 'CRVUSDT': 'curve-dao-token',
+            '1INCHUSDT': '1inch', 'RENUSDT': 'republic-protocol', 'APTUSDT': 'aptos',
+            'ARBUSDT': 'arbitrum'
+        }
+        
+        coin_id = symbol_map.get(symbol)
+        if not coin_id:
+            return None
+        
+        # API CoinGecko simple price (gratuite, pas de clé API nécessaire)
+        url = f"https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': coin_id,
+            'vs_currencies': 'usd'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if coin_id in data and 'usd' in data[coin_id]:
+                price = float(data[coin_id]['usd'])
+                return price
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
+    """
+    Récupère le prix réel et génère des données OHLCV réalistes.
+    
+    Args:
+        symbol: Symbole de la paire (ex: 'BTCUSDT')
+        interval: Intervalle de temps ('15m')
         limit: Nombre de bougies à générer
     
     Returns:
         DataFrame avec colonnes: timestamp, open, high, low, close, volume
     """
     try:
-        # Récupérer le prix de référence
-        base_price = REFERENCE_PRICES.get(symbol, 100.0)
+        # 1. Récupérer le prix réel actuel
+        real_price = get_real_price(symbol)
+        
+        if real_price and real_price > 0:
+            base_price = real_price
+        else:
+            # Fallback: utiliser le prix de référence
+            base_price = REFERENCE_PRICES.get(symbol, 100.0)
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
         interval_minutes = interval_map.get(interval, 15)
         
-        # Générer des données OHLC basées sur le prix de référence
+        # Générer des données OHLC basées sur le prix réel
         return generate_ohlc_data(symbol, base_price, limit, interval_minutes)
     
     except Exception as e:
@@ -180,9 +244,9 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         return None
 
 
-def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) -> dict:
+def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200) -> dict:
     """
-    Génère les données OHLCV pour plusieurs paires.
+    Récupère les prix réels et génère les données OHLCV pour plusieurs paires.
     
     Args:
         symbols: Liste des symboles de paires
@@ -195,11 +259,16 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
     data = {}
     total = len(symbols)
     
+    print(f"📊 Récupération des prix réels pour {total} paires...")
+    
     for i, symbol in enumerate(symbols, 1):
-        print(f"📊 Génération {symbol} ({i}/{total})...", end='\r')
+        print(f"📊 {symbol} ({i}/{total})...", end='\r')
         df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
+        # Délai pour éviter rate limiting (CoinGecko: 10-50 req/min)
+        if i < total:
+            time.sleep(1.2)  # ~50 requêtes par minute max
     
-    print(f"\n✅ {len(data)}/{total} paires générées avec succès")
+    print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data
