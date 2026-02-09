@@ -12,29 +12,39 @@ src_dir = os.path.join(base_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-print(f"📂 Répertoire de travail: {os.getcwd()}")
-print(f"📂 Chemin src: {src_dir}")
-print(f"📂 Fichier web_app.py existe: {os.path.exists(os.path.join(src_dir, 'web_app.py'))}")
-
+# Importer l'application Flask
 try:
-    # Importer l'application Flask
     from web_app import app
-    print("✅ Import de web_app réussi")
-    
-    # Exporter pour Gunicorn
     application = app
-    print("✅ Application exportée pour Gunicorn")
+except ImportError as e:
+    # Si l'import échoue, essayer avec le chemin complet
+    import importlib.util
+    web_app_path = os.path.join(src_dir, 'web_app.py')
+    if os.path.exists(web_app_path):
+        spec = importlib.util.spec_from_file_location("web_app", web_app_path)
+        web_app_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(web_app_module)
+        application = web_app_module.app
+    else:
+        # Créer une application minimale en dernier recours
+        from flask import Flask
+        application = Flask(__name__)
+        
+        @application.route('/')
+        def error():
+            return f"❌ Erreur: Impossible de charger web_app.py. {str(e)}", 500
+        
+        @application.route('/health')
+        def health():
+            return {"status": "error", "error": str(e)}, 500
 except Exception as e:
-    print(f"❌ Erreur lors de l'import: {e}")
-    import traceback
-    traceback.print_exc()
     # Créer une application minimale pour éviter le crash
     from flask import Flask
     application = Flask(__name__)
     
     @application.route('/')
     def error():
-        return f"❌ Erreur: Impossible de charger l'application. {str(e)}", 500
+        return f"❌ Erreur: {str(e)}", 500
     
     @application.route('/health')
     def health():

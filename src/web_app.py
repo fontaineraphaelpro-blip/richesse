@@ -546,10 +546,16 @@ def trigger_scan():
         """Fonction qui exécute le scan en arrière-plan."""
         try:
             # Importer et exécuter le scanner
+            import sys
+            src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
+            if src_path not in sys.path:
+                sys.path.insert(0, src_path)
             from main import run_scanner
             run_scanner()
         except Exception as e:
             print(f"❌ Erreur lors du scan en arrière-plan: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             # Supprimer le fichier de scan en cours
             if os.path.exists('.scanning'):
