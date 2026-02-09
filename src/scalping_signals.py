@@ -47,68 +47,119 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     if indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0:
         volume_ratio = indicators.get('current_volume') / indicators.get('volume_ma20')
     
-    # Calculer le signal d'entrée
+    # Calculer le signal d'entrée avec critères STRICTS
     entry_signal = 'NEUTRAL'
     confidence = 0
-    # Le prix d'entrée doit toujours être proche du prix actuel (max 0.5% d'écart)
     entry_price = current_price
     
-    # 1. Croisement EMA (signal fort pour scalping)
+    # Compteurs de confirmations (nécessaires pour un signal valide)
+    bullish_confirmations = 0
+    bearish_confirmations = 0
+    
+    # 1. Croisement EMA (nécessaire mais pas suffisant seul)
+    ema_bullish = False
+    ema_bearish = False
     if ema9 and ema21:
-        if ema9 > ema21:
-            confidence += 20
-            if current_price > ema9:
-                confidence += 10
-                entry_signal = 'LONG'
-                # Pour LONG, entrer légèrement au-dessus du prix actuel ou au niveau EMA9
-                entry_price = max(current_price, ema9) * 1.0005  # +0.05% pour éviter les slippages
-        else:
-            if current_price < ema9:
-                confidence += 10
-                entry_signal = 'SHORT'
-                # Pour SHORT, entrer légèrement en dessous du prix actuel ou au niveau EMA9
-                entry_price = min(current_price, ema9) * 0.9995  # -0.05% pour éviter les slippages
+        if ema9 > ema21 and current_price > ema9:
+            ema_bullish = True
+            bullish_confirmations += 1
+            confidence += 15
+        elif ema9 < ema21 and current_price < ema9:
+            ema_bearish = True
+            bearish_confirmations += 1
+            confidence += 15
     
-    # 2. RSI (zone optimale pour scalping: 40-60)
+    # 2. RSI (filtre important - éviter les zones extrêmes)
+    rsi_ok_bullish = False
+    rsi_ok_bearish = False
     if rsi14 is not None:
-        if 40 <= rsi14 <= 60:
-            confidence += 15
-        elif 30 <= rsi14 < 40 and entry_signal == 'LONG':
-            confidence += 10  # Survente pour long
-        elif 60 < rsi14 <= 70 and entry_signal == 'SHORT':
-            confidence += 10  # Surachat pour short
-    
-    # 3. MACD (croisement)
-    if macd is not None and macd_signal is not None:
-        if macd > macd_signal:
-            confidence += 15
-            if macd_histogram and macd_histogram > 0:
-                confidence += 5
-        elif macd < macd_signal:
-            if entry_signal == 'SHORT':
+        # Pour LONG: RSI entre 30-65 (éviter surachat)
+        if 30 <= rsi14 <= 65:
+            if ema_bullish:
+                rsi_ok_bullish = True
+                bullish_confirmations += 1
+                confidence += 15
+        # Pour SHORT: RSI entre 35-70 (éviter survente)
+        if 35 <= rsi14 <= 70:
+            if ema_bearish:
+                rsi_ok_bearish = True
+                bearish_confirmations += 1
                 confidence += 15
     
-    # 4. Bollinger Bands (rebond ou breakout) - ajuster le prix d'entrée si opportunité
+    # 3. MACD (confirmation de tendance)
+    macd_bullish = False
+    macd_bearish = False
+    if macd is not None and macd_signal is not None:
+        if macd > macd_signal:
+            macd_bullish = True
+            if ema_bullish:
+                bullish_confirmations += 1
+                confidence += 15
+                if macd_histogram and macd_histogram > 0:
+                    bullish_confirmations += 1  # Histogramme positif = confirmation supplémentaire
+                    confidence += 5
+        elif macd < macd_signal:
+            macd_bearish = True
+            if ema_bearish:
+                bearish_confirmations += 1
+                confidence += 15
+    
+    # 4. Bollinger Bands (filtre de volatilité et position)
+    bb_ok_bullish = False
+    bb_ok_bearish = False
     if bb_lower and bb_upper and (bb_upper - bb_lower) > 0:
         bb_position = (current_price - bb_lower) / (bb_upper - bb_lower)
-        if bb_position < 0.2 and entry_signal == 'LONG':
-            confidence += 10  # Rebound depuis bande inférieure
-            # Entrer légèrement au-dessus de la bande inférieure ou au prix actuel
-            entry_price = max(current_price, bb_lower * 1.001)  # +0.1% au-dessus de la bande
-        elif bb_position > 0.8 and entry_signal == 'SHORT':
-            confidence += 10  # Rebound depuis bande supérieure
-            # Entrer légèrement en dessous de la bande supérieure ou au prix actuel
-            entry_price = min(current_price, bb_upper * 0.999)  # -0.1% en dessous de la bande
+        # Pour LONG: prix proche ou sous bande inférieure (rebond potentiel)
+        if bb_position < 0.3 and ema_bullish:
+            bb_ok_bullish = True
+            bullish_confirmations += 1
+            confidence += 10
+            entry_price = max(current_price, bb_lower * 1.001)
+        # Pour SHORT: prix proche ou au-dessus bande supérieure (rebond potentiel)
+        elif bb_position > 0.7 and ema_bearish:
+            bb_ok_bearish = True
+            bearish_confirmations += 1
+            confidence += 10
+            entry_price = min(current_price, bb_upper * 0.999)
     
-    # 5. Volume (confirmation)
-    if volume_ratio and volume_ratio > 1.5:
-        confidence += 10
+    # 5. Volume (confirmation importante - minimum 1.3x)
+    volume_ok = False
+    if volume_ratio:
+        if volume_ratio > 1.3:
+            volume_ok = True
+            if ema_bullish or ema_bearish:
+                if ema_bullish:
+                    bullish_confirmations += 1
+                else:
+                    bearish_confirmations += 1
+                confidence += 10
+            if volume_ratio > 1.8:
+                confidence += 5  # Volume très élevé = signal plus fort
     
-    # 6. Momentum
-    if momentum and momentum > 0 and entry_signal == 'LONG':
-        confidence += 5
-    elif momentum and momentum < 0 and entry_signal == 'SHORT':
-        confidence += 5
+    # 6. Momentum (confirmation de direction)
+    momentum_ok = False
+    if momentum:
+        if momentum > 0 and ema_bullish:
+            momentum_ok = True
+            bullish_confirmations += 1
+            confidence += 5
+        elif momentum < 0 and ema_bearish:
+            momentum_ok = True
+            bearish_confirmations += 1
+            confidence += 5
+    
+    # DÉCISION FINALE: Nécessite AU MOINS 3 confirmations pour un signal valide
+    # et confiance minimum de 50
+    if bullish_confirmations >= 3 and confidence >= 50:
+        entry_signal = 'LONG'
+        entry_price = max(current_price, ema9) * 1.0005 if ema9 else current_price * 1.0005
+    elif bearish_confirmations >= 3 and confidence >= 50:
+        entry_signal = 'SHORT'
+        entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
+    else:
+        # Pas assez de confirmations = pas de signal
+        entry_signal = 'NEUTRAL'
+        confidence = 0
     
     # Calculer stop-loss et take-profit basés sur ATR
     stop_loss = None
