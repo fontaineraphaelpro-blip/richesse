@@ -6,6 +6,98 @@ from typing import Dict, Optional
 from scalping_signals import calculate_entry_exit_signals, find_resistance
 
 
+def detect_trend(indicators: Dict) -> str:
+    """
+    Détecte la tendance avec plusieurs confirmations pour plus de fiabilité.
+    
+    Utilise:
+    - EMA9 vs EMA21
+    - SMA20 vs SMA50
+    - MACD
+    - Position du prix vs moyennes mobiles
+    - Momentum
+    - Position dans Bollinger Bands
+    
+    Returns:
+        'Bullish', 'Bearish', ou 'NEUTRAL'
+    """
+    bullish_signals = 0
+    bearish_signals = 0
+    
+    ema9 = indicators.get('ema9')
+    ema21 = indicators.get('ema21')
+    sma20 = indicators.get('sma20')
+    sma50 = indicators.get('sma50')
+    current_price = indicators.get('current_price')
+    macd = indicators.get('macd')
+    macd_signal = indicators.get('macd_signal')
+    momentum = indicators.get('momentum')
+    bb_middle = indicators.get('bb_middle')
+    
+    # 1. EMA9 vs EMA21 (tendance court terme)
+    if ema9 and ema21:
+        if ema9 > ema21:
+            bullish_signals += 1
+        elif ema9 < ema21:
+            bearish_signals += 1
+    
+    # 2. SMA20 vs SMA50 (tendance moyen terme)
+    if sma20 and sma50:
+        if sma20 > sma50:
+            bullish_signals += 1
+        elif sma20 < sma50:
+            bearish_signals += 1
+    
+    # 3. Position du prix vs EMA21 (confirmation)
+    if current_price and ema21:
+        if current_price > ema21:
+            bullish_signals += 1
+        elif current_price < ema21:
+            bearish_signals += 1
+    
+    # 4. Position du prix vs SMA50 (tendance plus large)
+    if current_price and sma50:
+        if current_price > sma50:
+            bullish_signals += 1
+        elif current_price < sma50:
+            bearish_signals += 1
+    
+    # 5. MACD (confirmation de tendance)
+    if macd and macd_signal:
+        if macd > macd_signal:
+            bullish_signals += 1
+        elif macd < macd_signal:
+            bearish_signals += 1
+    
+    # 6. Momentum (direction du mouvement)
+    if momentum:
+        if momentum > 0:
+            bullish_signals += 1
+        elif momentum < 0:
+            bearish_signals += 1
+    
+    # 7. Position vs Bollinger Middle (tendance générale)
+    if current_price and bb_middle:
+        if current_price > bb_middle:
+            bullish_signals += 1
+        elif current_price < bb_middle:
+            bearish_signals += 1
+    
+    # Décision: nécessite au moins 4 confirmations sur 7 pour une tendance claire
+    if bullish_signals >= 4:
+        return 'Bullish'
+    elif bearish_signals >= 4:
+        return 'Bearish'
+    else:
+        # Si égalité ou pas assez de confirmations = tendance neutre
+        if bullish_signals > bearish_signals:
+            return 'Bullish'  # Légèrement bullish mais pas assez confirmé
+        elif bearish_signals > bullish_signals:
+            return 'Bearish'  # Légèrement bearish mais pas assez confirmé
+        else:
+            return 'NEUTRAL'
+
+
 def calculate_opportunity_score(indicators: Dict, support_distance: Optional[float], df=None) -> Dict:
     """
     Calcule le score d'opportunité (0-100) adapté au scalping.
@@ -177,12 +269,8 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     else:
         signal = "❌ Pas d'opportunité valide"
     
-    # Déterminer le trend
-    trend = 'Bullish'
-    if ema9 and ema21:
-        trend = 'Bullish' if ema9 > ema21 else 'Bearish'
-    elif indicators.get('sma20') and indicators.get('sma50'):
-        trend = 'Bullish' if indicators.get('sma20') > indicators.get('sma50') else 'Bearish'
+    # Déterminer le trend avec détection multi-indicateurs
+    trend = detect_trend(indicators)
     
     return {
         'score': score,
