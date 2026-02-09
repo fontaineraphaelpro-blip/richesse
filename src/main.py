@@ -1,6 +1,6 @@
 """
 Script principal du Crypto Signal Scanner Web.
-Version DAY TRADING (1h) - Avec Dashboard Complet (Scanner + Trades).
+Version DAY TRADING (1h) - Avec Gestion Complète (Entrées + Sorties).
 """
 
 import time
@@ -9,10 +9,7 @@ from datetime import datetime
 from flask import Flask, render_template_string
 import threading
 
-# Import du module de simulation
 from trader import PaperTrader
-
-# Importations des modules locaux
 from data_fetcher import fetch_multiple_pairs
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
@@ -20,24 +17,35 @@ from scorer import calculate_opportunity_score
 
 def run_scanner():
     """
-    Exécute un scan complet et gère le trading automatique.
+    Exécute un scan complet et gère le trading (entrées et sorties).
     """
     print("\n" + "="*60)
     print("🚀 CRYPTO SCANNER - Mode DAY TRADING (1h)")
-    print("="*60)
-    print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+    print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     
     try:
         # 1. Récupération des données
-        print("📊 Récupération des données sur 1000 bougies de 1h...")
+        print("📊 Récupération des données...")
         data, real_prices = fetch_multiple_pairs(None, interval='1h', limit=1000)
         
         if not data:
-            print("❌ Aucune donnée récupérée.")
+            print("❌ Aucune donnée.")
             return []
+            
+        # ==============================================================================
+        # 2. GESTION DES SORTIES (Vérifier si on doit vendre)
+        # ==============================================================================
+        print("🔍 Vérification des positions ouvertes...")
+        trader = PaperTrader()
         
-        # 2. Analyse
-        print("\n🔍 Analyse du marché...")
+        # On donne les prix actuels au trader pour qu'il vérifie les SL/TP
+        if real_prices:
+            trader.check_positions(real_prices)
+        
+        # ==============================================================================
+        
+        # 3. Analyse Scanner
+        print("🔍 Analyse des nouvelles opportunités...")
         opportunities = []
         
         for i, (symbol, df) in enumerate(data.items(), 1):
@@ -63,7 +71,7 @@ def run_scanner():
                 'confidence': score_data.get('confidence', 0),
             })
         
-        # 3. Filtrage & Tri
+        # Filtrage
         quality_opportunities = [opp for opp in opportunities if opp['score'] >= 50]
         quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
         top_picks = quality_opportunities[:15]
@@ -76,17 +84,16 @@ def run_scanner():
         for i, opp in enumerate(top_picks, 1):
             opp['rank'] = i
         
-        # 4. Affichage Terminal
-        print("\n" + "="*80)
-        print("🏆 TOP OPPORTUNITÉS (1H)")
-        print("="*80)
+        # Affichage Terminal
+        print("\n" + "-"*80)
+        print(f"{'Paire':<10} {'Score':<5} {'Signal':<6} {'Prix':<10} {'SL':<10} {'TP':<10}")
+        print("-"*80)
         for opp in top_picks:
-            print(f"{opp['pair']:<10} Score:{opp['score']:<3} {opp['trend']:<8} {opp['entry_signal']:<5} ${opp['price']:.4f}")
+            print(f"{opp['pair']:<10} {opp['score']:<5} {opp['entry_signal']:<6} ${opp['price']:.4f} ${opp['stop_loss']:.4f} ${opp['take_profit_1']:.4f}")
         
-        # 5. AUTOMATISATION PAPER TRADING
-        print("\n🤖 VÉRIFICATION POUR TRADING AUTO...")
-        trader = PaperTrader(initial_balance=1000)
-        
+        # ==============================================================================
+        # 4. GESTION DES ENTRÉES (Acheter)
+        # ==============================================================================
         my_positions = trader.get_open_positions()
         balance = trader.get_usdt_balance()
         
@@ -99,10 +106,10 @@ def run_scanner():
                     opp['entry_signal'] == 'LONG' and 
                     opp['pair'] not in my_positions):
                     
-                    print(f"🚀 LANCEMENT TRADE : {opp['pair']} (Score: {opp['score']})")
                     trader.place_buy_order(
                         symbol=opp['pair'],
                         amount_usdt=TRADE_AMOUNT,
+                        current_price=opp['price'], # Important pour calculer la quantité
                         stop_loss_price=opp['stop_loss'],
                         take_profit_price=opp['take_profit_1']
                     )
@@ -112,25 +119,23 @@ def run_scanner():
         
     except Exception as e:
         print(f"\n❌ Erreur scan: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def main():
-    print("⚡ Scanner + Dashboard Actifs")
+    print("⚡ Scanner + Auto-Trader Actifs")
     
-    # Données partagées
     shared_data = {'opportunities': [], 'is_scanning': False}
-    
     app = Flask(__name__)
     
     @app.route('/')
     def home():
-        # Récupérer les infos du trader à chaque rafraichissement
         trader = PaperTrader()
         balance = trader.get_usdt_balance()
         trades = trader.get_trades_history()
         positions = trader.get_open_positions()
         
-        # Template HTML mis à jour avec section Portefeuille
         HTML = """
         <!DOCTYPE html>
         <html lang="fr">
@@ -141,36 +146,24 @@ def main():
             <style>
                 body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; color: #333; margin:0; }
                 .container { max-width: 1200px; margin: 0 auto; }
-                
-                /* Cartes */
                 .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
-                
-                /* En-tête */
                 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
                 .status-badge { background: #e8f5e9; color: #2e7d32; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9em; }
                 .scanning { color: #f57c00; background: #fff3e0; animation: pulse 1.5s infinite; }
-                
-                /* Section Portefeuille */
                 .wallet-info { display: flex; gap: 20px; margin-bottom: 10px; }
                 .wallet-item { background: #f8f9fa; padding: 15px; border-radius: 8px; flex: 1; text-align: center; border: 1px solid #eee; }
                 .wallet-value { font-size: 1.8em; font-weight: bold; color: #2c3e50; }
                 .wallet-label { color: #666; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
-                
-                /* Tables */
                 h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
                 th { background-color: #f8f9fa; color: #666; padding: 12px; text-align: left; font-weight: 600; }
                 td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
-                
-                /* Badges et Couleurs */
                 .badge { padding: 5px 10px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.85em; }
                 .bg-green { background-color: #27ae60; }
                 .bg-red { background-color: #c0392b; }
                 .bg-blue { background-color: #2980b9; }
-                
-                .score-high { color: #27ae60; font-weight: bold; }
-                .score-med { color: #f39c12; font-weight: bold; }
-                
+                .profit { color: #27ae60; font-weight: bold; }
+                .loss { color: #c0392b; font-weight: bold; }
                 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
             </style>
         </head>
@@ -201,7 +194,7 @@ def main():
                     </div>
                     
                     {% if trades %}
-                    <h3 style="margin-top: 20px; font-size: 1.1em; color: #666;">Derniers Mouvements</h3>
+                    <h3 style="margin-top: 20px; font-size: 1.1em; color: #666;">Historique Récent</h3>
                     <table>
                         <thead>
                             <tr>
@@ -209,34 +202,41 @@ def main():
                                 <th>Type</th>
                                 <th>Paire</th>
                                 <th>Montant</th>
-                                <th>Stop Loss</th>
-                                <th>Take Profit</th>
+                                <th>Résultat (PnL)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for trade in trades[:5] %}
+                            {% for trade in trades[:10] %}
                             <tr>
                                 <td>{{ trade.time }}</td>
-                                <td><span class="badge bg-blue">{{ trade.type }}</span></td>
+                                <td>
+                                    <span class="badge {% if 'VENTE' in trade.type %}bg-red{% else %}bg-blue{% endif %}">
+                                        {{ trade.type }}
+                                    </span>
+                                </td>
                                 <td><strong>{{ trade.symbol }}</strong></td>
-                                <td>${{ trade.amount_usdt }}</td>
-                                <td style="color: #c0392b;">${{ trade.sl }}</td>
-                                <td style="color: #27ae60;">${{ trade.tp }}</td>
+                                <td>${{ "%.2f"|format(trade.amount_usdt) }}</td>
+                                <td>
+                                    {% if trade.pnl > 0 %}
+                                        <span class="profit">+${{ "%.2f"|format(trade.pnl) }}</span>
+                                    {% elif trade.pnl < 0 %}
+                                        <span class="loss">-${{ "%.2f"|format(trade.pnl|abs) }}</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% else %}
-                    <p style="color: #999; text-align: center; margin-top: 15px;">Aucun trade effectué pour le moment.</p>
                     {% endif %}
                 </div>
 
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h2>📡 Scanner Opportunités (1H)</h2>
-                        <span style="font-size:0.9em; color:#666;">Dernière MAJ: {{ last_update }}</span>
+                        <h2>📡 Scanner (1H)</h2>
+                        <span style="font-size:0.9em; color:#666;">MAJ: {{ last_update }}</span>
                     </div>
-                    
                     <table>
                         <thead>
                             <tr>
@@ -245,25 +245,23 @@ def main():
                                 <th>Score</th>
                                 <th>Signal</th>
                                 <th>Prix</th>
-                                <th>Confiance</th>
+                                <th>SL</th>
+                                <th>TP</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% if not opportunities %}
-                            <tr><td colspan="6" style="text-align:center; padding:30px">Chargement des données...</td></tr>
+                            <tr><td colspan="7" style="text-align:center; padding:30px">Chargement...</td></tr>
                             {% else %}
                             {% for opp in opportunities %}
                             <tr>
                                 <td>{{ opp.rank }}</td>
                                 <td><strong>{{ opp.pair }}</strong></td>
-                                <td class="{% if opp.score > 70 %}score-high{% else %}score-med{% endif %}">{{ opp.score }}/100</td>
-                                <td>
-                                    <span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% else %}bg-red{% endif %}">
-                                        {{ opp.entry_signal }}
-                                    </span>
-                                </td>
+                                <td style="font-weight:bold; color: {% if opp.score > 70 %}#27ae60{% else %}#f39c12{% endif %}">{{ opp.score }}</td>
+                                <td><span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% else %}bg-red{% endif %}">{{ opp.entry_signal }}</span></td>
                                 <td>${{ "%.4f"|format(opp.price) }}</td>
-                                <td>{{ opp.confidence }}%</td>
+                                <td style="color:#c0392b">${{ "%.4f"|format(opp.stop_loss) }}</td>
+                                <td style="color:#27ae60">${{ "%.4f"|format(opp.take_profit_1) }}</td>
                             </tr>
                             {% endfor %}
                             {% endif %}
@@ -271,10 +269,7 @@ def main():
                     </table>
                 </div>
             </div>
-            
-            <script>
-                setTimeout(function(){ location.reload(); }, 30000); // Rafraîchir toutes les 30 sec
-            </script>
+            <script>setTimeout(function(){ location.reload(); }, 30000);</script>
         </body>
         </html>
         """
