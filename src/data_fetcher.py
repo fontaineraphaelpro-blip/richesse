@@ -225,11 +225,9 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         
         if real_price and real_price > 0:
             base_price = real_price
-            print(f"✓ {symbol}: ${real_price:,.4f} (prix réel)")
         else:
             # Fallback: utiliser le prix de référence
             base_price = REFERENCE_PRICES.get(symbol, 100.0)
-            print(f"⚠ {symbol}: ${base_price:,.4f} (prix de référence - API indisponible)")
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
