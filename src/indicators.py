@@ -96,6 +96,98 @@ def calculate_momentum(data: pd.Series, period: int = 10) -> pd.Series:
     return data.diff(period)
 
 
+def calculate_stochastic(df: pd.DataFrame, period: int = 14) -> Dict:
+    """
+    Calcule le Stochastic Oscillator (%K et %D).
+    Utile pour détecter les zones de surachat/survente.
+    
+    Returns:
+        Dictionnaire avec k (stoch_k) et d (stoch_d)
+    """
+    low_min = df['low'].rolling(window=period).min()
+    high_max = df['high'].rolling(window=period).max()
+    
+    stoch_k = 100 * ((df['close'] - low_min) / (high_max - low_min))
+    stoch_d = stoch_k.rolling(window=3).mean()
+    
+    return {
+        'k': stoch_k,
+        'd': stoch_d
+    }
+
+
+def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    Calcule l'ADX (Average Directional Index) pour mesurer la force de la tendance.
+    ADX > 25 = tendance forte, ADX < 20 = tendance faible.
+    """
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    
+    # True Range
+    tr1 = high - low
+    tr2 = abs(high - close.shift())
+    tr3 = abs(low - close.shift())
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    
+    # Directional Movement
+    plus_dm = high.diff()
+    minus_dm = -low.diff()
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm < 0] = 0
+    
+    # Smoothing
+    atr = tr.rolling(window=period).mean()
+    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+    
+    # ADX
+    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+    adx = dx.rolling(window=period).mean()
+    
+    return adx
+
+
+def detect_rsi_divergence(df: pd.DataFrame, rsi: pd.Series, lookback: int = 20) -> Dict:
+    """
+    Détecte les divergences RSI (bearish divergence = signal SHORT fort).
+    
+    Returns:
+        Dictionnaire avec 'has_divergence' (bool) et 'type' ('bearish' ou None)
+    """
+    if len(df) < lookback or len(rsi) < lookback:
+        return {'has_divergence': False, 'type': None}
+    
+    try:
+        recent_prices = df['close'].tail(lookback)
+        recent_rsi = rsi.tail(lookback)
+        
+        # Chercher un pic de prix suivi d'un pic RSI plus bas (divergence bearish)
+        price_peaks = []
+        rsi_peaks = []
+        
+        for i in range(2, len(recent_prices) - 2):
+            if recent_prices.iloc[i] > recent_prices.iloc[i-1] and recent_prices.iloc[i] > recent_prices.iloc[i+1]:
+                price_peaks.append((i, recent_prices.iloc[i]))
+            if recent_rsi.iloc[i] > recent_rsi.iloc[i-1] and recent_rsi.iloc[i] > recent_rsi.iloc[i+1]:
+                rsi_peaks.append((i, recent_rsi.iloc[i]))
+        
+        # Vérifier divergence bearish (prix monte mais RSI baisse)
+        if len(price_peaks) >= 2 and len(rsi_peaks) >= 2:
+            last_price_peak = price_peaks[-1][1]
+            prev_price_peak = price_peaks[-2][1]
+            last_rsi_peak = rsi_peaks[-1][1]
+            prev_rsi_peak = rsi_peaks[-2][1]
+            
+            if last_price_peak > prev_price_peak and last_rsi_peak < prev_rsi_peak:
+                return {'has_divergence': True, 'type': 'bearish'}
+    except Exception:
+        pass
+    
+    return {'has_divergence': False, 'type': None}
+
+
 def calculate_indicators(df: pd.DataFrame) -> Dict:
     """
     Calcule tous les indicateurs techniques pour le scalping.
