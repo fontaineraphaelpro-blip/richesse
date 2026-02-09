@@ -220,7 +220,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
     Returns:
         Tuple (DataFrame, real_price) où:
         - DataFrame avec colonnes: timestamp, open, high, low, close, volume
-        - real_price: Prix réel récupéré depuis CoinGecko (ou None)
+        - real_price: Prix réel récupéré depuis Binance (ou None)
         Le dernier prix (close) sera EXACTEMENT le prix réel récupéré
     """
     try:
@@ -233,6 +233,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
             # Fallback: utiliser le prix de référence
             base_price = REFERENCE_PRICES.get(symbol, 100.0)
             real_price = None  # Pas de prix réel disponible
+            print(f"⚠️ {symbol}: API Binance indisponible, utilisation prix référence ${base_price:.4f}")
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}

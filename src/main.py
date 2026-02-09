@@ -58,9 +58,11 @@ def run_scanner():
             # UTILISER LE PRIX RÉEL RÉCUPÉRÉ, pas le prix généré
             # Le prix réel est toujours le plus à jour
             current_price = real_prices.get(symbol)
-            if not current_price:
+            if not current_price or current_price <= 0:
                 # Fallback: utiliser le prix du DataFrame si pas de prix réel
                 current_price = indicators.get('current_price')
+                if current_price:
+                    print(f"⚠️ {symbol}: Prix réel non disponible, utilisation prix généré ${current_price:.4f}")
             
             # Détecter le support
             support = find_swing_low(df, lookback=30)
