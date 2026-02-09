@@ -34,9 +34,9 @@ def run_scanner():
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return []
         
-        # 2. Générer les données OHLCV pour scalping (15min)
-        print("\n📊 Étape 2: Génération des données OHLCV (15min, 200 bougies)...")
-        print("💡 Mode SCALPING - Utilisation de données de démonstration (libres de droit)")
+        # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
+        print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
+        print("💡 Mode SCALPING - Récupération des prix réels depuis CoinGecko API")
         data = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
