@@ -1,6 +1,6 @@
 """
 Script principal du Crypto Signal Scanner Web.
-Version DAY TRADING (1h) - Analyse de tendance sur longue période.
+Version DAY TRADING (1h) - Avec Dashboard Complet (Scanner + Trades).
 """
 
 import time
@@ -8,6 +8,9 @@ import os
 from datetime import datetime
 from flask import Flask, render_template_string
 import threading
+
+# Import du module de simulation
+from trader import PaperTrader
 
 # Importations des modules locaux
 from data_fetcher import fetch_multiple_pairs
@@ -17,7 +20,7 @@ from scorer import calculate_opportunity_score
 
 def run_scanner():
     """
-    Exécute un scan complet sur 1H et retourne les opportunités de Day Trading.
+    Exécute un scan complet et gère le trading automatique.
     """
     print("\n" + "="*60)
     print("🚀 CRYPTO SCANNER - Mode DAY TRADING (1h)")
@@ -25,44 +28,31 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # 1. CONFIGURATION 1H (Longue plage)
-        # interval='1h' : Analyse chaque bougie d'une heure pour filtrer le bruit du 15m
-        # limit=1000 : Récupère 1000 heures (~41 jours) d'historique pour une tendance de fond fiable
-        print("📊 Récupération des données sur 1000 bougies de 1h (Analyse de fond)...")
-        
-        # On passe None pour utiliser la liste par défaut définie dans data_fetcher
+        # 1. Récupération des données
+        print("📊 Récupération des données sur 1000 bougies de 1h...")
         data, real_prices = fetch_multiple_pairs(None, interval='1h', limit=1000)
         
         if not data:
-            print("❌ Aucune donnée récupérée. Vérifiez votre connexion.")
+            print("❌ Aucune donnée récupérée.")
             return []
         
-        # 2. Analyse Technique
-        print("\n🔍 Analyse de la tendance et recherche de signaux...")
+        # 2. Analyse
+        print("\n🔍 Analyse du marché...")
         opportunities = []
         
         for i, (symbol, df) in enumerate(data.items(), 1):
-            # Calcul des indicateurs sur l'historique long
             indicators = calculate_indicators(df)
+            current_price = real_prices.get(symbol) or indicators.get('current_price')
             
-            current_price = real_prices.get(symbol)
-            if not current_price: 
-                current_price = indicators.get('current_price')
-
-            # Détection de support sur une période plus large (50h = ~2 jours)
             support = find_swing_low(df, lookback=50)
-            support_distance = None
-            if current_price and support:
-                support_distance = calculate_distance_to_support(current_price, support)
+            support_dist = calculate_distance_to_support(current_price, support) if support else None
             
-            # Calcul du score (La fonction detect_trend dans scorer utilisera automatiquement les données 1h)
-            score_data = calculate_opportunity_score(indicators, support_distance, df)
+            score_data = calculate_opportunity_score(indicators, support_dist, df)
             
-            # On ne garde que les données pertinentes pour le Day Trading
             opportunities.append({
                 'pair': symbol,
                 'score': score_data['score'],
-                'trend': score_data['trend'], # Tendance calculée sur 1h
+                'trend': score_data['trend'],
                 'signal': score_data['signal'],
                 'price': current_price,
                 'rsi': indicators.get('rsi14'),
@@ -70,155 +60,210 @@ def run_scanner():
                 'entry_price': score_data.get('entry_price'),
                 'stop_loss': score_data.get('stop_loss'),
                 'take_profit_1': score_data.get('take_profit_1'),
-                'take_profit_2': score_data.get('take_profit_2'),
-                'risk_reward_ratio': score_data.get('risk_reward_ratio'),
                 'confidence': score_data.get('confidence', 0),
-                'atr_percent': indicators.get('atr_percent'),
             })
         
-        # 3. Filtrage & Tri Intelligent
-        # On privilégie les scores > 50 qui indiquent une vraie opportunité
+        # 3. Filtrage & Tri
         quality_opportunities = [opp for opp in opportunities if opp['score'] >= 50]
-        
-        # Tri par Score décroissant
         quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Sélection du Top 15 (ou moins si pas assez d'opportunités)
         top_picks = quality_opportunities[:15]
         
-        # Si le marché est calme et qu'on a peu de bons signaux, on complète avec le reste trié
         if len(top_picks) < 5:
             remaining = [opp for opp in opportunities if opp not in quality_opportunities]
             remaining.sort(key=lambda x: x['score'], reverse=True)
             top_picks.extend(remaining[:10 - len(top_picks)])
 
-        # Ajout du classement (Rank)
         for i, opp in enumerate(top_picks, 1):
             opp['rank'] = i
         
-        # 4. Affichage Terminal (Résumé)
+        # 4. Affichage Terminal
         print("\n" + "="*80)
-        print("🏆 TOP OPPORTUNITÉS DAY TRADING (Timeframe: 1H)")
+        print("🏆 TOP OPPORTUNITÉS (1H)")
         print("="*80)
-        print(f"{'Paire':<12} {'Score':<7} {'Trend':<10} {'Signal':<8} {'Prix':<10} {'Stop Loss':<10}")
-        print("-"*80)
-        
         for opp in top_picks:
-            entry_sig = opp.get('entry_signal', '-')
-            print(f"{opp['pair']:<12} {opp['score']:<7} {opp['trend']:<10} {entry_sig:<8} ${opp['price']:.4f} ${opp['stop_loss']:.4f}")
+            print(f"{opp['pair']:<10} Score:{opp['score']:<3} {opp['trend']:<8} {opp['entry_signal']:<5} ${opp['price']:.4f}")
+        
+        # 5. AUTOMATISATION PAPER TRADING
+        print("\n🤖 VÉRIFICATION POUR TRADING AUTO...")
+        trader = PaperTrader(initial_balance=1000)
+        
+        my_positions = trader.get_open_positions()
+        balance = trader.get_usdt_balance()
+        
+        TRADE_AMOUNT = 100
+        MIN_SCORE = 80
+        
+        if balance >= TRADE_AMOUNT:
+            for opp in top_picks:
+                if (opp['score'] >= MIN_SCORE and 
+                    opp['entry_signal'] == 'LONG' and 
+                    opp['pair'] not in my_positions):
+                    
+                    print(f"🚀 LANCEMENT TRADE : {opp['pair']} (Score: {opp['score']})")
+                    trader.place_buy_order(
+                        symbol=opp['pair'],
+                        amount_usdt=TRADE_AMOUNT,
+                        stop_loss_price=opp['stop_loss'],
+                        take_profit_price=opp['take_profit_1']
+                    )
+                    break 
         
         return top_picks
         
     except Exception as e:
-        print(f"\n❌ Erreur critique lors du scan: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\n❌ Erreur scan: {e}")
         return []
 
 def main():
-    print("⚡ Crypto Scanner - Mode DAY TRADING (1h)")
-    print("📌 Analyse sur 1000 bougies (41 jours) pour déterminer la tendance de fond.")
-    print("🛑 Ctrl+C pour arrêter")
+    print("⚡ Scanner + Dashboard Actifs")
     
-    opportunities_data = {'data': []}
-    scanning_status = {'is_scanning': False}
+    # Données partagées
+    shared_data = {'opportunities': [], 'is_scanning': False}
+    
     app = Flask(__name__)
     
     @app.route('/')
     def home():
-        is_scanning = scanning_status.get('is_scanning', False)
-        opportunities = opportunities_data.get('data', [])
-        last_update = datetime.now().strftime('%d/%m/%Y %H:%M')
+        # Récupérer les infos du trader à chaque rafraichissement
+        trader = PaperTrader()
+        balance = trader.get_usdt_balance()
+        trades = trader.get_trades_history()
+        positions = trader.get_open_positions()
         
-        # Template HTML simplifié et épuré pour le Day Trading
+        # Template HTML mis à jour avec section Portefeuille
         HTML = """
         <!DOCTYPE html>
         <html lang="fr">
         <head>
             <meta charset="UTF-8">
-            <title>Day Trading Scanner (1h)</title>
+            <title>Bot Trading Dashboard</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { font-family: 'Segoe UI', sans-serif; background: #f4f6f9; padding: 20px; color: #333; }
-                .container { max-width: 1400px; margin: 0 auto; }
-                .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
-                h1 { margin: 0 0 10px 0; color: #2c3e50; }
-                .subtitle { color: #666; font-size: 0.9em; }
+                body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; color: #333; margin:0; }
+                .container { max-width: 1200px; margin: 0 auto; }
                 
-                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                th { background-color: #f8f9fa; text-transform: uppercase; font-size: 0.8em; color: #666; padding: 15px; text-align: left; }
-                td { padding: 15px; border-bottom: 1px solid #eee; vertical-align: middle; }
-                tr:hover { background-color: #f8f9fa; }
+                /* Cartes */
+                .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
                 
-                .trend-bullish { color: #27ae60; font-weight: bold; background: #eafaf1; padding: 4px 8px; border-radius: 4px; }
-                .trend-bearish { color: #c0392b; font-weight: bold; background: #fdedec; padding: 4px 8px; border-radius: 4px; }
-                .trend-neutral { color: #7f8c8d; background: #f2f3f4; padding: 4px 8px; border-radius: 4px; }
+                /* En-tête */
+                .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+                .status-badge { background: #e8f5e9; color: #2e7d32; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9em; }
+                .scanning { color: #f57c00; background: #fff3e0; animation: pulse 1.5s infinite; }
                 
-                .badge { padding: 6px 10px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.85em; }
+                /* Section Portefeuille */
+                .wallet-info { display: flex; gap: 20px; margin-bottom: 10px; }
+                .wallet-item { background: #f8f9fa; padding: 15px; border-radius: 8px; flex: 1; text-align: center; border: 1px solid #eee; }
+                .wallet-value { font-size: 1.8em; font-weight: bold; color: #2c3e50; }
+                .wallet-label { color: #666; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+                
+                /* Tables */
+                h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
+                th { background-color: #f8f9fa; color: #666; padding: 12px; text-align: left; font-weight: 600; }
+                td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+                
+                /* Badges et Couleurs */
+                .badge { padding: 5px 10px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.85em; }
                 .bg-green { background-color: #27ae60; }
                 .bg-red { background-color: #c0392b; }
-                .bg-gray { background-color: #95a5a6; }
+                .bg-blue { background-color: #2980b9; }
                 
-                .score-val { font-weight: bold; font-size: 1.1em; }
-                .price-val { font-family: 'Consolas', monospace; }
+                .score-high { color: #27ae60; font-weight: bold; }
+                .score-med { color: #f39c12; font-weight: bold; }
                 
-                .scan-loader { color: #e67e22; font-weight: bold; animation: blink 1.5s infinite; }
-                @keyframes blink { 50% { opacity: 0.5; } }
+                @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="card">
-                    <h1>📈 Day Trading Scanner</h1>
-                    <div class="subtitle">
-                        Timeframe: <strong>1 Heure</strong> | Historique analysé: <strong>1000 bougies</strong> | 
-                        Dernière MAJ: {{ last_update }}
-                        {% if is_scanning %} <span class="scan-loader"> (Scan en cours...)</span>{% endif %}
-                    </div>
+                <div class="header">
+                    <h1>🤖 Trading Bot Dashboard</h1>
+                    <span class="status-badge {% if is_scanning %}scanning{% endif %}">
+                        {% if is_scanning %}🔄 Scan en cours...{% else %}✅ Système Prêt{% endif %}
+                    </span>
                 </div>
-                
+
                 <div class="card">
+                    <h2>💼 Mon Portefeuille (Simulation)</h2>
+                    <div class="wallet-info">
+                        <div class="wallet-item">
+                            <div class="wallet-value">${{ "%.2f"|format(balance) }}</div>
+                            <div class="wallet-label">Solde Disponible</div>
+                        </div>
+                        <div class="wallet-item">
+                            <div class="wallet-value">{{ positions|length }}</div>
+                            <div class="wallet-label">Positions Ouvertes</div>
+                        </div>
+                        <div class="wallet-item">
+                            <div class="wallet-value">{{ trades|length }}</div>
+                            <div class="wallet-label">Trades Totaux</div>
+                        </div>
+                    </div>
+                    
+                    {% if trades %}
+                    <h3 style="margin-top: 20px; font-size: 1.1em; color: #666;">Derniers Mouvements</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Paire</th>
+                                <th>Montant</th>
+                                <th>Stop Loss</th>
+                                <th>Take Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in trades[:5] %}
+                            <tr>
+                                <td>{{ trade.time }}</td>
+                                <td><span class="badge bg-blue">{{ trade.type }}</span></td>
+                                <td><strong>{{ trade.symbol }}</strong></td>
+                                <td>${{ trade.amount_usdt }}</td>
+                                <td style="color: #c0392b;">${{ trade.sl }}</td>
+                                <td style="color: #27ae60;">${{ trade.tp }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p style="color: #999; text-align: center; margin-top: 15px;">Aucun trade effectué pour le moment.</p>
+                    {% endif %}
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>📡 Scanner Opportunités (1H)</h2>
+                        <span style="font-size:0.9em; color:#666;">Dernière MAJ: {{ last_update }}</span>
+                    </div>
+                    
                     <table>
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Paire</th>
-                                <th>Score / 100</th>
-                                <th>Tendance (Fond)</th>
+                                <th>Score</th>
                                 <th>Signal</th>
+                                <th>Prix</th>
                                 <th>Confiance</th>
-                                <th>Prix Actuel</th>
-                                <th>Stop Loss</th>
-                                <th>Objectif (TP1)</th>
-                                <th>RSI</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% if not opportunities %}
-                            <tr><td colspan="10" style="text-align:center; padding:30px">Initialisation ou aucun signal fort trouvé...</td></tr>
+                            <tr><td colspan="6" style="text-align:center; padding:30px">Chargement des données...</td></tr>
                             {% else %}
                             {% for opp in opportunities %}
                             <tr>
-                                <td><strong>{{ opp.rank }}</strong></td>
+                                <td>{{ opp.rank }}</td>
                                 <td><strong>{{ opp.pair }}</strong></td>
-                                <td class="score-val" style="color: {% if opp.score > 70 %}#27ae60{% elif opp.score > 50 %}#f39c12{% else %}#7f8c8d{% endif %}">
-                                    {{ opp.score }}
-                                </td>
+                                <td class="{% if opp.score > 70 %}score-high{% else %}score-med{% endif %}">{{ opp.score }}/100</td>
                                 <td>
-                                    <span class="{% if opp.trend == 'Bullish' %}trend-bullish{% elif opp.trend == 'Bearish' %}trend-bearish{% else %}trend-neutral{% endif %}">
-                                        {{ opp.trend }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% elif opp.entry_signal == 'SHORT' %}bg-red{% else %}bg-gray{% endif %}">
+                                    <span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% else %}bg-red{% endif %}">
                                         {{ opp.entry_signal }}
                                     </span>
                                 </td>
+                                <td>${{ "%.4f"|format(opp.price) }}</td>
                                 <td>{{ opp.confidence }}%</td>
-                                <td class="price-val">${{ "%.4f"|format(opp.price) }}</td>
-                                <td class="price-val" style="color: #c0392b;">${{ "%.4f"|format(opp.stop_loss) if opp.stop_loss else '-' }}</td>
-                                <td class="price-val" style="color: #27ae60;">${{ "%.4f"|format(opp.take_profit_1) if opp.take_profit_1 else '-' }}</td>
-                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else '-' }}</td>
                             </tr>
                             {% endfor %}
                             {% endif %}
@@ -226,41 +271,40 @@ def main():
                     </table>
                 </div>
             </div>
+            
             <script>
-                // Rafraîchir la page toutes les 60 secondes pour voir les mises à jour
-                setTimeout(function(){ location.reload(); }, 60000);
+                setTimeout(function(){ location.reload(); }, 30000); // Rafraîchir toutes les 30 sec
             </script>
         </body>
         </html>
         """
-        return render_template_string(HTML, opportunities=opportunities, last_update=last_update, is_scanning=is_scanning)
+        
+        return render_template_string(HTML, 
+                                     opportunities=shared_data['opportunities'], 
+                                     last_update=datetime.now().strftime('%H:%M'),
+                                     is_scanning=shared_data['is_scanning'],
+                                     balance=balance,
+                                     trades=trades,
+                                     positions=positions)
 
     def run_loop():
         while True:
-            scanning_status['is_scanning'] = True
+            shared_data['is_scanning'] = True
             try:
-                opportunities_data['data'] = run_scanner()
+                shared_data['opportunities'] = run_scanner()
             except Exception as e:
                 print(f"Erreur loop: {e}")
             finally:
-                scanning_status['is_scanning'] = False
+                shared_data['is_scanning'] = False
             
-            # Pause de 15 minutes (900 secondes)
-            # En 1H, pas besoin de scanner chaque minute. 15min permet de voir l'évolution intra-bougie.
-            print("💤 Pause de 15 minutes avant le prochain scan...")
+            print("💤 Pause de 15 min...")
             time.sleep(900)
 
-    # Lancement du thread de scan
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
     
-    # Lancement du serveur Web
     port = int(os.environ.get('PORT', 8080))
-    print(f"\n🌐 Dashboard accessible sur http://0.0.0.0:{port}")
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False)
-    except Exception as e:
-        print(f"Erreur serveur: {e}")
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == '__main__':
     main()
