@@ -1,6 +1,7 @@
 """
 Module pour récupérer les VRAIES données de marché (OHLCV) depuis Binance.
 Inclut la liste des 50 principales paires pour le scalping.
+Gère le basculement automatique vers Binance US en cas de blocage (Erreur 451).
 """
 
 import pandas as pd
@@ -25,8 +26,13 @@ TOP_USDT_PAIRS = [
 def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
     """
     Récupère les bougies (Klines) historiques depuis l'API Binance (Publique).
+    Tente Binance Global puis Binance US si bloqué (Erreur 451).
     """
-    base_url = "https://api.binance.com/api/v3/klines"
+    # URLs possibles (Global et US)
+    base_urls = [
+        "https://api.binance.com/api/v3/klines", # Global
+        "https://api.binance.us/api/v3/klines"   # US (Fallback)
+    ]
     
     # Validation de l'intervalle
     valid_intervals = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']
@@ -39,45 +45,60 @@ def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> 
         'limit': limit
     }
     
-    try:
-        response = requests.get(base_url, params=params, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
+    for base_url in base_urls:
+        try:
+            response = requests.get(base_url, params=params, timeout=5)
             
-            if not data:
+            if response.status_code == 200:
+                data = response.json()
+                
+                if not data:
+                    return None
+                    
+                # Colonnes API Binance
+                df = pd.DataFrame(data, columns=[
+                    'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                    'close_time', 'quote_asset_volume', 'trades', 
+                    'taker_buy_base', 'taker_buy_quote', 'ignore'
+                ])
+                
+                # Nettoyage
+                df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+                
+                # Conversion types (float)
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = df[col].astype(float)
+                
+                # Conversion timestamp
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                
+                return df
+                
+            elif response.status_code == 451:
+                # Géoblocage détecté, on tente l'URL suivante (US)
+                continue
+                
+            elif response.status_code == 429:
+                print(f"⚠️ Rate Limit Binance atteint. Pause de 2s...")
+                time.sleep(2)
+                return None
+            
+            elif response.status_code == 400:
+                # Symbole peut-être inexistant sur cette version de l'échange
+                # (Certaines paires existent sur .com mais pas sur .us)
                 return None
                 
-            # Colonnes API Binance
-            df = pd.DataFrame(data, columns=[
-                'timestamp', 'open', 'high', 'low', 'close', 'volume',
-                'close_time', 'quote_asset_volume', 'trades', 
-                'taker_buy_base', 'taker_buy_quote', 'ignore'
-            ])
-            
-            # Nettoyage
-            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-            
-            # Conversion types (float)
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = df[col].astype(float)
-            
-            # Conversion timestamp
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            return df
-            
-        elif response.status_code == 429:
-            print(f"⚠️ Rate Limit Binance atteint. Pause de 2s...")
-            time.sleep(2)
-            return None
-        else:
-            print(f"⚠️ Erreur API Binance {symbol}: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        print(f"⚠️ Erreur réseau pour {symbol}: {e}")
-        return None
+            else:
+                print(f"⚠️ Erreur API Binance {symbol}: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            # En cas d'erreur réseau, on essaie l'URL suivante si possible
+            continue
+
+    # Si on arrive ici, toutes les URLs ont échoué
+    print(f"❌ Échec récupération {symbol} (Toutes API inaccessibles)")
+    return None
 
 
 def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Tuple[Optional[pd.DataFrame], Optional[float]]:
