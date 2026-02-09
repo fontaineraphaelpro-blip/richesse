@@ -87,23 +87,34 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interva
     timestamps = [datetime.now() - timedelta(minutes=interval_minutes*i) for i in range(limit-1, -1, -1)]
     
     # Générer prix avec tendance réaliste et volatilité
+    # Utiliser un seed basé sur le symbole pour avoir des prix cohérents
+    np.random.seed(hash(symbol) % (2**32))
+    
     prices = []
     price = base_price
     
-    # Ajouter une tendance légère (bullish ou bearish)
-    trend = np.random.uniform(-0.0005, 0.0005)
+    # Ajouter une tendance légère (bullish ou bearish) mais cohérente
+    trend = np.random.uniform(-0.0003, 0.0003)
     
     # Volatilité variable selon le type de crypto (plus élevée pour scalping)
-    volatility = 0.008 if base_price > 100 else 0.012  # Volatilité adaptée au timeframe 15min
+    volatility = 0.006 if base_price > 100 else 0.010  # Volatilité adaptée au timeframe 15min
     
     for i in range(limit):
-        # Variation aléatoire mais réaliste
+        # Variation aléatoire mais réaliste avec marche aléatoire
         change = np.random.normal(0, volatility)  # Distribution normale
         price = price * (1 + change + trend)
         
-        # Garder dans une plage raisonnable (±30% du prix de base)
-        price = max(base_price * 0.7, min(base_price * 1.3, price))
+        # Garder dans une plage raisonnable (±20% du prix de base pour plus de cohérence)
+        price = max(base_price * 0.85, min(base_price * 1.15, price))
         prices.append(price)
+    
+    # S'assurer que le dernier prix (prix actuel) est proche du prix de base (±5%)
+    # pour avoir des prix plus réalistes
+    last_price = prices[-1]
+    if abs(last_price - base_price) / base_price > 0.05:
+        # Ajuster progressivement vers le prix de base
+        adjustment = (base_price - last_price) * 0.3
+        prices[-1] = last_price + adjustment
     
     # Créer DataFrame OHLC
     df_data = []
