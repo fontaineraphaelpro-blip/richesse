@@ -279,8 +279,11 @@ HOME_TEMPLATE = """
 
             <div id="content">
                 <div class="no-data">
-                    <h2>⏳ Chargement des données...</h2>
-                    <p>Veuillez patienter pendant le chargement des opportunités.</p>
+                    <h2>📊 Bienvenue sur le Crypto Signal Scanner</h2>
+                    <p>Le site est prêt ! Cliquez sur "🚀 Lancer le Scan" pour commencer l'analyse des cryptomonnaies.</p>
+                    <p style="margin-top: 20px; font-size: 0.9em; color: #999;">
+                        Les données seront calculées en direct et affichées automatiquement.
+                    </p>
                 </div>
             </div>
         </div>
@@ -308,6 +311,36 @@ HOME_TEMPLATE = """
             return 'score-low';
         }
 
+        function triggerScan() {
+            const scanBtn = document.getElementById('scan-btn');
+            const scanStatus = document.getElementById('scan-status');
+            
+            if (scanBtn) {
+                scanBtn.disabled = true;
+                scanBtn.textContent = '⏳ Scan en cours...';
+            }
+            scanStatus.textContent = 'Scan démarré...';
+            
+            fetch('/api/trigger-scan', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    scanStatus.textContent = data.message || 'Scan démarré';
+                    // Recharger les données après 5 secondes
+                    setTimeout(() => {
+                        loadData();
+                        setInterval(loadData, 10000); // Actualiser toutes les 10 secondes pendant le scan
+                    }, 5000);
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    scanStatus.textContent = 'Erreur lors du démarrage du scan';
+                    if (scanBtn) {
+                        scanBtn.disabled = false;
+                        scanBtn.textContent = '🚀 Lancer le Scan';
+                    }
+                });
+        }
+
         function loadData() {
             // Désactiver le bouton pendant le chargement
             const refreshBtn = document.querySelector('.refresh-btn');
@@ -321,6 +354,24 @@ HOME_TEMPLATE = """
                 .then(data => {
                     const opportunities = data.opportunities || [];
                     const lastUpdate = data.last_update;
+                    const isScanning = data.is_scanning || false;
+                    
+                    // Mettre à jour le statut du scan
+                    const scanStatus = document.getElementById('scan-status');
+                    const scanBtn = document.getElementById('scan-btn');
+                    if (isScanning) {
+                        if (scanStatus) scanStatus.textContent = '⏳ Scan en cours...';
+                        if (scanBtn) {
+                            scanBtn.disabled = true;
+                            scanBtn.textContent = '⏳ Scan en cours...';
+                        }
+                    } else {
+                        if (scanStatus) scanStatus.textContent = '';
+                        if (scanBtn) {
+                            scanBtn.disabled = false;
+                            scanBtn.textContent = '🚀 Lancer le Scan';
+                        }
+                    }
 
                     // Mettre à jour les stats
                     document.getElementById('total-pairs').textContent = data.total_pairs || '-';
@@ -472,7 +523,8 @@ def api_opportunities():
         'last_update': last_update.isoformat() if last_update else None,
         'total_pairs': total_pairs,
         'avg_score': round(avg_score, 1),
-        'bullish_count': bullish_count
+        'bullish_count': bullish_count,
+        'is_scanning': os.path.exists('.scanning')
     })
 
 
