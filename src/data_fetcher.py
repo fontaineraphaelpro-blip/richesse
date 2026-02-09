@@ -206,7 +206,7 @@ def get_real_price(symbol: str) -> Optional[float]:
         return None
 
 
-def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
+def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
     """
     Récupère le prix réel et génère des données OHLCV réalistes.
     
@@ -216,11 +216,13 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         limit: Nombre de bougies à générer
     
     Returns:
-        DataFrame avec colonnes: timestamp, open, high, low, close, volume
+        Tuple (DataFrame, real_price) où:
+        - DataFrame avec colonnes: timestamp, open, high, low, close, volume
+        - real_price: Prix réel récupéré depuis CoinGecko (ou None)
         Le dernier prix (close) sera EXACTEMENT le prix réel récupéré
     """
     try:
-        # 1. Récupérer le prix réel actuel
+        # 1. Récupérer le prix réel actuel (TOUJOURS à chaque appel)
         real_price = get_real_price(symbol)
         
         if real_price and real_price > 0:
@@ -228,6 +230,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         else:
             # Fallback: utiliser le prix de référence
             base_price = REFERENCE_PRICES.get(symbol, 100.0)
+            real_price = None  # Pas de prix réel disponible
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
@@ -238,21 +241,26 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         df = generate_ohlc_data(symbol, base_price, limit, interval_minutes)
         
         # S'assurer que le dernier prix est EXACTEMENT le prix réel
-        if df is not None and len(df) > 0 and real_price and real_price > 0:
-            df.iloc[-1, df.columns.get_loc('close')] = real_price
-            # Ajuster aussi high et low pour être cohérents
-            last_high = df.iloc[-1]['high']
-            last_low = df.iloc[-1]['low']
-            if real_price > last_high:
-                df.iloc[-1, df.columns.get_loc('high')] = real_price * 1.001
-            if real_price < last_low:
-                df.iloc[-1, df.columns.get_loc('low')] = real_price * 0.999
+        if df is not None and len(df) > 0:
+            if real_price and real_price > 0:
+                # Forcer le prix réel dans le DataFrame
+                df.iloc[-1, df.columns.get_loc('close')] = real_price
+                # Ajuster aussi high et low pour être cohérents
+                last_high = df.iloc[-1]['high']
+                last_low = df.iloc[-1]['low']
+                if real_price > last_high:
+                    df.iloc[-1, df.columns.get_loc('high')] = real_price * 1.001
+                if real_price < last_low:
+                    df.iloc[-1, df.columns.get_loc('low')] = real_price * 0.999
+            else:
+                # Si pas de prix réel, utiliser le prix généré
+                real_price = df.iloc[-1]['close']
         
-        return df
+        return df, real_price
     
     except Exception as e:
         print(f"❌ Erreur lors de la génération des données pour {symbol}: {e}")
-        return None
+        return None, None
 
 
 def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200) -> tuple:
