@@ -1,253 +1,46 @@
-# 🚀 Crypto Signal Scanner
+# Crypto Signal Scanner Web
 
-Scanner automatique de cryptomonnaies sur Binance qui détecte les meilleures opportunités d'investissement selon des critères techniques.
+Scanner automatique de cryptomonnaies qui détecte les meilleures opportunités selon des critères techniques et affiche les résultats dans une page web.
 
-## 📋 Description
+## 🎯 Fonctionnalités
 
-Ce projet scanne automatiquement les 50 principales paires USDT sur Binance, calcule des indicateurs techniques (SMA, RSI, Volume, Support), et génère un classement des meilleures opportunités avec un score de 0 à 100.
+- Scanner automatique de 50 principales paires USDT
+- Calcul d'indicateurs techniques (SMA20, SMA50, RSI14)
+- Détection de support
+- Scoring d'opportunités (0-100)
+- Affichage web interactif avec actualisation automatique
 
-**⚠️ Important:** Ce système ne prédit pas le futur. Il fournit seulement des indications statistiques ("Top opportunités"), pas des ordres automatiques "BUY NOW". Toujours faire vos propres recherches (DYOR).
+## 📦 Installation
 
-## ✨ Fonctionnalités
-
-### Scanner de base
-- ✅ Scanner multi-coins (50 principales paires USDT)
-- ✅ Exclusion automatique des stablecoins
-- ✅ Calcul d'indicateurs techniques (SMA20, SMA50, RSI14, Volume)
-- ✅ Détection de niveaux de support et résistance
-
-### Signaux avancés (Nouveau ✨)
-- ✅ **Détection de breakout** : Prix casse résistance avec volume élevé
-- ✅ **Détection de pullback** : Prix revient sur support/SMA20 en tendance bullish
-- ✅ **Divergence RSI** : Détection automatique des divergences haussières/baissières
-- ✅ **Multi-timeframe** : Confirmation de tendance sur 4H et 15min
-
-### Scoring amélioré
-- ✅ Scoring d'opportunité (0-100) avec critères multiples
-- ✅ Bonus pour breakout (+15), pullback (+10), divergence RSI (+10)
-- ✅ Confirmation multi-timeframe (+5)
-
-### Alertes et rapports
-- ✅ **Alertes Telegram** : Notifications automatiques pour scores > 85
-- ✅ Génération de rapport HTML avec colonnes Volume Ratio et Trend Confirmation
-- ✅ **Dashboard web interactif** avec actualisation automatique
-- ✅ Tri automatique par score décroissant
-- ✅ Codes couleur (vert > 80, jaune 60-80, rouge < 60)
-
-### Backtesting
-- ✅ **Backtesting simple** : Test du scoring sur données historiques (3 mois)
-- ✅ Métriques de performance (retour moyen, taux de réussite)
-
-### Déploiement
-- ✅ Boucle continue pour fonctionnement 24/7
-- ✅ Prêt pour déploiement Railway
-
-## 🛠️ Installation
-
-### Prérequis
-
-- Python 3.10 ou supérieur
-- pip (gestionnaire de paquets Python)
-
-### Étapes
-
-1. **Cloner ou télécharger le projet**
-
-2. **Installer les dépendances:**
 ```bash
 pip install -r requirements.txt
 ```
 
 ## 🚀 Utilisation
 
-### Option 1: Scanner seul (sans interface web)
-
 ```bash
 python src/main.py
 ```
 
-Le script va:
-1. Récupérer les 50 principales paires USDT
-2. Télécharger les données OHLCV (1H, 200 bougies)
-3. Calculer les indicateurs techniques
-4. Générer un classement Top 10
-5. Créer un fichier `report.html`
-6. Attendre 1 heure et recommencer
+Le serveur web sera accessible sur `http://localhost:5000`
 
-### Option 2: Dashboard web (recommandé)
-
-Pour afficher le dashboard dans votre navigateur, lancez le serveur web:
-
-```bash
-python src/run_web.py
-```
-
-Puis ouvrez votre navigateur à l'adresse: **http://localhost:5000**
-
-Le dashboard affiche:
-- 📊 Statistiques en temps réel
-- 🏆 Top 10 des opportunités
-- 🔄 Actualisation automatique toutes les 30 secondes
-- 📱 Interface responsive et moderne
-
-### Option 3: Scanner + Web (tout-en-un)
-
-Pour lancer à la fois le scanner et le serveur web:
-
-```bash
-python src/run_all.py
-```
-
-### Arrêter
-
-Appuyez sur `Ctrl+C` pour arrêter.
-
-## 📊 Critères de Scoring
-
-Le score d'opportunité (0-100) est calculé selon:
-
-### Critères de base
-- **Trend bullish** (SMA20 > SMA50) → +30 points
-- **RSI favorable** (entre 35 et 50) → +25 points
-- **Prix proche support** (<2%) → +25 points
-- **Volume élevé** (>1.5× volume moyen) → +20 points
-
-### Signaux avancés (bonus)
-- **Breakout détecté** (prix > résistance + volume élevé) → +15 points
-- **Pullback détecté** (prix proche support/SMA20 en tendance bullish) → +10 points
-- **Divergence RSI haussière** → +10 points
-- **Confirmation multi-timeframe bullish** → +5 points
-
-**Score maximum: 100 points**
-
-## 📱 Configuration Telegram (Optionnel)
-
-Pour activer les alertes Telegram:
-
-1. **Créer un bot Telegram:**
-   - Ouvrez Telegram et cherchez `@BotFather`
-   - Envoyez `/newbot` et suivez les instructions
-   - Copiez le token fourni
-
-2. **Obtenir votre Chat ID:**
-   - Cherchez `@userinfobot` sur Telegram
-   - Envoyez `/start` pour obtenir votre Chat ID
-
-3. **Configurer les variables d'environnement:**
-   ```bash
-   export TELEGRAM_TOKEN="votre_token_ici"
-   export TELEGRAM_CHAT_ID="votre_chat_id_ici"
-   ```
-
-   Ou sur Railway, ajoutez ces variables dans les paramètres du projet.
-
-Les alertes seront envoyées automatiquement pour toutes les opportunités avec un score ≥ 85.
-
-## 🔬 Backtesting
-
-Pour tester la performance historique du système de scoring:
-
-```bash
-python src/run_backtest.py
-```
-
-Le backtest analyse les 3 derniers mois et génère:
-- Retour moyen par range de score
-- Taux de réussite (win rate)
-- Fichier CSV avec les résultats détaillés (`backtest_results.csv`)
-
-## 📁 Structure du Projet
+## 📁 Structure
 
 ```
-crypto_signal_scanner/
-├── requirements.txt          # Dépendances Python
-├── README.md                 # Documentation
-├── Procfile                  # Configuration Railway
+/crypto_signal_scanner_web
+├── requirements.txt
+├── README.md
+├── Procfile
 └── src/
-    ├── fetch_pairs.py        # Récupération des paires USDT
-    ├── data_fetcher.py       # Récupération données OHLCV
-    ├── indicators.py         # Calcul indicateurs techniques + divergence RSI
-    ├── support.py            # Détection des supports
-    ├── breakout.py           # Détection breakout et pullback (Nouveau)
-    ├── multi_timeframe.py    # Analyse multi-timeframe (Nouveau)
-    ├── scorer.py             # Calcul des scores amélioré
-    ├── alerts.py             # Alertes Telegram (Nouveau)
-    ├── backtest.py           # Backtesting (Nouveau)
-    ├── html_report.py        # Génération rapport HTML amélioré
-    ├── web_app.py            # Application web Flask
-    ├── main.py               # Script principal
-    ├── run_web.py            # Lanceur serveur web
-    └── run_backtest.py       # Lanceur backtesting (Nouveau)
+    ├── fetch_pairs.py      # Récupération des paires USDT
+    ├── data_fetcher.py    # Récupération des données OHLCV
+    ├── indicators.py      # Calcul des indicateurs techniques
+    ├── support.py          # Détection du support
+    ├── scorer.py          # Calcul du score d'opportunité
+    ├── web_server.py      # Serveur Flask pour la page web
+    └── main.py            # Script principal
 ```
-
-## 🚂 Déploiement sur Railway
-
-### 1. Créer un compte Railway
-
-Allez sur [railway.app](https://railway.app) et créez un compte.
-
-### 2. Créer un nouveau projet
-
-- Cliquez sur "New Project"
-- Connectez votre dépôt GitHub ou uploadez les fichiers
-
-### 3. Configuration
-
-Le fichier `Procfile` est déjà configuré:
-```
-worker: python src/main.py
-web: python src/run_web.py
-```
-
-Railway détectera automatiquement le Procfile et lancera les deux services.
-
-### 4. Variables d'environnement
-
-**Optionnel - API Binance:**
-- `BINANCE_API_KEY` (optionnel, pour éviter les limites de rate)
-
-**Optionnel - Alertes Telegram:**
-- `TELEGRAM_TOKEN` : Token de votre bot Telegram
-- `TELEGRAM_CHAT_ID` : Votre Chat ID Telegram
-
-Le script fonctionne sans clés API pour les données publiques.
-
-### 5. Déployer
-
-Railway déploiera automatiquement votre application avec deux services:
-- **Worker**: Scanner qui tourne en continu et met à jour les résultats toutes les heures
-- **Web**: Serveur web Flask qui sert le dashboard accessible via l'URL publique Railway
-
-Le dashboard sera accessible via l'URL publique fournie par Railway (ex: `https://votre-projet.railway.app`)
-
-## 📄 Fichiers Générés
-
-- `report.html`: Rapport HTML statique avec le Top 10 des opportunités
-- `opportunities_data.json`: Données JSON pour l'API web (mis à jour toutes les heures)
-- **Dashboard web**: Interface interactive accessible sur http://localhost:5000
-
-## 🔮 Améliorations Futures
-
-- 📱 Alertes Telegram
-- 📈 Backtesting
-- ⏱️ Multi-timeframe (4H, 1D)
-- 📊 Graphiques dans le rapport HTML
-- 💾 Historique des signaux
-- 🔔 Notifications par email
 
 ## ⚠️ Avertissement
 
-Ce projet est fourni à des fins éducatives uniquement. Il ne constitue pas un conseil financier. Le trading de cryptomonnaies comporte des risques. Toujours faire vos propres recherches (DYOR) avant d'investir.
-
-## 📝 Licence
-
-Ce projet est libre d'utilisation pour des fins éducatives.
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues! N'hésitez pas à ouvrir une issue ou une pull request.
-
----
-
-**Développé avec ❤️ pour la communauté crypto**
-
+Ce scanner fournit des indications statistiques, pas des conseils financiers. Ne pas utiliser pour des ordres automatiques. Toujours faire vos propres recherches (DYOR).

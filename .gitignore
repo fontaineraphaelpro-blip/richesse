@@ -36,6 +36,8 @@ ENV/
 # Fichiers générés
 report.html
 *.log
+opportunities_data.json
+.scanning
 
 # OS
 .DS_Store

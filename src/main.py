@@ -1,27 +1,24 @@
 """
-Script principal du Crypto Signal Scanner.
-Scanne les cryptos via CryptoCompare/CoinCap, calcule les opportunités et génère un rapport.
+Script principal du Crypto Signal Scanner Web.
+Scanne les cryptos, calcule les scores et affiche les résultats dans une page web.
 """
 
 import time
 import os
-import json
 from datetime import datetime
+from flask import Flask
 
 from fetch_pairs import get_top_usdt_pairs
 from data_fetcher import fetch_multiple_pairs
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
 from scorer import calculate_opportunity_score
-from html_report import generate_html_report
-from breakout import get_breakout_signals
-from multi_timeframe import get_multi_timeframe_confirmation
-from alerts import check_and_send_alerts
+from web_server import create_app
 
 
 def run_scanner():
     """
-    Fonction principale qui exécute un scan complet.
+    Exécute un scan complet et retourne les Top 10 opportunités.
     """
     print("\n" + "="*60)
     print("🚀 CRYPTO SIGNAL SCANNER - Démarrage du scan")
@@ -29,25 +26,21 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        print("🔌 Utilisation de sources de données multiples (CryptoCompare, CoinCap)")
-        print("✅ Pas de rate limiting strict, scan rapide")
-        
-        # 1. Récupérer les principales paires crypto
-        print("\n📋 Étape 1: Récupération des paires crypto...")
-        pairs = get_top_usdt_pairs(limit=20)
+        # 1. Récupérer les principales paires USDT
+        print("📋 Étape 1: Récupération des paires USDT...")
+        pairs = get_top_usdt_pairs(limit=50)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
-            return
+            return []
         
-        # 2. Récupérer les données OHLCV (sources multiples avec fallback)
+        # 2. Récupérer les données OHLCV
         print("\n📊 Étape 2: Récupération des données OHLCV (1H, 200 bougies)...")
-        print("⚡ Scan rapide (pas de rate limiting)...")
         data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
         
         if not data:
             print("❌ Aucune donnée récupérée. Arrêt du scanner.")
-            return
+            return []
         
         # 3. Calculer les indicateurs et scores pour chaque paire
         print("\n🔍 Étape 3: Calcul des indicateurs et scores...")
@@ -57,7 +50,7 @@ def run_scanner():
         for i, (symbol, df) in enumerate(data.items(), 1):
             print(f"📊 Analyse {symbol} ({i}/{total})...", end='\r')
             
-            # Calculer les indicateurs techniques (inclut divergence RSI)
+            # Calculer les indicateurs techniques
             indicators = calculate_indicators(df)
             
             # Détecter le support
@@ -68,33 +61,8 @@ def run_scanner():
             if current_price and support:
                 support_distance = calculate_distance_to_support(current_price, support)
             
-            # Calculer le ratio de volume
-            current_volume = indicators.get('current_volume')
-            volume_ma = indicators.get('volume_ma20')
-            volume_ratio = None
-            if current_volume and volume_ma and volume_ma > 0:
-                volume_ratio = current_volume / volume_ma
-            
-            # Détecter breakout et pullback
-            breakout_signals = get_breakout_signals(
-                df, indicators, support, support_distance, volume_ratio or 0
-            )
-            
-            # Confirmation multi-timeframe (optionnel, seulement pour Top 20 potentiels)
-            multi_timeframe_confirmation = None
-            if i <= 20:  # Limiter pour éviter trop de requêtes API
-                try:
-                    multi_timeframe_confirmation = get_multi_timeframe_confirmation(symbol)
-                except:
-                    pass  # Ignorer les erreurs de multi-timeframe
-            
-            # Calculer le score d'opportunité amélioré
-            score_data = calculate_opportunity_score(
-                indicators, 
-                support_distance,
-                breakout_signals,
-                multi_timeframe_confirmation
-            )
+            # Calculer le score d'opportunité
+            score_data = calculate_opportunity_score(indicators, support_distance)
             
             # Ajouter à la liste des opportunités
             opportunities.append({
@@ -103,14 +71,7 @@ def run_scanner():
                 'trend': score_data['trend'],
                 'rsi': indicators.get('rsi14'),
                 'signal': score_data['signal'],
-                'details': score_data['details'],
-                'price': current_price,
-                'support': support,
-                'support_distance': support_distance,
-                'volume_ratio': volume_ratio,
-                'trend_confirmation': score_data.get('trend_confirmation', 'N/A'),
-                'breakout_detected': breakout_signals.get('breakout', {}).get('breakout_detected', False),
-                'pullback_detected': breakout_signals.get('pullback', {}).get('pullback_detected', False)
+                'price': current_price
             })
         
         print(f"\n✅ {len(opportunities)} paires analysées")
@@ -123,83 +84,73 @@ def run_scanner():
         for i, opp in enumerate(top_10, 1):
             opp['rank'] = i
         
-        # 5. Envoyer les alertes Telegram pour scores > 85
-        print("\n📱 Étape 4: Vérification des alertes Telegram...")
-        alerts_sent = check_and_send_alerts(top_10, min_score=85)
-        if alerts_sent > 0:
-            print(f"✅ {alerts_sent} alerte(s) Telegram envoyée(s)")
-        
-        # 6. Afficher les résultats dans le terminal
+        # 5. Afficher les résultats dans le terminal
         print("\n" + "="*60)
         print("🏆 TOP 10 OPPORTUNITÉS")
         print("="*60)
-        print(f"{'Rank':<6} {'Pair':<15} {'Score':<8} {'Trend':<10} {'RSI':<8} {'Vol Ratio':<10} {'Signal':<30}")
+        print(f"{'Rank':<6} {'Pair':<15} {'Score':<8} {'Trend':<10} {'RSI':<8} {'Signal':<30}")
         print("-"*60)
         
         for opp in top_10:
             rsi_display = f"{opp['rsi']:.1f}" if opp['rsi'] else "N/A"
-            vol_ratio = f"{opp['volume_ratio']:.2f}x" if opp.get('volume_ratio') else "N/A"
-            print(f"#{opp['rank']:<5} {opp['pair']:<15} {opp['score']:<8} {opp['trend']:<10} {rsi_display:<8} {vol_ratio:<10} {opp['signal']:<30}")
+            print(f"#{opp['rank']:<5} {opp['pair']:<15} {opp['score']:<8} {opp['trend']:<10} {rsi_display:<8} {opp['signal']:<30}")
         
         print("="*60)
         
-        # 7. Sauvegarder les données en JSON pour l'API web
-        print("\n💾 Étape 5: Sauvegarde des données pour le dashboard web...")
-        data_to_save = {
-            'opportunities': top_10,
-            'total_analyzed': len(data),
-            'last_update': datetime.now().isoformat()
-        }
-        with open('opportunities_data.json', 'w', encoding='utf-8') as f:
-            json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-        
-        # Supprimer le fichier de scan en cours si on est appelé depuis le web
-        if os.path.exists('.scanning'):
-            os.remove('.scanning')
-        
-        # 8. Générer le rapport HTML amélioré
-        print("\n📄 Étape 6: Génération du rapport HTML...")
-        generate_html_report(top_10, output_file='report.html')
-        
-        print("\n✅ Scan terminé avec succès!")
-        print(f"📊 {len(data)} paires analysées")
-        print(f"🏆 Top 10 opportunités identifiées")
-        print(f"📱 {alerts_sent} alerte(s) Telegram envoyée(s)")
-        print(f"📄 Rapport HTML: report.html")
-        print(f"🌐 Dashboard web: http://localhost:5000\n")
+        return top_10
         
     except Exception as e:
         print(f"\n❌ Erreur lors du scan: {e}")
         import traceback
         traceback.print_exc()
+        return []
 
 
 def main():
     """
-    Fonction main avec boucle continue pour Railway.
+    Fonction principale avec serveur web Flask intégré.
     """
-    print("🚀 Crypto Signal Scanner - Démarrage")
+    print("🚀 Crypto Signal Scanner Web - Démarrage")
     print("📌 Mode: Boucle continue (mise à jour toutes les heures)")
     print("🛑 Appuyez sur Ctrl+C pour arrêter\n")
     
-    try:
-        while True:
-            run_scanner()
-            
-            # Attendre 1 heure avant le prochain scan
-            print(f"⏳ Prochain scan dans 1 heure...")
-            print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
-            time.sleep(3600)  # 3600 secondes = 1 heure
+    # Premier scan
+    opportunities = run_scanner()
     
+    # Créer l'application Flask
+    app = create_app(opportunities)
+    
+    # Fonction pour mettre à jour les opportunités en arrière-plan
+    def update_opportunities():
+        """Met à jour les opportunités toutes les heures."""
+        while True:
+            time.sleep(3600)  # Attendre 1 heure
+            print("\n🔄 Mise à jour automatique...")
+            new_opportunities = run_scanner()
+            # Mettre à jour l'app avec les nouvelles opportunités
+            app.config['opportunities'] = new_opportunities
+            # Recréer les routes avec les nouvelles données
+            app.view_functions['home'] = lambda: create_app(new_opportunities).view_functions['home']()
+    
+    # Lancer la mise à jour en arrière-plan
+    import threading
+    update_thread = threading.Thread(target=update_opportunities, daemon=True)
+    update_thread.start()
+    
+    # Démarrer le serveur Flask
+    port = int(os.environ.get('PORT', 5000))
+    print(f"\n🌐 Serveur web démarré sur http://0.0.0.0:{port}")
+    print(f"📱 Dashboard accessible depuis votre navigateur\n")
+    
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
     except KeyboardInterrupt:
-        print("\n\n🛑 Arrêt du scanner demandé par l'utilisateur.")
-        print("👋 Au revoir!")
+        print("\n\n🛑 Arrêt du serveur...")
     except Exception as e:
-        print(f"\n❌ Erreur fatale: {e}")
+        print(f"\n❌ Erreur serveur: {e}")
         import traceback
         traceback.print_exc()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-
