@@ -4,6 +4,10 @@ Point d'entrée WSGI pour Gunicorn (production).
 
 import sys
 import os
+import threading
+import time
+from flask import Flask, render_template_string
+from datetime import datetime
 
 # Ajouter src au path
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,18 +15,94 @@ src_dir = os.path.join(base_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-# Importer l'application depuis main
-from main import main
-
-# Créer l'app Flask pour Gunicorn
-# On doit initialiser l'app différemment pour la production
-import threading
-from flask import Flask
-from flask import render_template_string
-from datetime import datetime
+# Importer les modules nécessaires
+from fetch_pairs import get_top_usdt_pairs
+from data_fetcher import fetch_multiple_pairs
+from indicators import calculate_indicators
+from support import find_swing_low, calculate_distance_to_support
+from scorer import calculate_opportunity_score
 
 # Variable globale pour les opportunités
 opportunities_data = {'data': []}
+
+# Fonction pour exécuter un scan
+def run_scanner():
+    """Exécute un scan complet et retourne les Top 10 opportunités."""
+    from datetime import datetime
+    
+    print("\n" + "="*60)
+    print("🚀 CRYPTO SIGNAL SCANNER - Démarrage du scan")
+    print("="*60)
+    print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+    
+    try:
+        # 1. Récupérer les principales paires USDT
+        print("📋 Étape 1: Récupération des paires USDT...")
+        pairs = get_top_usdt_pairs(limit=50)
+        
+        if not pairs:
+            print("❌ Aucune paire trouvée. Arrêt du scanner.")
+            return []
+        
+        # 2. Générer les données OHLCV
+        print("\n📊 Étape 2: Génération des données OHLCV (1H, 200 bougies)...")
+        print("💡 Utilisation de données de démonstration (libres de droit)")
+        data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
+        
+        if not data:
+            print("❌ Aucune donnée générée. Arrêt du scanner.")
+            return []
+        
+        # 3. Calculer les indicateurs et scores
+        print("\n🔍 Étape 3: Calcul des indicateurs et scores...")
+        opportunities = []
+        total = len(data)
+        
+        for i, (symbol, df) in enumerate(data.items(), 1):
+            print(f"📊 Analyse {symbol} ({i}/{total})...", end='\r')
+            
+            # Calculer les indicateurs techniques
+            indicators = calculate_indicators(df)
+            
+            # Détecter le support
+            support = find_swing_low(df, lookback=30)
+            current_price = indicators.get('current_price')
+            support_distance = None
+            
+            if current_price and support:
+                support_distance = calculate_distance_to_support(current_price, support)
+            
+            # Calculer le score d'opportunité
+            score_data = calculate_opportunity_score(indicators, support_distance)
+            
+            # Ajouter à la liste des opportunités
+            opportunities.append({
+                'pair': symbol,
+                'score': score_data['score'],
+                'trend': score_data['trend'],
+                'rsi': indicators.get('rsi14'),
+                'signal': score_data['signal'],
+                'price': current_price
+            })
+        
+        print(f"\n✅ {len(opportunities)} paires analysées")
+        
+        # 4. Trier par score décroissant et prendre le Top 10
+        opportunities.sort(key=lambda x: x['score'], reverse=True)
+        top_10 = opportunities[:10]
+        
+        # Ajouter le rank
+        for i, opp in enumerate(top_10, 1):
+            opp['rank'] = i
+        
+        print("\n✅ Scan terminé avec succès!")
+        return top_10
+        
+    except Exception as e:
+        print(f"\n❌ Erreur lors du scan: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 # Créer l'app Flask
 app = Flask(__name__)
@@ -157,9 +237,6 @@ def health():
 # Fonction pour initialiser et mettre à jour les opportunités
 def init_scanner():
     """Initialise le scanner et lance la mise à jour en arrière-plan."""
-    from main import run_scanner
-    import time
-    
     # Premier scan
     print("🚀 Initialisation du scanner...")
     opportunities_data['data'] = run_scanner()
