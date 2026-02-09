@@ -39,7 +39,8 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
 
 def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) -> dict:
     """
-    Récupère les données OHLCV pour plusieurs paires via CoinGecko.
+    Récupère les données OHLCV pour plusieurs paires.
+    Utilise CryptoCompare, CoinCap et génération de données en fallback.
     
     Args:
         symbols: Liste des symboles de paires
@@ -57,10 +58,9 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
         df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
-        # Délai entre chaque paire pour éviter le rate limiting CoinGecko
-        # CoinGecko free tier limite à ~10-30 req/min, donc on attend 4 secondes
+        # Délai minimal entre chaque paire (CryptoCompare et CoinCap sont plus permissifs)
         if i < total:
-            time.sleep(4.0)  # 4 secondes = max 15 req/min (sous la limite)
+            time.sleep(0.5)  # 0.5 seconde suffit pour CryptoCompare/CoinCap
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data

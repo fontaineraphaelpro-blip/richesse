@@ -1,6 +1,6 @@
 """
 Module pour l'analyse multi-timeframe (confirmation de tendance).
-Utilise l'API CoinGecko (pas besoin de clé).
+Utilise les APIs CryptoCompare/CoinCap via data_fetcher.
 """
 
 from data_fetcher import fetch_klines

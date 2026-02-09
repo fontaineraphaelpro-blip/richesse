@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from data_fetcher import fetch_klines
-# Utilise l'API CoinGecko
+# Utilise CryptoCompare/CoinCap via data_fetcher
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
 from scorer import calculate_opportunity_score
