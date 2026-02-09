@@ -165,8 +165,8 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     if entry_signal != 'NEUTRAL' and atr and entry_price:
         # Stop Loss basé sur ATR (Volatilité)
         # Scalping 15m : SL à 1.5x ATR, TP à 2x et 3x ATR
-        atr_sl_multiplier = 1.5
-        atr_tp_multiplier = 2.0
+        atr_sl_multiplier = 2.5
+        atr_tp_multiplier = 3.5
         
         atr_value = atr
         
