@@ -102,12 +102,13 @@ def run_scanner():
         
         print(f"\n✅ {len(opportunities)} paires analysées")
         
-        # 4. Filtrer les opportunités de qualité (score >= 45 et signal valide)
+        # 4. Filtrer UNIQUEMENT les opportunités SHORT de qualité
+        # Score >= 50, signal SHORT uniquement, confiance >= 60
         quality_opportunities = [
             opp for opp in opportunities 
-            if opp['score'] >= 45 
-            and opp.get('entry_signal') != 'NEUTRAL'
-            and opp.get('confidence', 0) >= 50
+            if opp['score'] >= 50 
+            and opp.get('entry_signal') == 'SHORT'  # UNIQUEMENT SHORT
+            and opp.get('confidence', 0) >= 60  # Confiance plus élevée pour SHORT
         ]
         
         print(f"📊 {len(quality_opportunities)} opportunités de qualité trouvées (score >= 45, confiance >= 50)")

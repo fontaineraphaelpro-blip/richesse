@@ -151,94 +151,97 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
     confidence = signals.get('confidence', 0)
     
-    if entry_signal == 'LONG' or entry_signal == 'SHORT':
-        if confidence >= 50:
-            # Bonus si le signal est cohérent avec la tendance
-            if (entry_signal == 'LONG' and trend == 'Bullish') or (entry_signal == 'SHORT' and trend == 'Bearish'):
-                score += 35  # Bonus pour cohérence avec tendance
-                details.append(f"Signal {entry_signal} ✓ (conf: {confidence}%, tendance: {trend})")
+    # UNIQUEMENT les signaux SHORT sont acceptés
+    if entry_signal == 'SHORT':
+        if confidence >= 60:  # Confiance minimum plus élevée pour SHORT
+            # Bonus si le signal SHORT est cohérent avec tendance Bearish
+            if trend == 'Bearish':
+                score += 40  # Bonus important pour SHORT + tendance Bearish
+                details.append(f"Signal SHORT ✓ (conf: {confidence}%, tendance: {trend})")
             elif trend == 'NEUTRAL':
                 score += 30  # Pas de bonus mais pas de pénalité
-                details.append(f"Signal {entry_signal} (conf: {confidence}%, tendance: {trend})")
+                details.append(f"Signal SHORT (conf: {confidence}%, tendance: {trend})")
             else:
-                score += 20  # Pénalité si signal contre-tendance
-                details.append(f"Signal {entry_signal} ⚠️ (conf: {confidence}%, contre-tendance: {trend})")
+                score += 15  # Pénalité si signal SHORT avec tendance Bullish
+                details.append(f"Signal SHORT ⚠️ (conf: {confidence}%, contre-tendance: {trend})")
         else:
             # Signal faible = pas de points
             entry_signal = 'NEUTRAL'
-            details.append(f"Signal {entry_signal} trop faible (conf: {confidence}%)")
+            details.append(f"Signal SHORT trop faible (conf: {confidence}%)")
     else:
-        details.append("Pas de signal clair")
+        # Ignorer les signaux LONG
+        entry_signal = 'NEUTRAL'
+        details.append("Pas de signal SHORT")
     
-    # 2. RSI optimal pour scalping (40-60) → +20 (seulement si signal valide)
+    # 2. RSI pour SHORT (50-75 = zone favorable)
     if rsi14 is not None:
-        if entry_signal != 'NEUTRAL':
-            if 40 <= rsi14 <= 60:
-                score += 20
-                details.append(f"RSI optimal ({rsi14:.1f})")
-            elif 30 <= rsi14 < 40 and entry_signal == 'LONG':
-                score += 15  # Survente pour LONG
-                details.append(f"RSI survente ({rsi14:.1f})")
-            elif 60 < rsi14 <= 70 and entry_signal == 'SHORT':
-                score += 15  # Surachat pour SHORT
-                details.append(f"RSI surachat ({rsi14:.1f})")
+        if entry_signal == 'SHORT':
+            if 60 <= rsi14 <= 75:
+                score += 25  # RSI élevé = excellent pour SHORT
+                details.append(f"RSI surachat ({rsi14:.1f}) ✓")
+            elif 50 <= rsi14 < 60:
+                score += 15  # RSI modéré-élevé = bon pour SHORT
+                details.append(f"RSI élevé ({rsi14:.1f}) ✓")
+            elif 40 <= rsi14 < 50:
+                score += 5  # RSI neutre = faible confirmation
+                details.append(f"RSI neutre ({rsi14:.1f})")
             else:
-                score -= 10  # Pénalité si RSI ne correspond pas au signal
-                details.append(f"RSI incompatible ({rsi14:.1f})")
+                score -= 15  # Pénalité si RSI trop bas (risque de rebond)
+                details.append(f"RSI trop bas ({rsi14:.1f}) ✗")
         else:
-            details.append(f"RSI {rsi14:.1f} (pas de signal)")
+            details.append(f"RSI {rsi14:.1f} (pas de signal SHORT)")
     else:
         details.append("RSI N/A")
     
-    # 3. EMA croisement (EMA9 > EMA21) → +20 (seulement si cohérent avec signal)
+    # 3. EMA croisement bearish (EMA9 < EMA21) → +25 pour SHORT
     if ema9 is not None and ema21 is not None:
-        if entry_signal == 'LONG' and ema9 > ema21:
-            score += 20
-            details.append("EMA bullish ✓")
-        elif entry_signal == 'SHORT' and ema9 < ema21:
-            score += 20
-            details.append("EMA bearish ✓")
-        elif entry_signal != 'NEUTRAL':
-            score -= 15  # Pénalité si EMA ne correspond pas au signal
+        if entry_signal == 'SHORT' and ema9 < ema21:
+            # Vérifier l'écart significatif
+            ema_gap = ((ema21 - ema9) / ema9) * 100
+            if ema_gap > 0.2:
+                score += 25  # Écart important = signal fort
+                details.append(f"EMA bearish fort ✓ (écart: {ema_gap:.2f}%)")
+            else:
+                score += 20
+                details.append("EMA bearish ✓")
+        elif entry_signal == 'SHORT':
+            score -= 20  # Pénalité importante si EMA ne confirme pas SHORT
             details.append("EMA incompatible ✗")
         else:
             details.append("EMA neutre")
     else:
         details.append("EMA N/A")
     
-    # 4. MACD → +15 (seulement si cohérent avec signal)
+    # 4. MACD bearish → +20 pour SHORT
     if macd is not None and macd_signal is not None:
-        if entry_signal == 'LONG' and macd > macd_signal:
-            score += 15
-            if macd_histogram and macd_histogram > 0:
-                score += 5
-                details.append("MACD bullish fort ✓")
+        if entry_signal == 'SHORT' and macd < macd_signal:
+            score += 20
+            if macd_histogram and macd_histogram < -0.001:  # Histogramme négatif significatif
+                score += 10
+                details.append("MACD bearish très fort ✓")
             else:
-                details.append("MACD bullish ✓")
-        elif entry_signal == 'SHORT' and macd < macd_signal:
-            score += 15
-            details.append("MACD bearish ✓")
-        elif entry_signal != 'NEUTRAL':
-            score -= 10  # Pénalité si MACD ne correspond pas
+                details.append("MACD bearish ✓")
+        elif entry_signal == 'SHORT':
+            score -= 15  # Pénalité si MACD ne confirme pas SHORT
             details.append("MACD incompatible ✗")
         else:
             details.append("MACD neutre")
     else:
         details.append("MACD N/A")
     
-    # 5. Volume élevé (>1.3x) → +10 (obligatoire pour signal valide)
+    # 5. Volume élevé (>1.5x) → +15 pour SHORT (obligatoire)
     volume_ratio = None
     if current_volume is not None and volume_ma20 is not None and volume_ma20 > 0:
         volume_ratio = current_volume / volume_ma20
-        if entry_signal != 'NEUTRAL':
-            if volume_ratio > 1.5:
-                score += 10
+        if entry_signal == 'SHORT':
+            if volume_ratio > 2.0:
+                score += 20  # Volume très élevé = pression vendeuse forte
+                details.append(f"Volume très élevé ({volume_ratio:.2f}x) ✓✓")
+            elif volume_ratio > 1.5:
+                score += 15
                 details.append(f"Volume élevé ({volume_ratio:.2f}x) ✓")
-            elif volume_ratio > 1.3:
-                score += 5
-                details.append(f"Volume OK ({volume_ratio:.2f}x) ✓")
             else:
-                score -= 10  # Pénalité si volume insuffisant
+                score -= 15  # Pénalité importante si volume insuffisant pour SHORT
                 details.append(f"Volume faible ({volume_ratio:.2f}x) ✗")
         else:
             details.append(f"Volume {volume_ratio:.2f}x")
