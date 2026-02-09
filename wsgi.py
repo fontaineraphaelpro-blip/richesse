@@ -109,9 +109,25 @@ def run_scanner():
         
         print(f"\n✅ {len(opportunities)} paires analysées")
         
-        # 4. Trier par score décroissant et prendre le Top 10
-        opportunities.sort(key=lambda x: x['score'], reverse=True)
-        top_10 = opportunities[:10]
+        # 4. Filtrer les opportunités de qualité (score >= 45 et signal valide)
+        quality_opportunities = [
+            opp for opp in opportunities 
+            if opp['score'] >= 45 
+            and opp.get('entry_signal') != 'NEUTRAL'
+            and opp.get('confidence', 0) >= 50
+        ]
+        
+        print(f"📊 {len(quality_opportunities)} opportunités de qualité trouvées (score >= 45, confiance >= 50)")
+        
+        # Trier par score décroissant et prendre le Top 10
+        quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
+        top_10 = quality_opportunities[:10]
+        
+        # Si moins de 10 opportunités de qualité, compléter avec les meilleures autres
+        if len(top_10) < 10:
+            remaining = [opp for opp in opportunities if opp not in quality_opportunities]
+            remaining.sort(key=lambda x: x['score'], reverse=True)
+            top_10.extend(remaining[:10 - len(top_10)])
         
         # Ajouter le rank
         for i, opp in enumerate(top_10, 1):
