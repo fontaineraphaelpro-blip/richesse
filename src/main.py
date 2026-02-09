@@ -153,6 +153,10 @@ def run_scanner():
         with open('opportunities_data.json', 'w', encoding='utf-8') as f:
             json.dump(data_to_save, f, indent=2, ensure_ascii=False)
         
+        # Supprimer le fichier de scan en cours si on est appelé depuis le web
+        if os.path.exists('.scanning'):
+            os.remove('.scanning')
+        
         # 8. Générer le rapport HTML amélioré
         print("\n📄 Étape 6: Génération du rapport HTML...")
         generate_html_report(top_10, output_file='report.html')

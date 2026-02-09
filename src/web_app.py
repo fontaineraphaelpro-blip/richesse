@@ -4,6 +4,7 @@ Application web Flask pour afficher le dashboard du Crypto Signal Scanner.
 
 import json
 import os
+import threading
 from flask import Flask, render_template_string, jsonify
 from datetime import datetime
 
@@ -272,6 +273,8 @@ HOME_TEMPLATE = """
                 <span id="last-update-time">Chargement...</span>
                 <br>
                 <button class="refresh-btn" onclick="loadData(); return false;">🔄 Actualiser</button>
+                <button class="refresh-btn" onclick="triggerScan(); return false;" id="scan-btn" style="margin-left: 10px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">🚀 Lancer le Scan</button>
+                <span id="scan-status" style="margin-left: 10px; color: #28a745; font-weight: bold;"></span>
             </div>
 
             <div id="content">
@@ -341,10 +344,18 @@ HOME_TEMPLATE = """
 
                     // Afficher le tableau
                     if (opportunities.length === 0) {
+                        let message = '📊 Aucune donnée disponible';
+                        let subMessage = 'Cliquez sur "🚀 Lancer le Scan" pour commencer l\'analyse.';
+                        
+                        if (isScanning) {
+                            message = '⏳ Scan en cours...';
+                            subMessage = 'Les données seront disponibles dans quelques instants.';
+                        }
+                        
                         document.getElementById('content').innerHTML = `
                             <div class="no-data">
-                                <h2>📊 Aucune donnée disponible</h2>
-                                <p>Le scanner n'a pas encore généré de données. Veuillez attendre le prochain scan.</p>
+                                <h2>${message}</h2>
+                                <p>${subMessage}</p>
                             </div>
                         `;
                         return;
@@ -414,8 +425,8 @@ HOME_TEMPLATE = """
         // Charger les données au chargement de la page
         loadData();
 
-        // Actualiser automatiquement toutes les 30 secondes
-        setInterval(loadData, 30000);
+        // Actualiser automatiquement toutes les 10 secondes
+        setInterval(loadData, 10000);
     </script>
 </body>
 </html>
