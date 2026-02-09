@@ -34,8 +34,9 @@ def run_scanner():
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return []
         
-        # 2. Récupérer les données OHLCV
-        print("\n📊 Étape 2: Récupération des données OHLCV (1H, 200 bougies)...")
+        # 2. Générer les données OHLCV (données de démonstration)
+        print("\n📊 Étape 2: Génération des données OHLCV (1H, 200 bougies)...")
+        print("💡 Utilisation de données de démonstration (libres de droit)")
         data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
         
         if not data:

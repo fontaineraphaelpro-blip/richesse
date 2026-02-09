@@ -1,92 +1,138 @@
 """
-Module pour récupérer les données OHLCV depuis des APIs publiques.
+Module pour générer des données OHLCV réalistes (sans API).
+Utilise des données de démonstration basées sur des prix de référence.
 """
 
 import pandas as pd
-import time
-import requests
+import numpy as np
 from typing import Optional, Dict
 from datetime import datetime, timedelta
-import numpy as np
 
 
-def get_price_from_api(symbol: str) -> Optional[float]:
+# Prix de référence réalistes par crypto (basés sur données historiques)
+REFERENCE_PRICES = {
+    'BTCUSDT': 50000.0,
+    'ETHUSDT': 3000.0,
+    'BNBUSDT': 400.0,
+    'SOLUSDT': 120.0,
+    'XRPUSDT': 0.6,
+    'ADAUSDT': 0.5,
+    'DOGEUSDT': 0.08,
+    'DOTUSDT': 7.0,
+    'MATICUSDT': 0.8,
+    'AVAXUSDT': 35.0,
+    'LINKUSDT': 15.0,
+    'UNIUSDT': 6.0,
+    'LTCUSDT': 70.0,
+    'ATOMUSDT': 10.0,
+    'ETCUSDT': 20.0,
+    'XLMUSDT': 0.12,
+    'ALGOUSDT': 0.15,
+    'VETUSDT': 0.03,
+    'ICPUSDT': 12.0,
+    'FILUSDT': 5.0,
+    'TRXUSDT': 0.10,
+    'EOSUSDT': 0.8,
+    'AAVEUSDT': 80.0,
+    'THETAUSDT': 1.0,
+    'SANDUSDT': 0.5,
+    'MANAUSDT': 0.4,
+    'AXSUSDT': 6.0,
+    'NEARUSDT': 3.0,
+    'FTMUSDT': 0.3,
+    'GRTUSDT': 0.15,
+    'HBARUSDT': 0.08,
+    'EGLDUSDT': 40.0,
+    'ZECUSDT': 25.0,
+    'CHZUSDT': 0.10,
+    'ENJUSDT': 0.3,
+    'BATUSDT': 0.25,
+    'ZILUSDT': 0.02,
+    'IOTAUSDT': 0.2,
+    'ONTUSDT': 0.3,
+    'QTUMUSDT': 3.0,
+    'WAVESUSDT': 2.0,
+    'OMGUSDT': 0.8,
+    'SNXUSDT': 3.0,
+    'MKRUSDT': 2000.0,
+    'COMPUSDT': 50.0,
+    'YFIUSDT': 5000.0,
+    'SUSHIUSDT': 1.0,
+    'CRVUSDT': 0.5,
+    '1INCHUSDT': 0.4,
+    'RENUSDT': 0.1,
+    'LUNAUSDT': 0.5,
+    'USTCUSDT': 0.01,
+    'LUNCUSDT': 0.0001,
+    'APTUSDT': 8.0,
+    'ARBUSDT': 1.0
+}
+
+
+def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200) -> pd.DataFrame:
     """
-    Récupère le prix actuel depuis CryptoCompare (API publique gratuite).
-    
-    Args:
-        symbol: Symbole crypto (ex: 'BTC' pour Bitcoin)
-    
-    Returns:
-        Prix en USD ou None
-    """
-    try:
-        base = symbol.replace('USDT', '')
-        url = f"https://min-api.cryptocompare.com/data/price"
-        params = {'fsym': base, 'tsyms': 'USD'}
-        
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return float(data.get('USD', 0))
-        return None
-    except:
-        return None
-
-
-def generate_ohlc_data(symbol: str, current_price: float, limit: int = 200) -> pd.DataFrame:
-    """
-    Génère des données OHLC réalistes basées sur un prix actuel.
+    Génère des données OHLC réalistes basées sur un prix de référence.
     
     Args:
         symbol: Symbole de la paire
-        current_price: Prix actuel
+        base_price: Prix de référence
         limit: Nombre de bougies
     
     Returns:
-        DataFrame OHLCV
+        DataFrame OHLCV avec colonnes: timestamp, open, high, low, close, volume
     """
-    # Prix de référence par crypto (pour variations réalistes)
-    price_ranges = {
-        'BTCUSDT': (40000, 80000), 'ETHUSDT': (2000, 4000), 'BNBUSDT': (250, 700),
-        'SOLUSDT': (80, 200), 'XRPUSDT': (0.4, 1.5), 'ADAUSDT': (0.3, 1.0),
-        'DOGEUSDT': (0.06, 0.20), 'DOTUSDT': (5, 12), 'MATICUSDT': (0.6, 1.5),
-        'AVAXUSDT': (25, 60), 'LINKUSDT': (12, 25), 'UNIUSDT': (4, 12)
-    }
-    
-    # Déterminer la plage de prix réaliste
-    price_min, price_max = price_ranges.get(symbol, (current_price * 0.7, current_price * 1.3))
-    
-    # Générer timestamps (1 heure par bougie)
+    # Générer timestamps (1 heure par bougie, en ordre chronologique)
     timestamps = [datetime.now() - timedelta(hours=i) for i in range(limit-1, -1, -1)]
     
-    # Générer prix avec tendance réaliste
+    # Générer prix avec tendance réaliste et volatilité
     prices = []
-    price = current_price
+    price = base_price
     
-    # Ajouter une tendance légère
-    trend = np.random.uniform(-0.001, 0.001)
+    # Ajouter une tendance légère (bullish ou bearish)
+    trend = np.random.uniform(-0.0005, 0.0005)
+    
+    # Volatilité variable selon le type de crypto
+    volatility = 0.015 if base_price > 100 else 0.02  # Plus volatil pour petites cryptos
     
     for i in range(limit):
-        # Variation aléatoire mais réaliste (±1-2% par bougie)
-        change = np.random.uniform(-0.02, 0.02)
+        # Variation aléatoire mais réaliste
+        change = np.random.normal(0, volatility)  # Distribution normale
         price = price * (1 + change + trend)
         
-        # Garder dans une plage réaliste
-        price = max(price_min * 0.8, min(price_max * 1.2, price))
+        # Garder dans une plage raisonnable (±30% du prix de base)
+        price = max(base_price * 0.7, min(base_price * 1.3, price))
         prices.append(price)
     
     # Créer DataFrame OHLC
-    df = pd.DataFrame({
-        'timestamp': timestamps,
-        'open': prices,
-        'high': [p * (1 + abs(np.random.uniform(0, 0.01))) for p in prices],
-        'low': [p * (1 - abs(np.random.uniform(0, 0.01))) for p in prices],
-        'close': prices,
-        'volume': [np.random.uniform(1000000, 10000000) for _ in range(limit)]
-    })
+    df_data = []
+    for i, (ts, close_price) in enumerate(zip(timestamps, prices)):
+        # Générer open (proche du close précédent ou du close actuel)
+        if i == 0:
+            open_price = close_price * np.random.uniform(0.995, 1.005)
+        else:
+            open_price = prices[i-1] * np.random.uniform(0.998, 1.002)
+        
+        # Générer high et low (variation de 0.5% à 2%)
+        price_range = close_price * np.random.uniform(0.005, 0.02)
+        high_price = max(open_price, close_price) + price_range * np.random.uniform(0.3, 0.7)
+        low_price = min(open_price, close_price) - price_range * np.random.uniform(0.3, 0.7)
+        
+        # Volume (plus élevé pour les grandes cryptos)
+        base_volume = 10000000 if base_price > 100 else 1000000
+        volume = base_volume * np.random.uniform(0.5, 2.0)
+        
+        df_data.append({
+            'timestamp': ts,
+            'open': open_price,
+            'high': high_price,
+            'low': low_price,
+            'close': close_price,
+            'volume': volume
+        })
     
-    # Ajuster high/low pour qu'ils soient cohérents
+    df = pd.DataFrame(df_data)
+    
+    # S'assurer que high >= max(open, close) et low <= min(open, close)
     df['high'] = df[['open', 'close', 'high']].max(axis=1)
     df['low'] = df[['open', 'close', 'low']].min(axis=1)
     
@@ -95,42 +141,31 @@ def generate_ohlc_data(symbol: str, current_price: float, limit: int = 200) -> p
 
 def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
     """
-    Récupère les données OHLCV (bougies) pour une paire donnée.
+    Génère des données OHLCV (bougies) pour une paire donnée.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
         interval: Intervalle de temps ('1h')
-        limit: Nombre de bougies à récupérer
+        limit: Nombre de bougies à générer
     
     Returns:
         DataFrame avec colonnes: timestamp, open, high, low, close, volume
     """
     try:
-        # Récupérer le prix actuel
-        price = get_price_from_api(symbol)
+        # Récupérer le prix de référence
+        base_price = REFERENCE_PRICES.get(symbol, 100.0)
         
-        if price and price > 0:
-            # Générer des données OHLC basées sur le prix actuel
-            return generate_ohlc_data(symbol, price, limit)
-        
-        # Fallback: prix par défaut
-        default_prices = {
-            'BTCUSDT': 50000, 'ETHUSDT': 3000, 'BNBUSDT': 400, 'SOLUSDT': 120,
-            'XRPUSDT': 0.6, 'ADAUSDT': 0.5, 'DOGEUSDT': 0.08, 'DOTUSDT': 7,
-            'MATICUSDT': 0.8, 'AVAXUSDT': 35, 'LINKUSDT': 15, 'UNIUSDT': 6
-        }
-        
-        default_price = default_prices.get(symbol, 100)
-        return generate_ohlc_data(symbol, default_price, limit)
+        # Générer des données OHLC basées sur le prix de référence
+        return generate_ohlc_data(symbol, base_price, limit)
     
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des données pour {symbol}: {e}")
+        print(f"❌ Erreur lors de la génération des données pour {symbol}: {e}")
         return None
 
 
 def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) -> dict:
     """
-    Récupère les données OHLCV pour plusieurs paires.
+    Génère les données OHLCV pour plusieurs paires.
     
     Args:
         symbols: Liste des symboles de paires
@@ -144,13 +179,10 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
     total = len(symbols)
     
     for i, symbol in enumerate(symbols, 1):
-        print(f"📊 Récupération {symbol} ({i}/{total})...", end='\r')
+        print(f"📊 Génération {symbol} ({i}/{total})...", end='\r')
         df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
-        # Délai minimal entre chaque paire
-        if i < total:
-            time.sleep(0.3)
     
-    print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
+    print(f"\n✅ {len(data)}/{total} paires générées avec succès")
     return data
