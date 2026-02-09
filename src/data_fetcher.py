@@ -109,13 +109,9 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interva
         price = max(base_price * 0.85, min(base_price * 1.15, price))
         prices.append(price)
     
-    # S'assurer que le dernier prix (prix actuel) est proche du prix de base (±5%)
-    # pour avoir des prix plus réalistes
-    last_price = prices[-1]
-    if abs(last_price - base_price) / base_price > 0.05:
-        # Ajuster progressivement vers le prix de base
-        adjustment = (base_price - last_price) * 0.3
-        prices[-1] = last_price + adjustment
+    # FORCER le dernier prix à être EXACTEMENT le prix réel récupéré
+    # C'est le prix actuel du marché, il ne doit pas être modifié
+    prices[-1] = base_price
     
     # Créer DataFrame OHLC
     df_data = []
@@ -221,6 +217,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
     
     Returns:
         DataFrame avec colonnes: timestamp, open, high, low, close, volume
+        Le dernier prix (close) sera EXACTEMENT le prix réel récupéré
     """
     try:
         # 1. Récupérer le prix réel actuel
@@ -228,16 +225,32 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         
         if real_price and real_price > 0:
             base_price = real_price
+            print(f"✓ {symbol}: ${real_price:,.4f} (prix réel)")
         else:
             # Fallback: utiliser le prix de référence
             base_price = REFERENCE_PRICES.get(symbol, 100.0)
+            print(f"⚠ {symbol}: ${base_price:,.4f} (prix de référence - API indisponible)")
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
         interval_minutes = interval_map.get(interval, 15)
         
         # Générer des données OHLC basées sur le prix réel
-        return generate_ohlc_data(symbol, base_price, limit, interval_minutes)
+        # Le dernier prix sera FORCÉ à être exactement le prix réel
+        df = generate_ohlc_data(symbol, base_price, limit, interval_minutes)
+        
+        # S'assurer que le dernier prix est EXACTEMENT le prix réel
+        if df is not None and len(df) > 0 and real_price and real_price > 0:
+            df.iloc[-1, df.columns.get_loc('close')] = real_price
+            # Ajuster aussi high et low pour être cohérents
+            last_high = df.iloc[-1]['high']
+            last_low = df.iloc[-1]['low']
+            if real_price > last_high:
+                df.iloc[-1, df.columns.get_loc('high')] = real_price * 1.001
+            if real_price < last_low:
+                df.iloc[-1, df.columns.get_loc('low')] = real_price * 0.999
+        
+        return df
     
     except Exception as e:
         print(f"❌ Erreur lors de la génération des données pour {symbol}: {e}")
