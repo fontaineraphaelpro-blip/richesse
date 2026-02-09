@@ -528,6 +528,43 @@ def api_opportunities():
     })
 
 
+@app.route('/api/trigger-scan', methods=['POST'])
+def trigger_scan():
+    """Déclenche un scan en arrière-plan."""
+    # Vérifier si un scan est déjà en cours
+    if os.path.exists('.scanning'):
+        return jsonify({
+            'status': 'already_scanning',
+            'message': 'Un scan est déjà en cours...'
+        }), 200
+    
+    # Créer un fichier pour indiquer qu'un scan est en cours
+    with open('.scanning', 'w') as f:
+        f.write('')
+    
+    def run_scan():
+        """Fonction qui exécute le scan en arrière-plan."""
+        try:
+            # Importer et exécuter le scanner
+            from main import run_scanner
+            run_scanner()
+        except Exception as e:
+            print(f"❌ Erreur lors du scan en arrière-plan: {e}")
+        finally:
+            # Supprimer le fichier de scan en cours
+            if os.path.exists('.scanning'):
+                os.remove('.scanning')
+    
+    # Lancer le scan dans un thread séparé
+    thread = threading.Thread(target=run_scan, daemon=True)
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'message': 'Scan démarré en arrière-plan. Les données seront disponibles dans quelques instants.'
+    }), 200
+
+
 if __name__ == '__main__':
     # Pour Railway, utiliser le PORT de l'environnement
     port = int(os.environ.get('PORT', 5000))
