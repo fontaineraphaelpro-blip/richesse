@@ -288,25 +288,67 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 bearish_confirmations += 1
                 confidence += 5
     
-    # DÉCISION FINALE: UNIQUEMENT les signaux SHORT
-    # Nécessite AU MOINS 8 confirmations bearish pour un signal SHORT valide
-    # et confiance minimum de 75 (très strict avec toutes les données)
-    # ET ADX > 20 (tendance doit être présente)
-    if bearish_confirmations >= 8 and confidence >= 75 and (adx is None or adx > 20):
+    # VÉRIFICATIONS FINALES DE COHÉRENCE AVANT DÉCISION
+    # Vérifier que TOUS les indicateurs majeurs sont alignés
+    
+    # 1. Vérification EMA obligatoire
+    ema_aligned = ema_bearish
+    
+    # 2. Vérification RSI (doit être en zone favorable)
+    rsi_aligned = rsi14 is not None and 50 <= rsi14 <= 75
+    
+    # 3. Vérification MACD (doit être bearish)
+    macd_aligned = macd is not None and macd_signal is not None and macd < macd_signal
+    
+    # 4. Vérification Volume (minimum 1.3x)
+    volume_aligned = volume_ratio is not None and volume_ratio > 1.3
+    
+    # 5. Vérification ADX (tendance doit être présente)
+    adx_aligned = adx is None or adx > 20
+    
+    # 6. Vérification Stochastic (surachat pour SHORT)
+    stoch_aligned = stoch_k is not None and stoch_d is not None and stoch_k > 60 and stoch_d > 60
+    
+    # Compter les alignements
+    alignments = sum([
+        ema_aligned,
+        rsi_aligned,
+        macd_aligned,
+        volume_aligned,
+        adx_aligned,
+        stoch_aligned
+    ])
+    
+    # DÉCISION FINALE: UNIQUEMENT les signaux SHORT ULTRA-VALIDÉS
+    # Nécessite:
+    # - AU MOINS 9 confirmations bearish
+    # - Confiance minimum de 80 (très strict)
+    # - AU MOINS 5 alignements sur 6 indicateurs majeurs
+    # - ADX > 20 (tendance doit être présente)
+    if (bearish_confirmations >= 9 and 
+        confidence >= 80 and 
+        alignments >= 5 and
+        (adx is None or adx > 20)):
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
-    elif bearish_confirmations >= 7 and confidence >= 70 and (adx is None or adx > 25):
-        # Signal SHORT acceptable mais moins fort
+    elif (bearish_confirmations >= 8 and 
+          confidence >= 75 and 
+          alignments >= 4 and
+          (adx is None or adx > 25)):
+        # Signal SHORT très bon
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
-        confidence = min(confidence, 70)  # Limiter la confiance
-    elif bearish_confirmations >= 6 and confidence >= 65 and (adx is None or adx > 25):
-        # Signal SHORT minimal acceptable
+        confidence = min(confidence, 75)
+    elif (bearish_confirmations >= 7 and 
+          confidence >= 70 and 
+          alignments >= 4 and
+          (adx is None or adx > 25)):
+        # Signal SHORT acceptable
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
-        confidence = min(confidence, 65)
+        confidence = min(confidence, 70)
     else:
-        # Pas assez de confirmations ou pas bearish = pas de signal
+        # Pas assez de confirmations ou alignements = pas de signal
         entry_signal = 'NEUTRAL'
         confidence = 0
     

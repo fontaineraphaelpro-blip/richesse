@@ -102,16 +102,49 @@ def run_scanner():
         
         print(f"\n✅ {len(opportunities)} paires analysées")
         
-        # 4. Filtrer UNIQUEMENT les opportunités SHORT de qualité
-        # Score >= 60, signal SHORT uniquement, confiance >= 70 (avec toutes les données)
-        quality_opportunities = [
-            opp for opp in opportunities 
-            if opp['score'] >= 60 
-            and opp.get('entry_signal') == 'SHORT'  # UNIQUEMENT SHORT
-            and opp.get('confidence', 0) >= 70  # Confiance élevée avec toutes les données
-        ]
+        # 4. Filtrer UNIQUEMENT les opportunités SHORT de qualité ULTRA-STRICTE
+        # Score >= 65, signal SHORT uniquement, confiance >= 75
+        # Avec validation de cohérence et force du signal
+        from signal_validation import validate_signal_coherence, calculate_signal_strength
         
-        print(f"📊 {len(quality_opportunities)} opportunités SHORT de qualité trouvées (score >= 60, confiance >= 70, 8+ confirmations)")
+        quality_opportunities = []
+        for opp in opportunities:
+            if (opp.get('entry_signal') == 'SHORT' and
+                opp.get('score', 0) >= 65 and
+                opp.get('confidence', 0) >= 75):
+                
+                # Reconstruire les indicateurs pour validation
+                indicators_for_validation = {
+                    'current_price': opp.get('price'),
+                    'ema9': opp.get('ema9'),
+                    'ema21': opp.get('ema21'),
+                    'rsi14': opp.get('rsi'),
+                    'confidence': opp.get('confidence', 0),
+                    'candlestick_bearish_signals': 0,
+                    'chart_bearish_signals': 0,
+                    'rsi_divergence': False,
+                    'adx': None,
+                    'current_volume': None,
+                    'volume_ma20': None
+                }
+                
+                # Validation finale
+                validation = validate_signal_coherence(indicators_for_validation, 'SHORT')
+                strength = calculate_signal_strength(indicators_for_validation, 'SHORT', opp.get('confidence', 0))
+                
+                # Filtrer uniquement les signaux excellents ou très bons
+                if (validation['is_valid'] and 
+                    validation['coherence_score'] >= 75 and
+                    strength['quality'] in ['EXCELLENT', 'VERY_GOOD', 'GOOD'] and
+                    strength['risk_level'] in ['LOW', 'MEDIUM']):
+                    
+                    opp['coherence_score'] = validation['coherence_score']
+                    opp['signal_quality'] = strength['quality']
+                    opp['signal_strength'] = strength['strength']
+                    opp['risk_level'] = strength['risk_level']
+                    quality_opportunities.append(opp)
+        
+        print(f"📊 {len(quality_opportunities)} opportunités SHORT ULTRA-QUALITÉ trouvées (score >= 65, confiance >= 75, cohérence >= 75%)")
         
         # Trier par score décroissant et prendre le Top 10
         quality_opportunities.sort(key=lambda x: x['score'], reverse=True)

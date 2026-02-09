@@ -152,19 +152,62 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
     confidence = signals.get('confidence', 0)
     
+    # Import validation
+    from signal_validation import validate_signal_coherence, calculate_signal_strength
+    
     # UNIQUEMENT les signaux SHORT sont acceptés
     if entry_signal == 'SHORT':
-        if confidence >= 65:  # Confiance minimum encore plus élevée pour SHORT
+        # Validation de cohérence
+        validation = validate_signal_coherence(indicators, entry_signal)
+        
+        # Calcul de la force du signal
+        strength_data = calculate_signal_strength(indicators, entry_signal, confidence)
+        
+        # Vérifier que le signal est valide et de bonne qualité
+        if not validation['is_valid']:
+            entry_signal = 'NEUTRAL'
+            details.append(f"Signal invalide (cohérence: {validation['coherence_score']:.1f}%)")
+        elif strength_data['quality'] == 'WEAK':
+            entry_signal = 'NEUTRAL'
+            details.append(f"Signal trop faible (force: {strength_data['strength']})")
+        elif strength_data['risk_level'] == 'HIGH':
+            entry_signal = 'NEUTRAL'
+            details.append("Risque trop élevé")
+        
+        if confidence >= 70 and entry_signal == 'SHORT':  # Confiance minimum très élevée
+            # Bonus basé sur la qualité et la cohérence
+            coherence_bonus = 0
+            if validation['coherence_score'] >= 85:
+                coherence_bonus = 15
+                details.append(f"Cohérence excellente ({validation['coherence_score']:.1f}%) ✓✓")
+            elif validation['coherence_score'] >= 75:
+                coherence_bonus = 10
+                details.append(f"Cohérence bonne ({validation['coherence_score']:.1f}%) ✓")
+            
+            strength_bonus = 0
+            if strength_data['quality'] == 'EXCELLENT':
+                strength_bonus = 20
+                details.append(f"Qualité EXCELLENTE (force: {strength_data['strength']}) ✓✓✓")
+            elif strength_data['quality'] == 'VERY_GOOD':
+                strength_bonus = 15
+                details.append(f"Qualité TRÈS BONNE (force: {strength_data['strength']}) ✓✓")
+            elif strength_data['quality'] == 'GOOD':
+                strength_bonus = 10
+                details.append(f"Qualité BONNE (force: {strength_data['strength']}) ✓")
+            
             # Bonus si le signal SHORT est cohérent avec tendance Bearish
+            trend_bonus = 0
             if trend == 'Bearish':
-                score += 40  # Bonus important pour SHORT + tendance Bearish
-                details.append(f"Signal SHORT ✓ (conf: {confidence}%, tendance: {trend})")
+                trend_bonus = 15
+                details.append(f"Tendance Bearish confirmée ✓")
             elif trend == 'NEUTRAL':
-                score += 30  # Pas de bonus mais pas de pénalité
-                details.append(f"Signal SHORT (conf: {confidence}%, tendance: {trend})")
+                trend_bonus = 5
             else:
-                score += 15  # Pénalité si signal SHORT avec tendance Bullish
-                details.append(f"Signal SHORT ⚠️ (conf: {confidence}%, contre-tendance: {trend})")
+                score -= 10  # Pénalité si contre-tendance
+                details.append(f"⚠️ Contre-tendance {trend}")
+            
+            score += 30 + coherence_bonus + strength_bonus + trend_bonus
+            details.append(f"Signal SHORT (conf: {confidence}%)")
         else:
             # Signal faible = pas de points
             entry_signal = 'NEUTRAL'
