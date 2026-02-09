@@ -255,7 +255,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Option
         return None
 
 
-def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200) -> dict:
+def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200) -> tuple:
     """
     Récupère les prix réels et génère les données OHLCV pour plusieurs paires.
     
@@ -265,22 +265,27 @@ def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200)
         limit: Nombre de bougies par paire
     
     Returns:
-        Dictionnaire {symbol: DataFrame}
+        Tuple (data_dict, prices_dict) où:
+        - data_dict: Dictionnaire {symbol: DataFrame}
+        - prices_dict: Dictionnaire {symbol: real_price} avec les prix réels
     """
     data = {}
+    real_prices = {}
     total = len(symbols)
     
     print(f"📊 Récupération des prix réels pour {total} paires...")
     
     for i, symbol in enumerate(symbols, 1):
         print(f"📊 {symbol} ({i}/{total})...", end='\r')
-        df = fetch_klines(symbol, interval, limit)
+        df, real_price = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
+            if real_price:
+                real_prices[symbol] = real_price
         # Délai pour éviter rate limiting (CoinGecko: 10-50 req/min)
         # Réduire le délai pour accélérer le scan initial
         if i < total:
             time.sleep(0.8)  # ~75 requêtes par minute (limite: 50/min mais on prend une marge)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
-    return data
+    return data, real_prices

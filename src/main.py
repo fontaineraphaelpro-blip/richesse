@@ -38,7 +38,7 @@ def run_scanner():
         # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
         print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
         print("💡 Mode SCALPING - Récupération des prix réels depuis CoinGecko API")
-        data = fetch_multiple_pairs(pairs, interval='15m', limit=200)
+        data, real_prices = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
             print("❌ Aucune donnée récupérée. Arrêt du scanner.")
@@ -55,9 +55,15 @@ def run_scanner():
             # Calculer les indicateurs techniques
             indicators = calculate_indicators(df)
             
+            # UTILISER LE PRIX RÉEL RÉCUPÉRÉ, pas le prix généré
+            # Le prix réel est toujours le plus à jour
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                # Fallback: utiliser le prix du DataFrame si pas de prix réel
+                current_price = indicators.get('current_price')
+            
             # Détecter le support
             support = find_swing_low(df, lookback=30)
-            current_price = indicators.get('current_price')
             support_distance = None
             
             if current_price and support:
@@ -73,7 +79,7 @@ def run_scanner():
                 'trend': score_data['trend'],
                 'rsi': indicators.get('rsi14'),
                 'signal': score_data['signal'],
-                'price': current_price,
+                'price': current_price,  # PRIX RÉEL récupéré depuis CoinGecko
                 # Signaux scalping
                 'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
                 'entry_price': score_data.get('entry_price'),
