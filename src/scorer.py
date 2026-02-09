@@ -132,6 +132,7 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     volume_ma20 = indicators.get('volume_ma20')
     atr_percent = indicators.get('atr_percent')
     momentum_percent = indicators.get('momentum_percent')
+    current_price = indicators.get('current_price')  # Prix actuel
     
     # Trouver support et résistance
     support = None
