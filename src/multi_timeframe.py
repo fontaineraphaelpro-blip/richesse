@@ -1,6 +1,6 @@
 """
 Module pour l'analyse multi-timeframe (confirmation de tendance).
-Utilise l'API publique Binance (pas besoin de clé).
+Utilise l'API CoinGecko (pas besoin de clé).
 """
 
 from data_fetcher import fetch_klines

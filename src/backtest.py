@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from data_fetcher import fetch_klines
-# Plus besoin du client Binance, on utilise l'API REST publique
+# Utilise l'API CoinGecko
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
 from scorer import calculate_opportunity_score

@@ -1,12 +1,11 @@
 """
 Script principal du Crypto Signal Scanner.
-Scanne les cryptos sur Binance, calcule les opportunités et génère un rapport.
+Scanne les cryptos via CoinGecko, calcule les opportunités et génère un rapport.
 """
 
 import time
 import os
 import json
-# Plus besoin du client Binance, on utilise l'API REST publique directement
 from datetime import datetime
 
 from fetch_pairs import get_top_usdt_pairs
@@ -30,35 +29,28 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # Tester les connexions aux APIs
-        from binance_api import test_connection
+        # Tester la connexion à CoinGecko
         from coingecko_api import test_coingecko_connection
         
-        print("🔌 Test de connexion aux APIs...")
-        binance_ok = test_connection()
+        print("🔌 Test de connexion à l'API CoinGecko...")
         coingecko_ok = test_coingecko_connection()
         
-        if binance_ok:
-            print("✅ Connexion à l'API Binance OK")
-        else:
-            print("⚠️ API Binance bloquée")
-        
         if coingecko_ok:
-            print("✅ Connexion à l'API CoinGecko OK (fallback disponible)")
+            print("✅ Connexion à l'API CoinGecko OK")
         else:
-            print("⚠️ API CoinGecko indisponible")
+            print("⚠️ API CoinGecko indisponible, utilisation de données de démo")
         
-        # 1. Récupérer les principales paires USDT (API publique)
-        # Réduire à 20 paires pour éviter le rate limiting CoinGecko
-        print("\n📋 Étape 1: Récupération des paires USDT...")
+        # 1. Récupérer les principales paires crypto
+        print("\n📋 Étape 1: Récupération des paires crypto...")
         pairs = get_top_usdt_pairs(limit=20)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return
         
-        # 2. Récupérer les données OHLCV (API publique)
+        # 2. Récupérer les données OHLCV via CoinGecko
         print("\n📊 Étape 2: Récupération des données OHLCV (1H, 200 bougies)...")
+        print("⏳ Cela peut prendre 1-2 minutes (rate limiting CoinGecko)...")
         data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
         
         if not data:

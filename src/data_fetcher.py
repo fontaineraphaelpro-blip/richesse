@@ -1,18 +1,17 @@
 """
-Module pour récupérer les données OHLCV depuis Binance ou CoinGecko (fallback).
-Utilise l'API publique REST (pas besoin de clé).
+Module pour récupérer les données OHLCV depuis CoinGecko.
+Utilise l'API publique CoinGecko (pas besoin de clé).
 """
 
 import pandas as pd
 import time
-from binance_api import get_klines
 from coingecko_api import get_klines_coingecko
 from typing import Optional
 
 
 def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
     """
-    Récupère les données OHLCV (bougies) pour une paire donnée (API publique, pas besoin de clé).
+    Récupère les données OHLCV (bougies) pour une paire donnée via CoinGecko.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
@@ -24,41 +23,13 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
         Retourne None en cas d'erreur
     """
     try:
-        # Essayer d'abord Binance
-        klines = get_klines(symbol=symbol, interval=interval, limit=limit)
+        # Utiliser CoinGecko directement
+        df = get_klines_coingecko(symbol=symbol, interval=interval, limit=limit)
         
-        # Si Binance échoue (erreur 451), utiliser CoinGecko comme fallback
-        if klines is None or len(klines) == 0:
-            print(f"  → Fallback CoinGecko pour {symbol}...", end='\r')
-            df_coingecko = get_klines_coingecko(symbol=symbol, interval=interval, limit=limit)
-            if df_coingecko is not None and len(df_coingecko) > 0:
-                return df_coingecko
-            return None
+        if df is not None and len(df) > 0:
+            return df
         
-        # Convertir en DataFrame
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-            'taker_buy_quote', 'ignore'
-        ])
-        
-        # Convertir les types numériques
-        numeric_columns = ['open', 'high', 'low', 'close', 'volume']
-        for col in numeric_columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # Convertir le timestamp en datetime
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        
-        # Garder seulement les colonnes nécessaires
-        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-        
-        # Vérifier qu'on a des données valides
-        if df.empty or df.isna().any().any():
-            print(f"⚠️ Données incomplètes pour {symbol}")
-            return None
-        
-        return df
+        return None
     
     except Exception as e:
         print(f"❌ Erreur lors de la récupération des données pour {symbol}: {e}")
@@ -67,7 +38,7 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
 
 def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) -> dict:
     """
-    Récupère les données OHLCV pour plusieurs paires (API publique, pas besoin de clé).
+    Récupère les données OHLCV pour plusieurs paires via CoinGecko.
     
     Args:
         symbols: Liste des symboles de paires
@@ -85,7 +56,7 @@ def fetch_multiple_pairs(symbols: list, interval: str = '1h', limit: int = 200) 
         df = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
-        # Délai entre chaque paire pour éviter le rate limiting
+        # Délai entre chaque paire pour éviter le rate limiting CoinGecko
         # CoinGecko free tier limite à ~10-30 req/min, donc on attend 4 secondes
         if i < total:
             time.sleep(4.0)  # 4 secondes = max 15 req/min (sous la limite)

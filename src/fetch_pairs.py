@@ -1,78 +1,36 @@
 """
-Module pour récupérer les principales paires USDT sur Binance.
-Exclut les stablecoins et retourne les 50 principales par volume.
-Utilise l'API publique REST (pas besoin de clé API).
+Module pour récupérer les principales paires crypto USDT.
+Utilise une liste prédéfinie des principales cryptos.
 """
 
-from binance_api import get_ticker_24h
 from typing import List
 
 
-# Liste des stablecoins à exclure
-STABLECOINS = {'USDC', 'BUSD', 'TUSD', 'USDP', 'USDD', 'DAI', 'FDUSD', 'PYUSD'}
-
-
-def get_top_usdt_pairs(limit: int = 50) -> List[str]:
+def get_top_usdt_pairs(limit: int = 20) -> List[str]:
     """
-    Récupère les principales paires USDT sur Binance (API publique, pas besoin de clé).
+    Retourne les principales paires crypto USDT.
     
     Args:
-        limit: Nombre de paires à retourner (défaut: 50)
+        limit: Nombre de paires à retourner (défaut: 20)
     
     Returns:
         Liste des symboles de paires (ex: ['BTCUSDT', 'ETHUSDT', ...])
     """
-    try:
-        # Récupérer toutes les paires de trading via API publique
-        ticker_24h = get_ticker_24h()
-        
-        if not ticker_24h:
-            raise Exception("Aucune donnée récupérée de l'API")
-        
-        # Filtrer les paires USDT et exclure les stablecoins
-        usdt_pairs = []
-        for ticker in ticker_24h:
-            symbol = ticker['symbol']
-            
-            # Vérifier que c'est une paire USDT
-            if not symbol.endswith('USDT'):
-                continue
-            
-            # Extraire la base (ex: BTC de BTCUSDT)
-            base = symbol.replace('USDT', '')
-            
-            # Exclure les stablecoins
-            if base in STABLECOINS:
-                continue
-            
-            # Ajouter avec le volume 24h pour trier
-            usdt_pairs.append({
-                'symbol': symbol,
-                'volume': float(ticker['quoteVolume'])  # Volume en USDT
-            })
-        
-        # Trier par volume décroissant et prendre les top N
-        usdt_pairs.sort(key=lambda x: x['volume'], reverse=True)
-        top_pairs = [pair['symbol'] for pair in usdt_pairs[:limit]]
-        
-        print(f"✅ {len(top_pairs)} paires USDT récupérées (excluant stablecoins)")
-        return top_pairs
+    # Liste des principales cryptos par capitalisation
+    top_pairs = [
+        'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
+        'ADAUSDT', 'DOGEUSDT', 'DOTUSDT', 'MATICUSDT', 'AVAXUSDT',
+        'LINKUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT', 'ETCUSDT',
+        'XLMUSDT', 'ALGOUSDT', 'VETUSDT', 'ICPUSDT', 'FILUSDT',
+        'TRXUSDT', 'EOSUSDT', 'AAVEUSDT', 'THETAUSDT', 'SANDUSDT',
+        'MANAUSDT', 'AXSUSDT', 'NEARUSDT', 'FTMUSDT', 'GRTUSDT',
+        'HBARUSDT', 'EGLDUSDT', 'ZECUSDT', 'CHZUSDT', 'ENJUSDT',
+        'BATUSDT', 'ZILUSDT', 'IOTAUSDT', 'ONTUSDT', 'QTUMUSDT',
+        'WAVESUSDT', 'OMGUSDT', 'SNXUSDT', 'MKRUSDT', 'COMPUSDT',
+        'YFIUSDT', 'SUSHIUSDT', 'CRVUSDT', '1INCHUSDT', 'RENUSDT'
+    ]
     
-    except Exception as e:
-        print(f"❌ Erreur lors de la récupération des paires: {e}")
-        # Fallback: liste de paires populaires si l'API échoue
-        fallback_pairs = [
-            'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
-            'ADAUSDT', 'DOGEUSDT', 'DOTUSDT', 'MATICUSDT', 'AVAXUSDT',
-            'LINKUSDT', 'UNIUSDT', 'LTCUSDT', 'ATOMUSDT', 'ETCUSDT',
-            'XLMUSDT', 'ALGOUSDT', 'VETUSDT', 'ICPUSDT', 'FILUSDT',
-            'TRXUSDT', 'EOSUSDT', 'AAVEUSDT', 'THETAUSDT', 'SANDUSDT',
-            'MANAUSDT', 'AXSUSDT', 'NEARUSDT', 'FTMUSDT', 'GRTUSDT',
-            'HBARUSDT', 'EGLDUSDT', 'ZECUSDT', 'CHZUSDT', 'ENJUSDT',
-            'BATUSDT', 'ZILUSDT', 'IOTAUSDT', 'ONTUSDT', 'QTUMUSDT',
-            'WAVESUSDT', 'OMGUSDT', 'SNXUSDT', 'MKRUSDT', 'COMPUSDT',
-            'YFIUSDT', 'SUSHIUSDT', 'CRVUSDT', '1INCHUSDT', 'RENUSDT'
-        ]
-        print(f"⚠️ Utilisation de la liste de fallback ({len(fallback_pairs)} paires)")
-        return fallback_pairs[:limit]
+    selected = top_pairs[:limit]
+    print(f"✅ {len(selected)} paires sélectionnées")
+    return selected
 

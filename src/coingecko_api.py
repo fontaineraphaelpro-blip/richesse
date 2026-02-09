@@ -1,5 +1,5 @@
 """
-Module pour accéder à l'API CoinGecko (alternative à Binance).
+Module pour accéder à l'API CoinGecko.
 API gratuite, pas besoin de clé, moins de restrictions géographiques.
 """
 
@@ -18,7 +18,7 @@ HEADERS = {
     'Accept': 'application/json'
 }
 
-# Mapping des symboles Binance vers CoinGecko IDs
+# Mapping des symboles crypto vers CoinGecko IDs
 SYMBOL_TO_ID = {
     'BTCUSDT': 'bitcoin',
     'ETHUSDT': 'ethereum',
@@ -74,7 +74,7 @@ SYMBOL_TO_ID = {
 
 
 def get_coingecko_id(symbol: str) -> Optional[str]:
-    """Convertit un symbole Binance en ID CoinGecko."""
+    """Convertit un symbole crypto (ex: BTCUSDT) en ID CoinGecko."""
     return SYMBOL_TO_ID.get(symbol)
 
 

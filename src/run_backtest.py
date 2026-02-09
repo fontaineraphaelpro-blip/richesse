@@ -1,6 +1,6 @@
 """
 Script pour lancer le backtesting du système de scoring.
-Utilise l'API publique Binance (pas besoin de clé).
+Utilise l'API CoinGecko (pas besoin de clé).
 """
 
 from fetch_pairs import get_top_usdt_pairs
