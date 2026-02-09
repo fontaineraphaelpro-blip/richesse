@@ -151,58 +151,50 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interva
 
 def get_real_price(symbol: str) -> Optional[float]:
     """
-    Récupère le prix réel actuel d'une crypto depuis CoinGecko (API publique gratuite).
+    Récupère le prix réel actuel d'une crypto depuis l'API publique Binance.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
     
     Returns:
-        Prix réel en USD ou None
+        Prix réel en USDT ou None
     """
     try:
-        # Convertir le symbole Binance en ID CoinGecko
-        symbol_map = {
-            'BTCUSDT': 'bitcoin', 'ETHUSDT': 'ethereum', 'BNBUSDT': 'binancecoin',
-            'SOLUSDT': 'solana', 'XRPUSDT': 'ripple', 'ADAUSDT': 'cardano',
-            'DOGEUSDT': 'dogecoin', 'DOTUSDT': 'polkadot', 'MATICUSDT': 'matic-network',
-            'AVAXUSDT': 'avalanche-2', 'LINKUSDT': 'chainlink', 'UNIUSDT': 'uniswap',
-            'LTCUSDT': 'litecoin', 'ATOMUSDT': 'cosmos', 'ETCUSDT': 'ethereum-classic',
-            'XLMUSDT': 'stellar', 'ALGOUSDT': 'algorand', 'VETUSDT': 'vechain',
-            'ICPUSDT': 'internet-computer', 'FILUSDT': 'filecoin', 'TRXUSDT': 'tron',
-            'EOSUSDT': 'eos', 'AAVEUSDT': 'aave', 'THETAUSDT': 'theta-token',
-            'SANDUSDT': 'the-sandbox', 'MANAUSDT': 'decentraland', 'AXSUSDT': 'axie-infinity',
-            'NEARUSDT': 'near', 'FTMUSDT': 'fantom', 'GRTUSDT': 'the-graph',
-            'HBARUSDT': 'hedera-hashgraph', 'EGLDUSDT': 'elrond-erd-2', 'ZECUSDT': 'zcash',
-            'CHZUSDT': 'chiliz', 'ENJUSDT': 'enjincoin', 'BATUSDT': 'basic-attention-token',
-            'ZILUSDT': 'zilliqa', 'IOTAUSDT': 'iota', 'ONTUSDT': 'ontology',
-            'QTUMUSDT': 'qtum', 'WAVESUSDT': 'waves', 'OMGUSDT': 'omisego',
-            'SNXUSDT': 'synthetix-network-token', 'MKRUSDT': 'maker', 'COMPUSDT': 'compound-governance-token',
-            'YFIUSDT': 'yearn-finance', 'SUSHIUSDT': 'sushi', 'CRVUSDT': 'curve-dao-token',
-            '1INCHUSDT': '1inch', 'RENUSDT': 'republic-protocol', 'APTUSDT': 'aptos',
-            'ARBUSDT': 'arbitrum'
+        # API Binance publique - Ticker Price (pas besoin de clé API)
+        # Documentation: https://binance-docs.github.io/apidocs/spot/en/#symbol-price-ticker
+        url = "https://api.binance.com/api/v3/ticker/price"
+        params = {'symbol': symbol}
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
         }
         
-        coin_id = symbol_map.get(symbol)
-        if not coin_id:
-            return None
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         
-        # API CoinGecko simple price (gratuite, pas de clé API nécessaire)
-        url = f"https://api.coingecko.com/api/v3/simple/price"
-        params = {
-            'ids': coin_id,
-            'vs_currencies': 'usd'
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            if coin_id in data and 'usd' in data[coin_id]:
-                price = float(data[coin_id]['usd'])
+            if 'price' in data:
+                price = float(data['price'])
                 return price
+        elif response.status_code == 400:
+            # Paire invalide ou inexistante
+            print(f"⚠️ Paire {symbol} non trouvée sur Binance")
+            return None
+        else:
+            print(f"⚠️ Erreur API Binance pour {symbol}: {response.status_code}")
+            return None
         
         return None
         
+    except requests.exceptions.Timeout:
+        print(f"⚠️ Timeout API Binance pour {symbol}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erreur réseau API Binance pour {symbol}: {e}")
+        return None
     except Exception as e:
+        print(f"⚠️ Erreur API Binance pour {symbol}: {e}")
         return None
 
 
@@ -290,10 +282,10 @@ def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200)
             data[symbol] = df
             if real_price:
                 real_prices[symbol] = real_price
-        # Délai pour éviter rate limiting (CoinGecko: 10-50 req/min)
-        # Réduire le délai pour accélérer le scan initial
+        # Délai pour éviter rate limiting (Binance: 1200 req/min, mais on prend une marge)
+        # Pas besoin de délai long, Binance est très rapide
         if i < total:
-            time.sleep(0.8)  # ~75 requêtes par minute (limite: 50/min mais on prend une marge)
+            time.sleep(0.1)  # 100ms entre chaque requête (600 req/min max)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data, real_prices
