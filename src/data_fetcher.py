@@ -151,7 +151,8 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interva
 
 def get_real_price(symbol: str) -> Optional[float]:
     """
-    Récupère le prix réel actuel d'une crypto depuis l'API publique Binance.
+    Récupère le prix réel actuel d'une crypto depuis CryptoCompare (API publique gratuite).
+    CryptoCompare est accessible depuis partout, contrairement à Binance qui peut être bloqué.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
@@ -159,11 +160,41 @@ def get_real_price(symbol: str) -> Optional[float]:
     Returns:
         Prix réel en USDT ou None
     """
+    # Mapping des symboles Binance vers les symboles CryptoCompare
+    symbol_map = {
+        'BTCUSDT': 'BTC', 'ETHUSDT': 'ETH', 'BNBUSDT': 'BNB',
+        'SOLUSDT': 'SOL', 'XRPUSDT': 'XRP', 'ADAUSDT': 'ADA',
+        'DOGEUSDT': 'DOGE', 'DOTUSDT': 'DOT', 'MATICUSDT': 'MATIC',
+        'AVAXUSDT': 'AVAX', 'LINKUSDT': 'LINK', 'UNIUSDT': 'UNI',
+        'LTCUSDT': 'LTC', 'ATOMUSDT': 'ATOM', 'ETCUSDT': 'ETC',
+        'XLMUSDT': 'XLM', 'ALGOUSDT': 'ALGO', 'VETUSDT': 'VET',
+        'ICPUSDT': 'ICP', 'FILUSDT': 'FIL', 'TRXUSDT': 'TRX',
+        'EOSUSDT': 'EOS', 'AAVEUSDT': 'AAVE', 'THETAUSDT': 'THETA',
+        'SANDUSDT': 'SAND', 'MANAUSDT': 'MANA', 'AXSUSDT': 'AXS',
+        'NEARUSDT': 'NEAR', 'FTMUSDT': 'FTM', 'GRTUSDT': 'GRT',
+        'HBARUSDT': 'HBAR', 'EGLDUSDT': 'EGLD', 'ZECUSDT': 'ZEC',
+        'CHZUSDT': 'CHZ', 'ENJUSDT': 'ENJ', 'BATUSDT': 'BAT',
+        'ZILUSDT': 'ZIL', 'IOTAUSDT': 'IOTA', 'ONTUSDT': 'ONT',
+        'QTUMUSDT': 'QTUM', 'WAVESUSDT': 'WAVES', 'OMGUSDT': 'OMG',
+        'SNXUSDT': 'SNX', 'MKRUSDT': 'MKR', 'COMPUSDT': 'COMP',
+        'YFIUSDT': 'YFI', 'SUSHIUSDT': 'SUSHI', 'CRVUSDT': 'CRV',
+        '1INCHUSDT': '1INCH', 'RENUSDT': 'REN', 'APTUSDT': 'APT',
+        'ARBUSDT': 'ARB', 'LUNAUSDT': 'LUNA', 'USTCUSDT': 'USTC',
+        'LUNCUSDT': 'LUNC'
+    }
+    
+    crypto_symbol = symbol_map.get(symbol)
+    if not crypto_symbol:
+        return None
+    
     try:
-        # API Binance publique - Ticker Price (pas besoin de clé API)
-        # Documentation: https://binance-docs.github.io/apidocs/spot/en/#symbol-price-ticker
-        url = "https://api.binance.com/api/v3/ticker/price"
-        params = {'symbol': symbol}
+        # API CryptoCompare - Price (gratuite, pas de clé API nécessaire)
+        # Documentation: https://min-api.cryptocompare.com/documentation
+        url = "https://min-api.cryptocompare.com/data/price"
+        params = {
+            'fsym': crypto_symbol,
+            'tsyms': 'USD'
+        }
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -174,37 +205,30 @@ def get_real_price(symbol: str) -> Optional[float]:
         
         if response.status_code == 200:
             data = response.json()
-            if 'price' in data:
-                price = float(data['price'])
-                print(f"✓ {symbol}: ${price:,.8f} (Binance)")
+            if 'USD' in data and data['USD']:
+                price = float(data['USD'])
+                print(f"✓ {symbol}: ${price:,.8f} (CryptoCompare)")
                 return price
             else:
-                print(f"⚠️ Réponse Binance invalide pour {symbol}: {data}")
+                print(f"⚠️ Réponse CryptoCompare invalide pour {symbol}: {data}")
                 return None
-        elif response.status_code == 400:
-            # Paire invalide ou inexistante
-            error_data = response.json() if response.text else {}
-            print(f"⚠️ Paire {symbol} non trouvée sur Binance: {error_data.get('msg', 'Unknown error')}")
-            return None
         elif response.status_code == 429:
             # Rate limit
-            print(f"⚠️ Rate limit Binance pour {symbol}, attente...")
+            print(f"⚠️ Rate limit CryptoCompare pour {symbol}, attente...")
             time.sleep(1)
             return None
         else:
-            print(f"⚠️ Erreur API Binance pour {symbol}: {response.status_code} - {response.text[:100]}")
+            print(f"⚠️ Erreur API CryptoCompare pour {symbol}: {response.status_code}")
             return None
         
     except requests.exceptions.Timeout:
-        print(f"⚠️ Timeout API Binance pour {symbol}")
+        print(f"⚠️ Timeout API CryptoCompare pour {symbol}")
         return None
     except requests.exceptions.RequestException as e:
-        print(f"⚠️ Erreur réseau API Binance pour {symbol}: {e}")
+        print(f"⚠️ Erreur réseau API CryptoCompare pour {symbol}: {e}")
         return None
     except Exception as e:
-        print(f"⚠️ Erreur API Binance pour {symbol}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"⚠️ Erreur API CryptoCompare pour {symbol}: {e}")
         return None
 
 
@@ -220,7 +244,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
     Returns:
         Tuple (DataFrame, real_price) où:
         - DataFrame avec colonnes: timestamp, open, high, low, close, volume
-        - real_price: Prix réel récupéré depuis Binance (ou None)
+        - real_price: Prix réel récupéré depuis CryptoCompare (ou None)
         Le dernier prix (close) sera EXACTEMENT le prix réel récupéré
     """
     try:
@@ -233,7 +257,7 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
             # Fallback: utiliser le prix de référence
             base_price = REFERENCE_PRICES.get(symbol, 100.0)
             real_price = None  # Pas de prix réel disponible
-            print(f"⚠️ {symbol}: API Binance indisponible, utilisation prix référence ${base_price:.4f}")
+            print(f"⚠️ {symbol}: API CryptoCompare indisponible, utilisation prix référence ${base_price:.4f}")
         
         # Déterminer l'intervalle en minutes
         interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
@@ -296,10 +320,10 @@ def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200)
                 print(f"✓ {symbol}: ${real_price:,.8f} récupéré")
             else:
                 print(f"⚠️ {symbol}: Prix réel non disponible, utilisation du prix généré")
-        # Délai pour éviter rate limiting (Binance: 1200 req/min, mais on prend une marge)
-        # Pas besoin de délai long, Binance est très rapide
+        # Délai pour éviter rate limiting (CryptoCompare: gratuit, ~100k req/mois)
+        # On prend une marge de sécurité
         if i < total:
-            time.sleep(0.15)  # 150ms entre chaque requête (400 req/min max pour sécurité)
+            time.sleep(0.2)  # 200ms entre chaque requête (300 req/min max)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data, real_prices
