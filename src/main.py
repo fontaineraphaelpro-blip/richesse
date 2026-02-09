@@ -1,6 +1,6 @@
 """
 Script principal du Crypto Signal Scanner.
-Scanne les cryptos via CoinGecko, calcule les opportunités et génère un rapport.
+Scanne les cryptos via CryptoCompare/CoinCap, calcule les opportunités et génère un rapport.
 """
 
 import time
