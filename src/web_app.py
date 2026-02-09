@@ -434,8 +434,15 @@ def health():
     return jsonify({
         'status': 'ok',
         'service': 'Crypto Signal Scanner Web',
-        'data_file_exists': os.path.exists(DATA_FILE)
+        'data_file_exists': os.path.exists(DATA_FILE),
+        'port': os.environ.get('PORT', 'not set')
     }), 200
+
+
+@app.route('/test')
+def test():
+    """Route de test simple."""
+    return "<h1>✅ Serveur web fonctionne!</h1><p>Le serveur Flask répond correctement.</p>", 200
 
 
 @app.route('/api/opportunities')
