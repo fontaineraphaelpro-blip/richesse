@@ -152,9 +152,6 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
     confidence = signals.get('confidence', 0)
     
-    # Import validation
-    from signal_validation import validate_signal_coherence, calculate_signal_strength
-    
     # UNIQUEMENT les signaux SHORT sont acceptés
     if entry_signal == 'SHORT':
         # Validation de cohérence

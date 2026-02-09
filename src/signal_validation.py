@@ -281,7 +281,6 @@ def filter_weak_signals(opportunities: List[Dict]) -> List[Dict]:
     Returns:
         Liste filtrée des opportunités
     """
-    from signal_validation import validate_signal_coherence, calculate_signal_strength
     
     filtered = []
     

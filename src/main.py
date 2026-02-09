@@ -105,8 +105,6 @@ def run_scanner():
         # 4. Filtrer UNIQUEMENT les opportunités SHORT de qualité ULTRA-STRICTE
         # Score >= 65, signal SHORT uniquement, confiance >= 75
         # Avec validation de cohérence et force du signal
-        from signal_validation import validate_signal_coherence, calculate_signal_strength
-        
         quality_opportunities = []
         for opp in opportunities:
             if (opp.get('entry_signal') == 'SHORT' and
