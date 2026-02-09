@@ -38,22 +38,23 @@ def run_scanner():
     try:
         # 1. Récupérer les principales paires USDT
         print("📋 Étape 1: Récupération des paires USDT...")
-        pairs = get_top_usdt_pairs(limit=50)
+        # Réduire à 30 paires pour accélérer le scan initial
+        pairs = get_top_usdt_pairs(limit=30)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return []
         
-        # 2. Générer les données OHLCV
-        print("\n📊 Étape 2: Génération des données OHLCV (1H, 200 bougies)...")
-        print("💡 Utilisation de données de démonstration (libres de droit)")
-        data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
+        # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
+        print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
+        print("💡 Mode SCALPING - Récupération des prix réels depuis CoinGecko API")
+        data, real_prices = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
-            print("❌ Aucune donnée générée. Arrêt du scanner.")
+            print("❌ Aucune donnée récupérée. Arrêt du scanner.")
             return []
         
-        # 3. Calculer les indicateurs et scores
+        # 3. Calculer les indicateurs et scores pour chaque paire
         print("\n🔍 Étape 3: Calcul des indicateurs et scores...")
         opportunities = []
         total = len(data)
@@ -64,25 +65,46 @@ def run_scanner():
             # Calculer les indicateurs techniques
             indicators = calculate_indicators(df)
             
+            # UTILISER LE PRIX RÉEL RÉCUPÉRÉ, pas le prix généré
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                # Fallback: utiliser le prix du DataFrame si pas de prix réel
+                current_price = indicators.get('current_price')
+            
             # Détecter le support
             support = find_swing_low(df, lookback=30)
-            current_price = indicators.get('current_price')
             support_distance = None
             
             if current_price and support:
                 support_distance = calculate_distance_to_support(current_price, support)
             
-            # Calculer le score d'opportunité
-            score_data = calculate_opportunity_score(indicators, support_distance)
+            # Calculer le score d'opportunité (avec DataFrame pour résistance)
+            score_data = calculate_opportunity_score(indicators, support_distance, df)
             
-            # Ajouter à la liste des opportunités
+            # Ajouter à la liste des opportunités avec toutes les infos scalping
             opportunities.append({
                 'pair': symbol,
                 'score': score_data['score'],
                 'trend': score_data['trend'],
                 'rsi': indicators.get('rsi14'),
                 'signal': score_data['signal'],
-                'price': current_price
+                'price': current_price,  # PRIX RÉEL récupéré depuis CoinGecko
+                # Signaux scalping
+                'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
+                'entry_price': score_data.get('entry_price'),
+                'stop_loss': score_data.get('stop_loss'),
+                'take_profit_1': score_data.get('take_profit_1'),
+                'take_profit_2': score_data.get('take_profit_2'),
+                'risk_reward_ratio': score_data.get('risk_reward_ratio'),
+                'exit_signal': score_data.get('exit_signal', 'HOLD'),
+                'confidence': score_data.get('confidence', 0),
+                # Indicateurs supplémentaires
+                'ema9': indicators.get('ema9'),
+                'ema21': indicators.get('ema21'),
+                'macd': indicators.get('macd'),
+                'atr_percent': indicators.get('atr_percent'),
+                'momentum_percent': indicators.get('momentum_percent'),
+                'volume_ratio': (indicators.get('current_volume') / indicators.get('volume_ma20')) if (indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0) else None
             })
         
         print(f"\n✅ {len(opportunities)} paires analysées")
