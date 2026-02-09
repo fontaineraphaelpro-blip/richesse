@@ -34,10 +34,10 @@ def run_scanner():
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return []
         
-        # 2. Générer les données OHLCV (données de démonstration)
-        print("\n📊 Étape 2: Génération des données OHLCV (1H, 200 bougies)...")
-        print("💡 Utilisation de données de démonstration (libres de droit)")
-        data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
+        # 2. Générer les données OHLCV pour scalping (15min)
+        print("\n📊 Étape 2: Génération des données OHLCV (15min, 200 bougies)...")
+        print("💡 Mode SCALPING - Utilisation de données de démonstration (libres de droit)")
+        data = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
             print("❌ Aucune donnée récupérée. Arrêt du scanner.")
@@ -62,17 +62,33 @@ def run_scanner():
             if current_price and support:
                 support_distance = calculate_distance_to_support(current_price, support)
             
-            # Calculer le score d'opportunité
-            score_data = calculate_opportunity_score(indicators, support_distance)
+            # Calculer le score d'opportunité (avec DataFrame pour résistance)
+            score_data = calculate_opportunity_score(indicators, support_distance, df)
             
-            # Ajouter à la liste des opportunités
+            # Ajouter à la liste des opportunités avec toutes les infos scalping
             opportunities.append({
                 'pair': symbol,
                 'score': score_data['score'],
                 'trend': score_data['trend'],
                 'rsi': indicators.get('rsi14'),
                 'signal': score_data['signal'],
-                'price': current_price
+                'price': current_price,
+                # Signaux scalping
+                'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
+                'entry_price': score_data.get('entry_price'),
+                'stop_loss': score_data.get('stop_loss'),
+                'take_profit_1': score_data.get('take_profit_1'),
+                'take_profit_2': score_data.get('take_profit_2'),
+                'risk_reward_ratio': score_data.get('risk_reward_ratio'),
+                'exit_signal': score_data.get('exit_signal', 'HOLD'),
+                'confidence': score_data.get('confidence', 0),
+                # Indicateurs supplémentaires
+                'ema9': indicators.get('ema9'),
+                'ema21': indicators.get('ema21'),
+                'macd': indicators.get('macd'),
+                'atr_percent': indicators.get('atr_percent'),
+                'momentum_percent': indicators.get('momentum_percent'),
+                'volume_ratio': (indicators.get('current_volume') / indicators.get('volume_ma20')) if (indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0) else None
             })
         
         print(f"\n✅ {len(opportunities)} paires analysées")
@@ -86,17 +102,21 @@ def run_scanner():
             opp['rank'] = i
         
         # 5. Afficher les résultats dans le terminal
-        print("\n" + "="*60)
-        print("🏆 TOP 10 OPPORTUNITÉS")
-        print("="*60)
-        print(f"{'Rank':<6} {'Pair':<15} {'Score':<8} {'Trend':<10} {'RSI':<8} {'Signal':<30}")
-        print("-"*60)
+        print("\n" + "="*80)
+        print("🏆 TOP 10 OPPORTUNITÉS SCALPING")
+        print("="*80)
+        print(f"{'Rank':<6} {'Pair':<12} {'Score':<7} {'Entry':<8} {'Entry $':<10} {'Stop $':<10} {'TP1 $':<10} {'R/R':<6}")
+        print("-"*80)
         
         for opp in top_10:
-            rsi_display = f"{opp['rsi']:.1f}" if opp['rsi'] else "N/A"
-            print(f"#{opp['rank']:<5} {opp['pair']:<15} {opp['score']:<8} {opp['trend']:<10} {rsi_display:<8} {opp['signal']:<30}")
+            entry_signal = opp.get('entry_signal', 'N/A')
+            entry_price = f"${opp['entry_price']:.4f}" if opp.get('entry_price') else "N/A"
+            stop_loss = f"${opp['stop_loss']:.4f}" if opp.get('stop_loss') else "N/A"
+            tp1 = f"${opp['take_profit_1']:.4f}" if opp.get('take_profit_1') else "N/A"
+            rr = f"{opp['risk_reward_ratio']:.2f}" if opp.get('risk_reward_ratio') else "N/A"
+            print(f"#{opp['rank']:<5} {opp['pair']:<12} {opp['score']:<7} {entry_signal:<8} {entry_price:<10} {stop_loss:<10} {tp1:<10} {rr:<6}")
         
-        print("="*60)
+        print("="*80)
         
         return top_10
         
@@ -111,8 +131,8 @@ def main():
     """
     Fonction principale avec serveur web Flask intégré.
     """
-    print("🚀 Crypto Signal Scanner Web - Démarrage")
-    print("📌 Mode: Boucle continue (mise à jour toutes les heures)")
+    print("⚡ Scalping Crypto Scanner Web - Démarrage")
+    print("📌 Mode SCALPING (15min) - Boucle continue (mise à jour toutes les heures)")
     print("🛑 Appuyez sur Ctrl+C pour arrêter\n")
     
     # Premier scan
@@ -137,7 +157,7 @@ def main():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Crypto Signal Scanner</title>
+            <title>Scalping Crypto Scanner</title>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -146,7 +166,7 @@ def main():
                     min-height: 100vh;
                     padding: 20px;
                 }
-                .container { max-width: 1200px; margin: 0 auto; }
+                .container { max-width: 1600px; margin: 0 auto; }
                 .header {
                     background: rgba(255, 255, 255, 0.95);
                     border-radius: 15px;
@@ -162,20 +182,26 @@ def main():
                     -webkit-text-fill-color: transparent;
                     margin-bottom: 10px;
                 }
+                .header .subtitle {
+                    color: #666;
+                    font-size: 1.1em;
+                    margin-top: 5px;
+                }
                 .last-update { color: #666; font-size: 0.9em; margin-top: 10px; }
                 .main-content {
                     background: rgba(255, 255, 255, 0.95);
                     border-radius: 15px;
                     padding: 30px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                    overflow-x: auto;
                 }
-                table { width: 100%; border-collapse: collapse; font-size: 1em; }
+                table { width: 100%; border-collapse: collapse; font-size: 0.9em; min-width: 1400px; }
                 thead { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-                th { padding: 15px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 0.9em; }
-                td { padding: 15px; border-bottom: 1px solid #e9ecef; }
+                th { padding: 12px 8px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 0.85em; white-space: nowrap; }
+                td { padding: 12px 8px; border-bottom: 1px solid #e9ecef; font-size: 0.9em; }
                 tbody tr:hover { background: #f8f9fa; }
                 tbody tr:nth-child(even) { background: #fafafa; }
-                .rank { font-weight: bold; font-size: 1.2em; color: #667eea; }
+                .rank { font-weight: bold; font-size: 1.1em; color: #667eea; }
                 .score {
                     font-weight: bold;
                     padding: 5px 10px;
@@ -187,6 +213,23 @@ def main():
                 .score-low { background: #f8d7da; color: #721c24; }
                 .trend-bullish { color: #28a745; font-weight: bold; }
                 .trend-bearish { color: #dc3545; font-weight: bold; }
+                .entry-long { color: #28a745; font-weight: bold; }
+                .entry-short { color: #dc3545; font-weight: bold; }
+                .entry-neutral { color: #6c757d; }
+                .price-info { font-family: 'Courier New', monospace; font-size: 0.9em; }
+                .rr-ratio {
+                    font-weight: bold;
+                    padding: 3px 8px;
+                    border-radius: 4px;
+                    display: inline-block;
+                }
+                .rr-good { background: #d4edda; color: #155724; }
+                .rr-medium { background: #fff3cd; color: #856404; }
+                .rr-bad { background: #f8d7da; color: #721c24; }
+                .confidence {
+                    font-size: 0.85em;
+                    color: #666;
+                }
                 .footer {
                     text-align: center;
                     margin-top: 30px;
@@ -194,13 +237,23 @@ def main():
                     color: white;
                     font-size: 0.9em;
                 }
+                .info-badge {
+                    display: inline-block;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                    margin: 2px;
+                }
+                .badge-green { background: #d4edda; color: #155724; }
+                .badge-yellow { background: #fff3cd; color: #856404; }
+                .badge-red { background: #f8d7da; color: #721c24; }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🚀 Crypto Signal Scanner</h1>
-                    <p>Top 10 Opportunités Crypto</p>
+                    <h1>⚡ Scalping Crypto Scanner</h1>
+                    <p class="subtitle">Signaux d'entrée et de sortie pour trading à court terme (15min)</p>
                     <div class="last-update">
                         Dernière mise à jour: {{ last_update }}
                     </div>
@@ -212,9 +265,17 @@ def main():
                                 <th>Rank</th>
                                 <th>Pair</th>
                                 <th>Score</th>
-                                <th>Trend</th>
+                                <th>Prix</th>
+                                <th>Entry</th>
+                                <th>Entry $</th>
+                                <th>Stop $</th>
+                                <th>TP1 $</th>
+                                <th>TP2 $</th>
+                                <th>R/R</th>
                                 <th>RSI</th>
-                                <th>Signal</th>
+                                <th>Trend</th>
+                                <th>Conf.</th>
+                                <th>Exit</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -227,19 +288,44 @@ def main():
                                         {{ opp.score }}
                                     </span>
                                 </td>
+                                <td class="price-info">${{ "%.4f"|format(opp.price) if opp.price else "N/A" }}</td>
+                                <td>
+                                    <span class="{% if opp.entry_signal == 'LONG' %}entry-long{% elif opp.entry_signal == 'SHORT' %}entry-short{% else %}entry-neutral{% endif %}">
+                                        {{ opp.entry_signal if opp.entry_signal else 'N/A' }}
+                                    </span>
+                                </td>
+                                <td class="price-info">${{ "%.4f"|format(opp.entry_price) if opp.entry_price else "N/A" }}</td>
+                                <td class="price-info">${{ "%.4f"|format(opp.stop_loss) if opp.stop_loss else "N/A" }}</td>
+                                <td class="price-info">${{ "%.4f"|format(opp.take_profit_1) if opp.take_profit_1 else "N/A" }}</td>
+                                <td class="price-info">${{ "%.4f"|format(opp.take_profit_2) if opp.take_profit_2 else "N/A" }}</td>
+                                <td>
+                                    {% if opp.risk_reward_ratio %}
+                                        <span class="rr-ratio {% if opp.risk_reward_ratio >= 2 %}rr-good{% elif opp.risk_reward_ratio >= 1.5 %}rr-medium{% else %}rr-bad{% endif %}">
+                                            {{ "%.2f"|format(opp.risk_reward_ratio) }}
+                                        </span>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else "N/A" }}</td>
                                 <td class="{% if opp.trend == 'Bullish' %}trend-bullish{% else %}trend-bearish{% endif %}">
                                     {{ opp.trend }}
                                 </td>
-                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else "N/A" }}</td>
-                                <td>{{ opp.signal }}</td>
+                                <td>
+                                    <span class="confidence">
+                                        {{ opp.confidence if opp.confidence else 0 }}%
+                                    </span>
+                                </td>
+                                <td style="font-size: 0.85em;">{{ opp.exit_signal if opp.exit_signal else 'HOLD' }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 <div class="footer">
-                    <p><strong>⚠️ Avertissement:</strong> Ce scanner fournit des indications statistiques, pas des conseils financiers.</p>
-                    <p>Ne pas utiliser pour des ordres automatiques. Toujours faire vos propres recherches (DYOR).</p>
+                    <p><strong>⚠️ Avertissement:</strong> Ce scanner fournit des indications statistiques pour le scalping, pas des conseils financiers.</p>
+                    <p>Ne pas utiliser pour des ordres automatiques. Toujours faire vos propres recherches (DYOR). Risques élevés en scalping.</p>
+                    <p style="margin-top: 10px;"><strong>Légende:</strong> Entry = Signal d'entrée | TP1/TP2 = Take Profit 1/2 | R/R = Ratio Risque/Récompense | Conf. = Confiance</p>
                 </div>
             </div>
         </body>

@@ -69,20 +69,22 @@ REFERENCE_PRICES = {
 }
 
 
-def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200) -> pd.DataFrame:
+def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200, interval_minutes: int = 15) -> pd.DataFrame:
     """
     Génère des données OHLC réalistes basées sur un prix de référence.
+    Optimisé pour le scalping (timeframe 15min).
     
     Args:
         symbol: Symbole de la paire
         base_price: Prix de référence
         limit: Nombre de bougies
+        interval_minutes: Intervalle en minutes (défaut: 15 pour scalping)
     
     Returns:
         DataFrame OHLCV avec colonnes: timestamp, open, high, low, close, volume
     """
-    # Générer timestamps (1 heure par bougie, en ordre chronologique)
-    timestamps = [datetime.now() - timedelta(hours=i) for i in range(limit-1, -1, -1)]
+    # Générer timestamps (15 minutes par bougie pour scalping)
+    timestamps = [datetime.now() - timedelta(minutes=interval_minutes*i) for i in range(limit-1, -1, -1)]
     
     # Générer prix avec tendance réaliste et volatilité
     prices = []
@@ -91,8 +93,8 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200) -> pd.D
     # Ajouter une tendance légère (bullish ou bearish)
     trend = np.random.uniform(-0.0005, 0.0005)
     
-    # Volatilité variable selon le type de crypto
-    volatility = 0.015 if base_price > 100 else 0.02  # Plus volatil pour petites cryptos
+    # Volatilité variable selon le type de crypto (plus élevée pour scalping)
+    volatility = 0.008 if base_price > 100 else 0.012  # Volatilité adaptée au timeframe 15min
     
     for i in range(limit):
         # Variation aléatoire mais réaliste
@@ -139,7 +141,7 @@ def generate_ohlc_data(symbol: str, base_price: float, limit: int = 200) -> pd.D
     return df
 
 
-def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
+def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
     """
     Génère des données OHLCV (bougies) pour une paire donnée.
     
@@ -155,8 +157,12 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
         # Récupérer le prix de référence
         base_price = REFERENCE_PRICES.get(symbol, 100.0)
         
+        # Déterminer l'intervalle en minutes
+        interval_map = {'15m': 15, '1h': 60, '5m': 5, '1m': 1}
+        interval_minutes = interval_map.get(interval, 15)
+        
         # Générer des données OHLC basées sur le prix de référence
-        return generate_ohlc_data(symbol, base_price, limit)
+        return generate_ohlc_data(symbol, base_price, limit, interval_minutes)
     
     except Exception as e:
         print(f"❌ Erreur lors de la génération des données pour {symbol}: {e}")
