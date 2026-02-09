@@ -23,11 +23,23 @@ pip install -r requirements.txt
 
 ## 🚀 Utilisation
 
+### Développement local
+
 ```bash
 python src/main.py
 ```
 
 Le serveur web sera accessible sur `http://localhost:5000`
+
+### Production (Railway)
+
+Le projet est configuré pour Railway avec Gunicorn. Le `Procfile` est déjà configuré :
+
+```
+web: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 wsgi:application
+```
+
+Le serveur démarre automatiquement et met à jour les données toutes les heures.
 
 ## 📁 Structure
 
