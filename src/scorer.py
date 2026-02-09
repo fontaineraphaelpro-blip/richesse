@@ -144,14 +144,25 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     # Calculer les signaux d'entrée/sortie
     signals = calculate_entry_exit_signals(indicators, support, resistance)
     
+    # Déterminer le trend AVANT de calculer le score (pour vérifier la cohérence)
+    trend = detect_trend(indicators)
+    
     # 1. Signal d'entrée fort (LONG/SHORT) → +30 (seulement si confiance >= 50)
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
     confidence = signals.get('confidence', 0)
     
     if entry_signal == 'LONG' or entry_signal == 'SHORT':
         if confidence >= 50:
-            score += 30
-            details.append(f"Signal {entry_signal} (conf: {confidence}%)")
+            # Bonus si le signal est cohérent avec la tendance
+            if (entry_signal == 'LONG' and trend == 'Bullish') or (entry_signal == 'SHORT' and trend == 'Bearish'):
+                score += 35  # Bonus pour cohérence avec tendance
+                details.append(f"Signal {entry_signal} ✓ (conf: {confidence}%, tendance: {trend})")
+            elif trend == 'NEUTRAL':
+                score += 30  # Pas de bonus mais pas de pénalité
+                details.append(f"Signal {entry_signal} (conf: {confidence}%, tendance: {trend})")
+            else:
+                score += 20  # Pénalité si signal contre-tendance
+                details.append(f"Signal {entry_signal} ⚠️ (conf: {confidence}%, contre-tendance: {trend})")
         else:
             # Signal faible = pas de points
             entry_signal = 'NEUTRAL'
@@ -260,6 +271,12 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     
     # Déterminer le signal (seuils plus stricts)
     # Score minimum de 60 pour être considéré comme opportunité
+    # Bonus si signal cohérent avec tendance
+    trend_bonus = 0
+    if (entry_signal == 'LONG' and trend == 'Bullish') or (entry_signal == 'SHORT' and trend == 'Bearish'):
+        trend_bonus = 5
+        score += trend_bonus
+    
     if score >= 75 and entry_signal != 'NEUTRAL' and confidence >= 60:
         signal = "🔥 Opportunité scalping EXCELLENTE"
     elif score >= 60 and entry_signal != 'NEUTRAL' and confidence >= 50:
@@ -268,9 +285,6 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
         signal = "⚠️ Opportunité scalping MODÉRÉE"
     else:
         signal = "❌ Pas d'opportunité valide"
-    
-    # Déterminer le trend avec détection multi-indicateurs
-    trend = detect_trend(indicators)
     
     return {
         'score': score,
