@@ -107,7 +107,9 @@ def calculate_stochastic(df: pd.DataFrame, period: int = 14) -> Dict:
     low_min = df['low'].rolling(window=period).min()
     high_max = df['high'].rolling(window=period).max()
     
-    stoch_k = 100 * ((df['close'] - low_min) / (high_max - low_min))
+    # Éviter division par zéro
+    denominator = (high_max - low_min).replace(0, np.nan)
+    stoch_k = 100 * ((df['close'] - low_min) / denominator)
     stoch_d = stoch_k.rolling(window=3).mean()
     
     return {
@@ -142,8 +144,9 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
     
-    # ADX
-    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+    # ADX (éviter division par zéro)
+    dx_denominator = plus_di + minus_di
+    dx = 100 * abs(plus_di - minus_di) / dx_denominator.replace(0, np.nan)
     adx = dx.rolling(window=period).mean()
     
     return adx
