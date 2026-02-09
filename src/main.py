@@ -282,6 +282,19 @@ def main():
                             </tr>
                         </thead>
                         <tbody>
+                            {% if not opportunities %}
+                            <tr>
+                                <td colspan="14" style="text-align: center; padding: 50px;">
+                                    <h2>⏳ Scan en cours...</h2>
+                                    <p>Récupération des prix réels et analyse des cryptomonnaies en cours.</p>
+                                    <p>Veuillez patienter, les données seront disponibles dans quelques instants.</p>
+                                    <p style="margin-top: 20px;"><small>Cette page se rafraîchira automatiquement dans 10 secondes.</small></p>
+                                    <script>
+                                        setTimeout(function(){ location.reload(); }, 10000);
+                                    </script>
+                                </td>
+                            </tr>
+                            {% else %}
                             {% for opp in opportunities %}
                             <tr>
                                 <td class="rank">#{{ opp.rank }}</td>
