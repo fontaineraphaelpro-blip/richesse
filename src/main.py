@@ -1,7 +1,6 @@
 """
 Script principal du Crypto Signal Scanner Web.
-Scanne les cryptos, calcule les scores et affiche les résultats dans une page web.
-Version adaptée pour Binance (Données réelles) et critères assouplis.
+Version DAY TRADING (1h) - Analyse de tendance sur longue période.
 """
 
 import time
@@ -10,7 +9,7 @@ from datetime import datetime
 from flask import Flask, render_template_string
 import threading
 
-# On n'importe plus fetch_pairs car la liste est dans data_fetcher
+# Importations des modules locaux
 from data_fetcher import fetch_multiple_pairs
 from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
@@ -18,365 +17,246 @@ from scorer import calculate_opportunity_score
 
 def run_scanner():
     """
-    Exécute un scan complet et retourne les Top 10 opportunités.
+    Exécute un scan complet sur 1H et retourne les opportunités de Day Trading.
     """
     print("\n" + "="*60)
-    print("🚀 CRYPTO SIGNAL SCANNER - Démarrage du scan (Données Réelles Binance)")
+    print("🚀 CRYPTO SCANNER - Mode DAY TRADING (1h)")
     print("="*60)
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # 1. Récupération des données (La liste est maintenant gérée par data_fetcher)
-        print("📊 Étape 1 & 2: Récupération des prix réels et génération OHLCV...")
-        # On passe None pour utiliser la liste par défaut (TOP_USDT_PAIRS) définie dans data_fetcher
-        # On utilise limit=200 pour avoir assez d'historique pour les indicateurs
-        data, real_prices = fetch_multiple_pairs(None, interval='15m', limit=200)
+        # 1. CONFIGURATION 1H (Longue plage)
+        # interval='1h' : Analyse chaque bougie d'une heure pour filtrer le bruit du 15m
+        # limit=1000 : Récupère 1000 heures (~41 jours) d'historique pour une tendance de fond fiable
+        print("📊 Récupération des données sur 1000 bougies de 1h (Analyse de fond)...")
+        
+        # On passe None pour utiliser la liste par défaut définie dans data_fetcher
+        data, real_prices = fetch_multiple_pairs(None, interval='1h', limit=1000)
         
         if not data:
-            print("❌ Aucune donnée récupérée. Arrêt du scanner.")
+            print("❌ Aucune donnée récupérée. Vérifiez votre connexion.")
             return []
         
-        # 2. Calculer les indicateurs et scores pour chaque paire
-        print("\n🔍 Étape 3: Analyse technique et calcul des scores...")
+        # 2. Analyse Technique
+        print("\n🔍 Analyse de la tendance et recherche de signaux...")
         opportunities = []
-        total = len(data)
         
         for i, (symbol, df) in enumerate(data.items(), 1):
-            # Calculer les indicateurs techniques
+            # Calcul des indicateurs sur l'historique long
             indicators = calculate_indicators(df)
             
-            # Le prix réel est dans le dictionnaire real_prices
             current_price = real_prices.get(symbol)
-            if not current_price:
-                 current_price = indicators.get('current_price')
+            if not current_price: 
+                current_price = indicators.get('current_price')
 
-            # Détecter le support
-            support = find_swing_low(df, lookback=30)
+            # Détection de support sur une période plus large (50h = ~2 jours)
+            support = find_swing_low(df, lookback=50)
             support_distance = None
-            
             if current_price and support:
                 support_distance = calculate_distance_to_support(current_price, support)
             
-            # Calculer le score d'opportunité
+            # Calcul du score (La fonction detect_trend dans scorer utilisera automatiquement les données 1h)
             score_data = calculate_opportunity_score(indicators, support_distance, df)
             
-            # Ajouter à la liste des opportunités
+            # On ne garde que les données pertinentes pour le Day Trading
             opportunities.append({
                 'pair': symbol,
                 'score': score_data['score'],
-                'trend': score_data['trend'],
-                'rsi': indicators.get('rsi14'),
+                'trend': score_data['trend'], # Tendance calculée sur 1h
                 'signal': score_data['signal'],
                 'price': current_price,
-                # Signaux scalping
+                'rsi': indicators.get('rsi14'),
                 'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
                 'entry_price': score_data.get('entry_price'),
                 'stop_loss': score_data.get('stop_loss'),
                 'take_profit_1': score_data.get('take_profit_1'),
                 'take_profit_2': score_data.get('take_profit_2'),
                 'risk_reward_ratio': score_data.get('risk_reward_ratio'),
-                'exit_signal': score_data.get('exit_signal', 'HOLD'),
                 'confidence': score_data.get('confidence', 0),
-                # Indicateurs supplémentaires pour le frontend
-                'ema9': indicators.get('ema9'),
-                'ema21': indicators.get('ema21'),
-                'macd': indicators.get('macd'),
                 'atr_percent': indicators.get('atr_percent'),
-                'momentum_percent': indicators.get('momentum_percent'),
-                'volume_ratio': (indicators.get('current_volume') / indicators.get('volume_ma20')) if (indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0) else None
             })
         
-        print(f"\n✅ {len(opportunities)} paires analysées")
+        # 3. Filtrage & Tri Intelligent
+        # On privilégie les scores > 50 qui indiquent une vraie opportunité
+        quality_opportunities = [opp for opp in opportunities if opp['score'] >= 50]
         
-        # 3. Filtrage ADAPTÉ AUX DONNÉES RÉELLES (Moins strict)
-        # On accepte les scores >= 50 et confiance >= 50 pour capturer plus d'opportunités
-        quality_opportunities = []
-        for opp in opportunities:
-            if (opp.get('entry_signal') in ['SHORT', 'LONG'] and 
-                opp.get('score', 0) >= 50 and 
-                opp.get('confidence', 0) >= 50):
-                
-                quality_opportunities.append(opp)
+        # Tri par Score décroissant
+        quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
         
-        print(f"📊 {len(quality_opportunities)} opportunités potentielles trouvées (Score >= 50, Conf >= 50).")
+        # Sélection du Top 15 (ou moins si pas assez d'opportunités)
+        top_picks = quality_opportunities[:15]
         
-        # Trier par score décroissant
-        opportunities.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Si on a trouvé des opportunités de qualité, on les met en premier, sinon on prend le top global
-        if quality_opportunities:
-             quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
-             top_10 = quality_opportunities[:10]
-             # Si moins de 10, on complète avec les meilleures du reste
-             if len(top_10) < 10:
-                 remaining = [opp for opp in opportunities if opp not in quality_opportunities]
-                 top_10.extend(remaining[:10 - len(top_10)])
-        else:
-             top_10 = opportunities[:10]
+        # Si le marché est calme et qu'on a peu de bons signaux, on complète avec le reste trié
+        if len(top_picks) < 5:
+            remaining = [opp for opp in opportunities if opp not in quality_opportunities]
+            remaining.sort(key=lambda x: x['score'], reverse=True)
+            top_picks.extend(remaining[:10 - len(top_picks)])
 
-        # Ajouter le rank
-        for i, opp in enumerate(top_10, 1):
+        # Ajout du classement (Rank)
+        for i, opp in enumerate(top_picks, 1):
             opp['rank'] = i
         
-        # 4. Afficher les résultats dans le terminal
+        # 4. Affichage Terminal (Résumé)
         print("\n" + "="*80)
-        print("🏆 TOP 10 OPPORTUNITÉS SCALPING (Données Réelles)")
+        print("🏆 TOP OPPORTUNITÉS DAY TRADING (Timeframe: 1H)")
         print("="*80)
-        print(f"{'Rank':<6} {'Pair':<12} {'Score':<7} {'Signal':<8} {'Entry $':<10} {'Stop $':<10} {'TP1 $':<10} {'R/R':<6}")
+        print(f"{'Paire':<12} {'Score':<7} {'Trend':<10} {'Signal':<8} {'Prix':<10} {'Stop Loss':<10}")
         print("-"*80)
         
-        for opp in top_10:
-            entry_signal = opp.get('entry_signal', 'N/A')
-            entry_price = f"${opp['entry_price']:.4f}" if opp.get('entry_price') else "N/A"
-            stop_loss = f"${opp['stop_loss']:.4f}" if opp.get('stop_loss') else "N/A"
-            tp1 = f"${opp['take_profit_1']:.4f}" if opp.get('take_profit_1') else "N/A"
-            rr = f"{opp['risk_reward_ratio']:.2f}" if opp.get('risk_reward_ratio') else "N/A"
-            print(f"#{opp['rank']:<5} {opp['pair']:<12} {opp['score']:<7} {entry_signal:<8} {entry_price:<10} {stop_loss:<10} {tp1:<10} {rr:<6}")
+        for opp in top_picks:
+            entry_sig = opp.get('entry_signal', '-')
+            print(f"{opp['pair']:<12} {opp['score']:<7} {opp['trend']:<10} {entry_sig:<8} ${opp['price']:.4f} ${opp['stop_loss']:.4f}")
         
-        print("="*80)
-        
-        return top_10
+        return top_picks
         
     except Exception as e:
-        print(f"\n❌ Erreur lors du scan: {e}")
+        print(f"\n❌ Erreur critique lors du scan: {e}")
         import traceback
         traceback.print_exc()
         return []
 
 def main():
-    """
-    Fonction principale avec serveur web Flask intégré.
-    """
-    print("⚡ Scalping Crypto Scanner Web - Démarrage")
-    print("📌 Mode SCALPING (15min) - Données Réelles Binance")
-    print("🛑 Appuyez sur Ctrl+C pour arrêter\n")
+    print("⚡ Crypto Scanner - Mode DAY TRADING (1h)")
+    print("📌 Analyse sur 1000 bougies (41 jours) pour déterminer la tendance de fond.")
+    print("🛑 Ctrl+C pour arrêter")
     
-    # Variable partagée pour les opportunités
     opportunities_data = {'data': []}
     scanning_status = {'is_scanning': False}
-    
-    # Créer l'application Flask
     app = Flask(__name__)
     
     @app.route('/')
     def home():
-        """Page d'accueil avec le tableau des opportunités."""
         is_scanning = scanning_status.get('is_scanning', False)
         opportunities = opportunities_data.get('data', [])
+        last_update = datetime.now().strftime('%d/%m/%Y %H:%M')
         
-        # Template HTML intégré (Version améliorée)
-        HTML_TEMPLATE = """
+        # Template HTML simplifié et épuré pour le Day Trading
+        HTML = """
         <!DOCTYPE html>
         <html lang="fr">
         <head>
             <meta charset="UTF-8">
+            <title>Day Trading Scanner (1h)</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Scalping Crypto Scanner (Binance Data)</title>
             <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%);
-                    min-height: 100vh;
-                    padding: 20px;
-                    color: #333;
-                }
-                .container { max-width: 1600px; margin: 0 auto; }
-                .header {
-                    background: rgba(255, 255, 255, 0.95);
-                    border-radius: 15px;
-                    padding: 30px;
-                    margin-bottom: 20px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                    text-align: center;
-                }
-                .header h1 {
-                    font-size: 2.5em;
-                    color: #2c3e50;
-                    margin-bottom: 10px;
-                }
-                .header .subtitle {
-                    color: #666;
-                    font-size: 1.1em;
-                    margin-top: 5px;
-                }
-                .last-update { color: #666; font-size: 0.9em; margin-top: 10px; }
-                .main-content {
-                    background: rgba(255, 255, 255, 0.98);
-                    border-radius: 15px;
-                    padding: 30px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                    overflow-x: auto;
-                }
-                table { width: 100%; border-collapse: collapse; font-size: 0.9em; min-width: 1400px; }
-                thead { background: #34495e; color: white; }
-                th { padding: 15px 10px; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 0.85em; white-space: nowrap; }
-                td { padding: 12px 10px; border-bottom: 1px solid #e9ecef; font-size: 0.95em; vertical-align: middle; }
-                tbody tr:hover { background: #f1f2f6; }
-                .rank { font-weight: bold; font-size: 1.1em; color: #2c3e50; }
-                .score {
-                    font-weight: bold;
-                    padding: 5px 10px;
-                    border-radius: 5px;
-                    display: inline-block;
-                }
-                .score-high { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-                .score-medium { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-                .score-low { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+                body { font-family: 'Segoe UI', sans-serif; background: #f4f6f9; padding: 20px; color: #333; }
+                .container { max-width: 1400px; margin: 0 auto; }
+                .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
+                h1 { margin: 0 0 10px 0; color: #2c3e50; }
+                .subtitle { color: #666; font-size: 0.9em; }
                 
-                .signal-badge {
-                    font-weight: bold;
-                    padding: 5px 10px;
-                    border-radius: 5px;
-                    text-transform: uppercase;
-                    font-size: 0.85em;
-                }
-                .signal-long { background-color: #28a745; color: white; }
-                .signal-short { background-color: #dc3545; color: white; }
-                .signal-neutral { background-color: #6c757d; color: white; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background-color: #f8f9fa; text-transform: uppercase; font-size: 0.8em; color: #666; padding: 15px; text-align: left; }
+                td { padding: 15px; border-bottom: 1px solid #eee; vertical-align: middle; }
+                tr:hover { background-color: #f8f9fa; }
                 
-                .price-val { font-family: 'Consolas', 'Monaco', monospace; font-weight: 500; }
+                .trend-bullish { color: #27ae60; font-weight: bold; background: #eafaf1; padding: 4px 8px; border-radius: 4px; }
+                .trend-bearish { color: #c0392b; font-weight: bold; background: #fdedec; padding: 4px 8px; border-radius: 4px; }
+                .trend-neutral { color: #7f8c8d; background: #f2f3f4; padding: 4px 8px; border-radius: 4px; }
                 
-                .rr-ratio { font-weight: bold; }
-                .rr-good { color: #28a745; }
-                .rr-bad { color: #dc3545; }
+                .badge { padding: 6px 10px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.85em; }
+                .bg-green { background-color: #27ae60; }
+                .bg-red { background-color: #c0392b; }
+                .bg-gray { background-color: #95a5a6; }
                 
-                .footer {
-                    text-align: center;
-                    margin-top: 30px;
-                    padding: 20px;
-                    color: rgba(255,255,255,0.9);
-                    font-size: 0.9em;
-                }
+                .score-val { font-weight: bold; font-size: 1.1em; }
+                .price-val { font-family: 'Consolas', monospace; }
+                
+                .scan-loader { color: #e67e22; font-weight: bold; animation: blink 1.5s infinite; }
+                @keyframes blink { 50% { opacity: 0.5; } }
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">
-                    <h1>⚡ Scalping Crypto Scanner</h1>
-                    <p class="subtitle">Données Réelles Binance | Timeframe: 15m | Stratégie: Scalping</p>
-                    <div class="last-update">
-                        Dernière mise à jour: {{ last_update }}
+                <div class="card">
+                    <h1>📈 Day Trading Scanner</h1>
+                    <div class="subtitle">
+                        Timeframe: <strong>1 Heure</strong> | Historique analysé: <strong>1000 bougies</strong> | 
+                        Dernière MAJ: {{ last_update }}
+                        {% if is_scanning %} <span class="scan-loader"> (Scan en cours...)</span>{% endif %}
                     </div>
                 </div>
-                <div class="main-content">
+                
+                <div class="card">
                     <table>
                         <thead>
                             <tr>
-                                <th>Rank</th>
-                                <th>Pair</th>
-                                <th>Score</th>
+                                <th>#</th>
+                                <th>Paire</th>
+                                <th>Score / 100</th>
+                                <th>Tendance (Fond)</th>
                                 <th>Signal</th>
-                                <th>Prix</th>
-                                <th>Entry</th>
+                                <th>Confiance</th>
+                                <th>Prix Actuel</th>
                                 <th>Stop Loss</th>
-                                <th>TP1</th>
-                                <th>TP2</th>
-                                <th>R/R</th>
+                                <th>Objectif (TP1)</th>
                                 <th>RSI</th>
-                                <th>Trend</th>
-                                <th>Conf.</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% if not opportunities %}
-                            <tr>
-                                <td colspan="13" style="text-align: center; padding: 50px;">
-                                    {% if is_scanning %}
-                                        <h2>🔄 Scan en cours...</h2>
-                                        <p>Récupération des données réelles depuis Binance.</p>
-                                    {% else %}
-                                        <h2>⏳ Initialisation...</h2>
-                                        <p>Le premier scan va démarrer dans quelques instants.</p>
-                                    {% endif %}
-                                    <p>La page se rafraîchira automatiquement.</p>
-                                    <script>setTimeout(function(){ location.reload(); }, 5000);</script>
-                                </td>
-                            </tr>
+                            <tr><td colspan="10" style="text-align:center; padding:30px">Initialisation ou aucun signal fort trouvé...</td></tr>
                             {% else %}
                             {% for opp in opportunities %}
                             <tr>
-                                <td class="rank">#{{ opp.rank }}</td>
+                                <td><strong>{{ opp.rank }}</strong></td>
                                 <td><strong>{{ opp.pair }}</strong></td>
+                                <td class="score-val" style="color: {% if opp.score > 70 %}#27ae60{% elif opp.score > 50 %}#f39c12{% else %}#7f8c8d{% endif %}">
+                                    {{ opp.score }}
+                                </td>
                                 <td>
-                                    <span class="score {% if opp.score >= 70 %}score-high{% elif opp.score >= 50 %}score-medium{% else %}score-low{% endif %}">
-                                        {{ opp.score }}
+                                    <span class="{% if opp.trend == 'Bullish' %}trend-bullish{% elif opp.trend == 'Bearish' %}trend-bearish{% else %}trend-neutral{% endif %}">
+                                        {{ opp.trend }}
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="signal-badge {% if opp.entry_signal == 'LONG' %}signal-long{% elif opp.entry_signal == 'SHORT' %}signal-short{% else %}signal-neutral{% endif %}">
+                                    <span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% elif opp.entry_signal == 'SHORT' %}bg-red{% else %}bg-gray{% endif %}">
                                         {{ opp.entry_signal }}
                                     </span>
                                 </td>
-                                <td class="price-val">${{ "%.4f"|format(opp.price) if opp.price else "N/A" }}</td>
-                                <td class="price-val">${{ "%.4f"|format(opp.entry_price) if opp.entry_price else "N/A" }}</td>
-                                <td class="price-val" style="color: #dc3545;">${{ "%.4f"|format(opp.stop_loss) if opp.stop_loss else "N/A" }}</td>
-                                <td class="price-val" style="color: #28a745;">${{ "%.4f"|format(opp.take_profit_1) if opp.take_profit_1 else "N/A" }}</td>
-                                <td class="price-val" style="color: #28a745;">${{ "%.4f"|format(opp.take_profit_2) if opp.take_profit_2 else "N/A" }}</td>
-                                <td>
-                                    {% if opp.risk_reward_ratio %}
-                                        <span class="rr-ratio {% if opp.risk_reward_ratio >= 2 %}rr-good{% else %}rr-bad{% endif %}">
-                                            {{ "%.2f"|format(opp.risk_reward_ratio) }}
-                                        </span>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else "-" }}</td>
-                                <td style="font-weight:bold; color: {% if opp.trend == 'Bullish' %}#28a745{% elif opp.trend == 'Bearish' %}#dc3545{% else %}#6c757d{% endif %}">
-                                    {{ opp.trend }}
-                                </td>
                                 <td>{{ opp.confidence }}%</td>
+                                <td class="price-val">${{ "%.4f"|format(opp.price) }}</td>
+                                <td class="price-val" style="color: #c0392b;">${{ "%.4f"|format(opp.stop_loss) if opp.stop_loss else '-' }}</td>
+                                <td class="price-val" style="color: #27ae60;">${{ "%.4f"|format(opp.take_profit_1) if opp.take_profit_1 else '-' }}</td>
+                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else '-' }}</td>
                             </tr>
                             {% endfor %}
                             {% endif %}
                         </tbody>
                     </table>
                 </div>
-                <div class="footer">
-                    <p>⚠️ Trading à haut risque. Données à titre indicatif uniquement.</p>
-                </div>
             </div>
+            <script>
+                // Rafraîchir la page toutes les 60 secondes pour voir les mises à jour
+                setTimeout(function(){ location.reload(); }, 60000);
+            </script>
         </body>
         </html>
         """
-        
-        last_update = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        return render_template_string(HTML_TEMPLATE, 
-                                     opportunities=opportunities, 
-                                     last_update=last_update,
-                                     is_scanning=is_scanning)
-    
-    @app.route('/health')
-    def health():
-        return {'status': 'ok', 'opportunities_count': len(opportunities_data['data'])}, 200
-    
-    # Threads de gestion du scan
-    def run_scanner_loop():
-        """Boucle infinie de scan"""
+        return render_template_string(HTML, opportunities=opportunities, last_update=last_update, is_scanning=is_scanning)
+
+    def run_loop():
         while True:
             scanning_status['is_scanning'] = True
             try:
-                print("🔄 Démarrage du scan périodique...")
-                new_opportunities = run_scanner()
-                opportunities_data['data'] = new_opportunities
-                print("✅ Scan terminé et données mises à jour.")
+                opportunities_data['data'] = run_scanner()
             except Exception as e:
-                print(f"❌ Erreur dans la boucle de scan: {e}")
+                print(f"Erreur loop: {e}")
             finally:
                 scanning_status['is_scanning'] = False
             
-            # Attendre 5 minutes pour être plus réactif
-            time.sleep(300) 
+            # Pause de 15 minutes (900 secondes)
+            # En 1H, pas besoin de scanner chaque minute. 15min permet de voir l'évolution intra-bougie.
+            print("💤 Pause de 15 minutes avant le prochain scan...")
+            time.sleep(900)
 
-    # Lancer le scanner en arrière-plan
-    scanner_thread = threading.Thread(target=run_scanner_loop, daemon=True)
+    # Lancement du thread de scan
+    scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
     
-    # Démarrer le serveur Web
-    port = int(os.environ.get('PORT', 5000))
+    # Lancement du serveur Web
+    port = int(os.environ.get('PORT', 8080))
     print(f"\n🌐 Dashboard accessible sur http://0.0.0.0:{port}")
-    
     try:
         app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
