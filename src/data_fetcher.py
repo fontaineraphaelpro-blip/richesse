@@ -176,16 +176,24 @@ def get_real_price(symbol: str) -> Optional[float]:
             data = response.json()
             if 'price' in data:
                 price = float(data['price'])
+                print(f"✓ {symbol}: ${price:,.8f} (Binance)")
                 return price
+            else:
+                print(f"⚠️ Réponse Binance invalide pour {symbol}: {data}")
+                return None
         elif response.status_code == 400:
             # Paire invalide ou inexistante
-            print(f"⚠️ Paire {symbol} non trouvée sur Binance")
+            error_data = response.json() if response.text else {}
+            print(f"⚠️ Paire {symbol} non trouvée sur Binance: {error_data.get('msg', 'Unknown error')}")
+            return None
+        elif response.status_code == 429:
+            # Rate limit
+            print(f"⚠️ Rate limit Binance pour {symbol}, attente...")
+            time.sleep(1)
             return None
         else:
-            print(f"⚠️ Erreur API Binance pour {symbol}: {response.status_code}")
+            print(f"⚠️ Erreur API Binance pour {symbol}: {response.status_code} - {response.text[:100]}")
             return None
-        
-        return None
         
     except requests.exceptions.Timeout:
         print(f"⚠️ Timeout API Binance pour {symbol}")
@@ -195,6 +203,8 @@ def get_real_price(symbol: str) -> Optional[float]:
         return None
     except Exception as e:
         print(f"⚠️ Erreur API Binance pour {symbol}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -245,8 +255,9 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> tuple:
                 if real_price < last_low:
                     df.iloc[-1, df.columns.get_loc('low')] = real_price * 0.999
             else:
-                # Si pas de prix réel, utiliser le prix généré
-                real_price = df.iloc[-1]['close']
+                # Si pas de prix réel, utiliser le prix généré comme fallback
+                # Mais on garde real_price = None pour indiquer que ce n'est pas un prix réel
+                pass
         
         return df, real_price
     
@@ -276,16 +287,18 @@ def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200)
     print(f"📊 Récupération des prix réels pour {total} paires...")
     
     for i, symbol in enumerate(symbols, 1):
-        print(f"📊 {symbol} ({i}/{total})...", end='\r')
         df, real_price = fetch_klines(symbol, interval, limit)
         if df is not None:
             data[symbol] = df
-            if real_price:
+            if real_price and real_price > 0:
                 real_prices[symbol] = real_price
+                print(f"✓ {symbol}: ${real_price:,.8f} récupéré")
+            else:
+                print(f"⚠️ {symbol}: Prix réel non disponible, utilisation du prix généré")
         # Délai pour éviter rate limiting (Binance: 1200 req/min, mais on prend une marge)
         # Pas besoin de délai long, Binance est très rapide
         if i < total:
-            time.sleep(0.1)  # 100ms entre chaque requête (600 req/min max)
+            time.sleep(0.15)  # 150ms entre chaque requête (400 req/min max pour sécurité)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data, real_prices
