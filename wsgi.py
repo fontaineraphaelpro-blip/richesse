@@ -47,7 +47,7 @@ def run_scanner():
         
         # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
         print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
-        print("💡 Mode SCALPING - Récupération des prix réels depuis Binance API publique")
+        print("💡 Mode SCALPING - Récupération des prix réels depuis CryptoCompare API publique")
         data, real_prices = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
