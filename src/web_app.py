@@ -546,10 +546,7 @@ def trigger_scan():
         """Fonction qui exécute le scan en arrière-plan."""
         try:
             # Importer et exécuter le scanner
-            import sys
-            src_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src')
-            if src_path not in sys.path:
-                sys.path.insert(0, src_path)
+            # Le module main est dans le même répertoire que web_app
             from main import run_scanner
             run_scanner()
         except Exception as e:
