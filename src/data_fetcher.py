@@ -1,17 +1,18 @@
 """
-Module pour récupérer les données OHLCV depuis CoinGecko.
-Utilise l'API publique CoinGecko (pas besoin de clé).
+Module pour récupérer les données OHLCV depuis plusieurs sources.
+Utilise CryptoCompare, CoinCap et génération de données en fallback.
 """
 
 import pandas as pd
 import time
-from coingecko_api import get_klines_coingecko
+from crypto_api import get_klines_unified
 from typing import Optional
 
 
 def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optional[pd.DataFrame]:
     """
-    Récupère les données OHLCV (bougies) pour une paire donnée via CoinGecko.
+    Récupère les données OHLCV (bougies) pour une paire donnée.
+    Utilise plusieurs sources avec fallback automatique.
     
     Args:
         symbol: Symbole de la paire (ex: 'BTCUSDT')
@@ -23,8 +24,8 @@ def fetch_klines(symbol: str, interval: str = '1h', limit: int = 200) -> Optiona
         Retourne None en cas d'erreur
     """
     try:
-        # Utiliser CoinGecko directement
-        df = get_klines_coingecko(symbol=symbol, interval=interval, limit=limit)
+        # Utiliser l'API unifiée (CryptoCompare -> CoinCap -> génération)
+        df = get_klines_unified(symbol=symbol, interval=interval, limit=limit)
         
         if df is not None and len(df) > 0:
             return df

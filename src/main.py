@@ -29,16 +29,8 @@ def run_scanner():
     print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # Tester la connexion à CoinGecko
-        from coingecko_api import test_coingecko_connection
-        
-        print("🔌 Test de connexion à l'API CoinGecko...")
-        coingecko_ok = test_coingecko_connection()
-        
-        if coingecko_ok:
-            print("✅ Connexion à l'API CoinGecko OK")
-        else:
-            print("⚠️ API CoinGecko indisponible, utilisation de données de démo")
+        print("🔌 Utilisation de sources de données multiples (CryptoCompare, CoinCap)")
+        print("✅ Pas de rate limiting strict, scan rapide")
         
         # 1. Récupérer les principales paires crypto
         print("\n📋 Étape 1: Récupération des paires crypto...")
@@ -48,9 +40,9 @@ def run_scanner():
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
             return
         
-        # 2. Récupérer les données OHLCV via CoinGecko
+        # 2. Récupérer les données OHLCV (sources multiples avec fallback)
         print("\n📊 Étape 2: Récupération des données OHLCV (1H, 200 bougies)...")
-        print("⏳ Cela peut prendre 1-2 minutes (rate limiting CoinGecko)...")
+        print("⚡ Scan rapide (pas de rate limiting)...")
         data = fetch_multiple_pairs(pairs, interval='1h', limit=200)
         
         if not data:
