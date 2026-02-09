@@ -142,7 +142,7 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
             bearish_confirmations += 1
             confidence += 10
             # Momentum très négatif = signal plus fort
-            if momentum_percent and momentum_percent < -0.5:
+            if momentum_percent is not None and momentum_percent < -0.5:
                 confidence += 5
     
     # 7. Stochastic (confirmation de surachat pour SHORT)
