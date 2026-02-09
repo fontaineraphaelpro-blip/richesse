@@ -234,29 +234,40 @@ def health():
     """Route de santé."""
     return {'status': 'ok', 'opportunities_count': len(opportunities_data['data'])}, 200
 
-# Fonction pour initialiser et mettre à jour les opportunités
-def init_scanner():
-    """Initialise le scanner et lance la mise à jour en arrière-plan."""
-    # Premier scan
-    print("🚀 Initialisation du scanner...")
-    opportunities_data['data'] = run_scanner()
-    
-    # Fonction pour mettre à jour les opportunités toutes les heures
-    def update_opportunities():
-        """Met à jour les opportunités toutes les heures."""
-        while True:
-            time.sleep(3600)  # Attendre 1 heure
+# Fonction pour exécuter le scanner en arrière-plan
+def run_scanner_background():
+    """Exécute le scanner en arrière-plan."""
+    try:
+        print("🚀 Démarrage du scan initial en arrière-plan...")
+        new_opportunities = run_scanner()
+        opportunities_data['data'] = new_opportunities
+        print("✅ Scan initial terminé!")
+    except Exception as e:
+        print(f"❌ Erreur lors du scan: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Fonction pour mettre à jour les opportunités toutes les heures
+def update_opportunities():
+    """Met à jour les opportunités toutes les heures."""
+    while True:
+        time.sleep(3600)  # Attendre 1 heure
+        try:
             print("\n🔄 Mise à jour automatique...")
             new_opportunities = run_scanner()
             opportunities_data['data'] = new_opportunities
-    
-    # Lancer la mise à jour en arrière-plan
-    update_thread = threading.Thread(target=update_opportunities, daemon=True)
-    update_thread.start()
-    print("✅ Scanner initialisé et mise à jour automatique activée")
+        except Exception as e:
+            print(f"❌ Erreur lors de la mise à jour: {e}")
 
-# Initialiser le scanner au démarrage
-init_scanner()
+# Lancer le scanner initial en arrière-plan (non-bloquant)
+scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
+scanner_thread.start()
+
+# Lancer la mise à jour périodique en arrière-plan
+update_thread = threading.Thread(target=update_opportunities, daemon=True)
+update_thread.start()
+
+print("✅ Serveur web prêt - Scanner en cours d'initialisation en arrière-plan...")
 
 # Exporter pour Gunicorn
 application = app

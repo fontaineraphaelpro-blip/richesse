@@ -267,8 +267,9 @@ def fetch_multiple_pairs(symbols: list, interval: str = '15m', limit: int = 200)
         if df is not None:
             data[symbol] = df
         # Délai pour éviter rate limiting (CoinGecko: 10-50 req/min)
+        # Réduire le délai pour accélérer le scan initial
         if i < total:
-            time.sleep(1.2)  # ~50 requêtes par minute max
+            time.sleep(0.8)  # ~75 requêtes par minute (limite: 50/min mais on prend une marge)
     
     print(f"\n✅ {len(data)}/{total} paires récupérées avec succès")
     return data

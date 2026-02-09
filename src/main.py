@@ -28,7 +28,8 @@ def run_scanner():
     try:
         # 1. Récupérer les principales paires USDT
         print("📋 Étape 1: Récupération des paires USDT...")
-        pairs = get_top_usdt_pairs(limit=50)
+        # Réduire à 30 paires pour accélérer le scan initial
+        pairs = get_top_usdt_pairs(limit=30)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
@@ -135,11 +136,9 @@ def main():
     print("📌 Mode SCALPING (15min) - Boucle continue (mise à jour toutes les heures)")
     print("🛑 Appuyez sur Ctrl+C pour arrêter\n")
     
-    # Premier scan
-    opportunities = run_scanner()
-    
-    # Variable partagée pour les opportunités
-    opportunities_data = {'data': opportunities}
+    # Variable partagée pour les opportunités (vide au départ)
+    opportunities_data = {'data': []}
+    scanning_status = {'is_scanning': False}
     
     # Créer l'application Flask avec fonction dynamique
     app = Flask(__name__)
@@ -150,6 +149,10 @@ def main():
         # Utiliser le template directement
         from flask import render_template_string
         from datetime import datetime
+        
+        # Vérifier si le scan est en cours ou si les données sont disponibles
+        is_scanning = scanning_status.get('is_scanning', False)
+        opportunities = opportunities_data.get('data', [])
         
         HTML_TEMPLATE = """
         <!DOCTYPE html>
@@ -319,6 +322,7 @@ def main():
                                 <td style="font-size: 0.85em;">{{ opp.exit_signal if opp.exit_signal else 'HOLD' }}</td>
                             </tr>
                             {% endfor %}
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
@@ -333,24 +337,51 @@ def main():
         """
         
         last_update = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        return render_template_string(HTML_TEMPLATE, opportunities=opportunities_data['data'], last_update=last_update)
+        return render_template_string(HTML_TEMPLATE, 
+                                     opportunities=opportunities, 
+                                     last_update=last_update,
+                                     is_scanning=is_scanning)
     
     @app.route('/health')
     def health():
         """Route de santé."""
         return {'status': 'ok', 'opportunities_count': len(opportunities_data['data'])}, 200
     
-    # Fonction pour mettre à jour les opportunités en arrière-plan
+    # Fonction pour exécuter le scanner en arrière-plan
+    def run_scanner_background():
+        """Exécute le scanner en arrière-plan."""
+        scanning_status['is_scanning'] = True
+        try:
+            print("🚀 Démarrage du scan initial en arrière-plan...")
+            new_opportunities = run_scanner()
+            opportunities_data['data'] = new_opportunities
+            print("✅ Scan initial terminé!")
+        except Exception as e:
+            print(f"❌ Erreur lors du scan: {e}")
+        finally:
+            scanning_status['is_scanning'] = False
+    
+    # Fonction pour mettre à jour les opportunités toutes les heures
     def update_opportunities():
         """Met à jour les opportunités toutes les heures."""
         while True:
             time.sleep(3600)  # Attendre 1 heure
-            print("\n🔄 Mise à jour automatique...")
-            new_opportunities = run_scanner()
-            opportunities_data['data'] = new_opportunities
+            scanning_status['is_scanning'] = True
+            try:
+                print("\n🔄 Mise à jour automatique...")
+                new_opportunities = run_scanner()
+                opportunities_data['data'] = new_opportunities
+            except Exception as e:
+                print(f"❌ Erreur lors de la mise à jour: {e}")
+            finally:
+                scanning_status['is_scanning'] = False
     
-    # Lancer la mise à jour en arrière-plan
+    # Lancer le scanner initial en arrière-plan
     import threading
+    scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
+    scanner_thread.start()
+    
+    # Lancer la mise à jour périodique en arrière-plan
     update_thread = threading.Thread(target=update_opportunities, daemon=True)
     update_thread.start()
     
