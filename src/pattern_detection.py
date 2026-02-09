@@ -46,6 +46,17 @@ def detect_candlestick_patterns(df: pd.DataFrame) -> Dict:
     lower_shadow = min(open_price, close_price) - low_price
     total_range = high_price - low_price
     
+    # Pré-calcul des ratios pour éviter les erreurs "UnboundLocalError"
+    # et gérer le cas où total_range est 0
+    upper_shadow_ratio = 0.0
+    lower_shadow_ratio = 0.0
+    body_ratio = 0.0
+    
+    if total_range > 0:
+        upper_shadow_ratio = upper_shadow / total_range
+        lower_shadow_ratio = lower_shadow / total_range
+        body_ratio = body / total_range
+    
     # 1. Bearish Engulfing (très bearish)
     if prev_close > prev_open and close_price < open_price:
         if open_price > prev_close and close_price < prev_open:
@@ -58,19 +69,21 @@ def detect_candlestick_patterns(df: pd.DataFrame) -> Dict:
             patterns.append('Dark Cloud Cover')
             bearish_signals += 2
     
-    # 3. Shooting Star (bearish reversal)
+    # 3. Shooting Star (bearish reversal) - Longue mèche haute
     if total_range > 0:
-        shadow_ratio = upper_shadow / total_range
-        body_ratio = body / total_range
-        if shadow_ratio > 0.6 and body_ratio < 0.3 and close_price < open_price:
+        if upper_shadow_ratio > 0.6 and body_ratio < 0.3 and close_price < open_price:
             patterns.append('Shooting Star')
             bearish_signals += 2
     
-    # 4. Hanging Man (bearish si après hausse)
+    # 4. Hanging Man (bearish si après hausse) - Longue mèche basse
+    # Le Hanging Man ressemble à un marteau (Hammer) mais en haut de tendance
     if prev_close > prev_open:
-        if shadow_ratio > 0.6 and body_ratio < 0.3 and lower_shadow > body * 2:
-            patterns.append('Hanging Man')
-            bearish_signals += 1
+        # On utilise lower_shadow_ratio ici (correction du bug)
+        if lower_shadow_ratio > 0.6 and body_ratio < 0.3:
+             # Confirmation supplémentaire: petite mèche haute
+             if upper_shadow_ratio < 0.1:
+                patterns.append('Hanging Man')
+                bearish_signals += 1
     
     # 5. Three Black Crows (très bearish)
     if prev2 is not None and len(recent) >= 3:
@@ -324,4 +337,3 @@ def calculate_fibonacci_levels(df: pd.DataFrame, lookback: int = 50) -> Dict:
         'nearest_level': nearest['price'] if nearest else None,
         'nearest_fib': nearest['fibonacci'] if nearest else None
     }
-
