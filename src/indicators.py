@@ -5,6 +5,12 @@ Module pour calculer les indicateurs techniques adaptés au scalping.
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
+from pattern_detection import (
+    detect_candlestick_patterns,
+    detect_chart_patterns,
+    find_liquidity_zones,
+    calculate_fibonacci_levels
+)
 
 
 def calculate_sma(data: pd.Series, period: int) -> pd.Series:
@@ -239,6 +245,18 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     # Divergence RSI
     rsi_divergence = detect_rsi_divergence(df, rsi14, lookback=20)
     
+    # Patterns de chandeliers
+    candlestick_patterns = detect_candlestick_patterns(df)
+    
+    # Patterns chartistes
+    chart_patterns = detect_chart_patterns(df, lookback=50)
+    
+    # Zones de liquidité
+    liquidity_zones = find_liquidity_zones(df, lookback=100)
+    
+    # Niveaux Fibonacci
+    fibonacci_levels = calculate_fibonacci_levels(df, lookback=50)
+    
     # Volume
     volume_ma20 = calculate_sma(volume, 20)
     
@@ -281,6 +299,29 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         # Divergence RSI
         'rsi_divergence': rsi_divergence.get('has_divergence', False),
         'rsi_divergence_type': rsi_divergence.get('type'),
+        
+        # Patterns de chandeliers
+        'candlestick_patterns': candlestick_patterns.get('patterns', []),
+        'candlestick_bearish_signals': candlestick_patterns.get('bearish_signals', 0),
+        'has_bearish_candlestick': candlestick_patterns.get('has_bearish_pattern', False),
+        
+        # Patterns chartistes
+        'chart_patterns': chart_patterns.get('patterns', []),
+        'chart_bearish_signals': chart_patterns.get('bearish_signals', 0),
+        'has_bearish_chart_pattern': chart_patterns.get('has_bearish_pattern', False),
+        
+        # Zones de liquidité
+        'support_zones': liquidity_zones.get('support_zones', []),
+        'resistance_zones': liquidity_zones.get('resistance_zones', []),
+        'liquidity_clusters': liquidity_zones.get('liquidity_clusters', []),
+        'psychological_levels': liquidity_zones.get('psychological_levels', []),
+        'nearest_support': liquidity_zones.get('nearest_support'),
+        'nearest_resistance': liquidity_zones.get('nearest_resistance'),
+        
+        # Fibonacci
+        'fibonacci_levels': fibonacci_levels.get('levels', []),
+        'nearest_fibonacci': fibonacci_levels.get('nearest_level'),
+        'nearest_fib_ratio': fibonacci_levels.get('nearest_fib'),
         
         # Volume
         'volume_ma20': volume_ma20.iloc[-1] if len(volume_ma20) > 0 and not pd.isna(volume_ma20.iloc[-1]) else None,

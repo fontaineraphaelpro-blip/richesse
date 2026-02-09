@@ -288,6 +288,57 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
             score += 25  # Divergence bearish = signal très fort
             details.append("Divergence RSI bearish ✓✓✓")
     
+    # 12. Patterns de chandeliers bearish → +20 pour SHORT
+    candlestick_bearish = indicators.get('candlestick_bearish_signals', 0)
+    has_bearish_candlestick = indicators.get('has_bearish_candlestick', False)
+    if has_bearish_candlestick and entry_signal == 'SHORT':
+        score += min(candlestick_bearish * 7, 25)  # Max 25 points
+        details.append(f"Pattern chandelier bearish ({candlestick_bearish}) ✓")
+    
+    # 13. Patterns chartistes bearish → +30 pour SHORT (très fort)
+    chart_bearish = indicators.get('chart_bearish_signals', 0)
+    has_bearish_chart = indicators.get('has_bearish_chart_pattern', False)
+    if has_bearish_chart and entry_signal == 'SHORT':
+        score += min(chart_bearish * 10, 30)  # Max 30 points
+        details.append(f"Pattern chartiste bearish ({chart_bearish}) ✓✓")
+    
+    # 14. Proximité zone de résistance → +15 pour SHORT
+    nearest_resistance = indicators.get('nearest_resistance')
+    if nearest_resistance and entry_signal == 'SHORT' and current_price:
+        distance = ((nearest_resistance - current_price) / current_price) * 100
+        if 0 <= distance <= 2:
+            score += 15
+            details.append(f"Proche résistance ({distance:.2f}%) ✓")
+    
+    # 15. Niveaux psychologiques → +10 pour SHORT
+    psychological_levels = indicators.get('psychological_levels', [])
+    if psychological_levels and entry_signal == 'SHORT' and current_price:
+        for level in psychological_levels:
+            distance = abs((current_price - level) / current_price) * 100
+            if distance < 0.5:
+                score += 10
+                details.append(f"Niveau psychologique ${level:.2f} ✓")
+                break
+    
+    # 16. Zones de liquidité → +12 pour SHORT
+    liquidity_clusters = indicators.get('liquidity_clusters', [])
+    if liquidity_clusters and entry_signal == 'SHORT' and current_price:
+        for cluster in liquidity_clusters[:2]:
+            distance = abs((current_price - cluster['price']) / current_price) * 100
+            if distance < 1.0 and cluster['strength'] > 2.0:
+                score += 12
+                details.append(f"Zone liquidité (force: {cluster['strength']:.1f}) ✓")
+                break
+    
+    # 17. Niveaux Fibonacci → +10 pour SHORT
+    nearest_fibonacci = indicators.get('nearest_fibonacci')
+    if nearest_fibonacci and entry_signal == 'SHORT' and current_price:
+        distance = abs((current_price - nearest_fibonacci) / current_price) * 100
+        if distance < 0.5:
+            fib_ratio = indicators.get('nearest_fib_ratio')
+            score += 10
+            details.append(f"Fibonacci {fib_ratio} ({distance:.2f}%) ✓")
+    
     # 6. Prix proche support/résistance → +5
     if support_distance is not None:
         if 0 <= support_distance < 1:

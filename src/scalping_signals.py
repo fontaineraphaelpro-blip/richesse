@@ -52,6 +52,24 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     adx = indicators.get('adx')
     rsi_divergence = indicators.get('rsi_divergence', False)
     rsi_divergence_type = indicators.get('rsi_divergence_type')
+    
+    # Patterns
+    candlestick_bearish = indicators.get('candlestick_bearish_signals', 0)
+    chart_bearish = indicators.get('chart_bearish_signals', 0)
+    has_bearish_candlestick = indicators.get('has_bearish_candlestick', False)
+    has_bearish_chart = indicators.get('has_bearish_chart_pattern', False)
+    
+    # Zones de liquidité
+    nearest_support = indicators.get('nearest_support')
+    nearest_resistance = indicators.get('nearest_resistance')
+    support_zones = indicators.get('support_zones', [])
+    resistance_zones = indicators.get('resistance_zones', [])
+    liquidity_clusters = indicators.get('liquidity_clusters', [])
+    psychological_levels = indicators.get('psychological_levels', [])
+    
+    # Fibonacci
+    nearest_fibonacci = indicators.get('nearest_fibonacci')
+    
     volume_ratio = None
     if indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0:
         volume_ratio = indicators.get('current_volume') / indicators.get('volume_ma20')
@@ -182,6 +200,55 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
             bearish_confirmations += 2  # Divergence = double confirmation
             confidence += 25  # Divergence bearish = signal très fort
     
+    # 13. Patterns de chandeliers bearish
+    if has_bearish_candlestick and ema_bearish:
+        bearish_confirmations += 1
+        confidence += candlestick_bearish * 5  # Plus le pattern est fort, plus on ajoute
+        if candlestick_bearish >= 3:
+            bearish_confirmations += 1  # Pattern très bearish = double confirmation
+    
+    # 14. Patterns chartistes bearish
+    if has_bearish_chart and ema_bearish:
+        bearish_confirmations += 1
+        confidence += chart_bearish * 8  # Patterns chartistes = très importants
+        if chart_bearish >= 3:
+            bearish_confirmations += 1  # Pattern très bearish = double confirmation
+    
+    # 15. Proximité d'une zone de résistance (liquidity zone)
+    if nearest_resistance and current_price:
+        distance_to_resistance = ((nearest_resistance - current_price) / current_price) * 100
+        if 0 <= distance_to_resistance <= 2 and ema_bearish:  # Proche de la résistance
+            bearish_confirmations += 1
+            confidence += 15  # Proche résistance = bon point d'entrée SHORT
+    
+    # 16. Niveaux psychologiques (round numbers)
+    if psychological_levels and current_price:
+        for level in psychological_levels:
+            distance = abs((current_price - level) / current_price) * 100
+            if distance < 0.5:  # Très proche d'un niveau psychologique
+                if current_price < level and ema_bearish:  # En dessous = résistance
+                    bearish_confirmations += 1
+                    confidence += 10
+                break
+    
+    # 17. Zones de liquidité (clusters de volume)
+    if liquidity_clusters and current_price:
+        for cluster in liquidity_clusters[:2]:  # Top 2 clusters
+            cluster_price = cluster['price']
+            distance = abs((current_price - cluster_price) / current_price) * 100
+            if distance < 1.0 and cluster['strength'] > 2.0:  # Proche d'une zone de forte liquidité
+                if current_price < cluster_price and ema_bearish:
+                    bearish_confirmations += 1
+                    confidence += 8
+    
+    # 18. Niveaux Fibonacci (résistance)
+    if nearest_fibonacci and current_price:
+        distance_to_fib = abs((current_price - nearest_fibonacci) / current_price) * 100
+        if distance_to_fib < 0.5:  # Très proche d'un niveau Fibonacci
+            if current_price < nearest_fibonacci and ema_bearish:
+                bearish_confirmations += 1
+                confidence += 12
+    
     # 10. SMA20 vs SMA50 (confirmation tendance moyen terme)
     sma_bearish = False
     if sma20 and sma50:
@@ -222,17 +289,22 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 confidence += 5
     
     # DÉCISION FINALE: UNIQUEMENT les signaux SHORT
-    # Nécessite AU MOINS 6 confirmations bearish pour un signal SHORT valide
-    # et confiance minimum de 70 (encore plus strict)
+    # Nécessite AU MOINS 8 confirmations bearish pour un signal SHORT valide
+    # et confiance minimum de 75 (très strict avec toutes les données)
     # ET ADX > 20 (tendance doit être présente)
-    if bearish_confirmations >= 6 and confidence >= 70 and (adx is None or adx > 20):
+    if bearish_confirmations >= 8 and confidence >= 75 and (adx is None or adx > 20):
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
-    elif bearish_confirmations >= 5 and confidence >= 65 and (adx is None or adx > 25):
+    elif bearish_confirmations >= 7 and confidence >= 70 and (adx is None or adx > 25):
         # Signal SHORT acceptable mais moins fort
         entry_signal = 'SHORT'
         entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
-        confidence = min(confidence, 65)  # Limiter la confiance
+        confidence = min(confidence, 70)  # Limiter la confiance
+    elif bearish_confirmations >= 6 and confidence >= 65 and (adx is None or adx > 25):
+        # Signal SHORT minimal acceptable
+        entry_signal = 'SHORT'
+        entry_price = min(current_price, ema9) * 0.9995 if ema9 else current_price * 0.9995
+        confidence = min(confidence, 65)
     else:
         # Pas assez de confirmations ou pas bearish = pas de signal
         entry_signal = 'NEUTRAL'
