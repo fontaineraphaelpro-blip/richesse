@@ -1,49 +1,51 @@
 """
-Module pour calculer les indicateurs techniques adaptés au scalping.
+Module complet de calcul d'indicateurs techniques.
+Optimisé pour le SWING TRADING et le DAY TRADING.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
-from pattern_detection import (
-    detect_candlestick_patterns,
-    detect_chart_patterns,
-    find_liquidity_zones,
-    calculate_fibonacci_levels
-)
+
+# Import optionnel des patterns si le fichier existe
+try:
+    from pattern_detection import (
+        detect_candlestick_patterns,
+        detect_chart_patterns,
+        find_liquidity_zones,
+        calculate_fibonacci_levels
+    )
+    HAS_PATTERNS = True
+except ImportError:
+    HAS_PATTERNS = False
 
 
 def calculate_sma(data: pd.Series, period: int) -> pd.Series:
-    """Calcule la moyenne mobile simple (SMA)."""
+    """Calcule la Moyenne Mobile Simple (SMA)."""
     return data.rolling(window=period).mean()
 
 
 def calculate_ema(data: pd.Series, period: int) -> pd.Series:
-    """
-    Calcule la moyenne mobile exponentielle (EMA).
-    Plus réactive que SMA pour le scalping.
-    """
+    """Calcule la Moyenne Mobile Exponentielle (EMA)."""
     return data.ewm(span=period, adjust=False).mean()
 
 
 def calculate_rsi(data: pd.Series, period: int = 14) -> pd.Series:
-    """Calcule l'indicateur RSI (Relative Strength Index)."""
+    """
+    Calcule le RSI (Relative Strength Index).
+    """
     delta = data.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
-    
     return rsi
 
 
 def calculate_macd(data: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict:
     """
-    Calcule le MACD (Moving Average Convergence Divergence).
-    
-    Returns:
-        Dictionnaire avec macd_line, signal_line, histogram
+    Calcule le MACD (Trend & Momentum).
     """
     ema_fast = calculate_ema(data, fast)
     ema_slow = calculate_ema(data, slow)
@@ -60,10 +62,7 @@ def calculate_macd(data: pd.Series, fast: int = 12, slow: int = 26, signal: int 
 
 def calculate_bollinger_bands(data: pd.Series, period: int = 20, std_dev: float = 2.0) -> Dict:
     """
-    Calcule les Bandes de Bollinger.
-    
-    Returns:
-        Dictionnaire avec upper, middle, lower
+    Calcule les Bandes de Bollinger (Volatilité).
     """
     sma = calculate_sma(data, period)
     std = data.rolling(window=period).std()
@@ -74,14 +73,14 @@ def calculate_bollinger_bands(data: pd.Series, period: int = 20, std_dev: float 
     return {
         'upper': upper,
         'middle': sma,
-        'lower': lower
+        'lower': lower,
+        'width': (upper - lower) / sma  # Écartement des bandes (Bandwidth)
     }
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
-    Calcule l'ATR (Average True Range) pour mesurer la volatilité.
-    Important pour le scalping (stop-loss dynamique).
+    Calcule l'ATR (Average True Range) pour les Stop Loss.
     """
     high = df['high']
     low = df['low']
@@ -93,64 +92,33 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     atr = tr.rolling(window=period).mean()
-    
     return atr
-
-
-def calculate_momentum(data: pd.Series, period: int = 10) -> pd.Series:
-    """Calcule le momentum (taux de changement)."""
-    return data.diff(period)
-
-
-def calculate_stochastic(df: pd.DataFrame, period: int = 14) -> Dict:
-    """
-    Calcule le Stochastic Oscillator (%K et %D).
-    Utile pour détecter les zones de surachat/survente.
-    
-    Returns:
-        Dictionnaire avec k (stoch_k) et d (stoch_d)
-    """
-    low_min = df['low'].rolling(window=period).min()
-    high_max = df['high'].rolling(window=period).max()
-    
-    # Éviter division par zéro
-    denominator = (high_max - low_min).replace(0, np.nan)
-    stoch_k = 100 * ((df['close'] - low_min) / denominator)
-    stoch_d = stoch_k.rolling(window=3).mean()
-    
-    return {
-        'k': stoch_k,
-        'd': stoch_d
-    }
 
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
-    Calcule l'ADX (Average Directional Index) pour mesurer la force de la tendance.
-    ADX > 25 = tendance forte, ADX < 20 = tendance faible.
+    Calcule l'ADX (Force de la tendance).
+    ADX > 25 = Tendance forte.
+    ADX < 20 = Range (Pas de trade en swing).
     """
     high = df['high']
     low = df['low']
     close = df['close']
     
-    # True Range
     tr1 = high - low
     tr2 = abs(high - close.shift())
     tr3 = abs(low - close.shift())
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
     
-    # Directional Movement
     plus_dm = high.diff()
     minus_dm = -low.diff()
     plus_dm[plus_dm < 0] = 0
     minus_dm[minus_dm < 0] = 0
     
-    # Smoothing
-    atr = tr.rolling(window=period).mean()
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
     
-    # ADX (éviter division par zéro)
     dx_denominator = plus_di + minus_di
     dx = 100 * abs(plus_di - minus_di) / dx_denominator.replace(0, np.nan)
     adx = dx.rolling(window=period).mean()
@@ -158,179 +126,148 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return adx
 
 
-def detect_rsi_divergence(df: pd.DataFrame, rsi: pd.Series, lookback: int = 20) -> Dict:
+def calculate_stochastic(df: pd.DataFrame, period: int = 14, k_period: int = 3, d_period: int = 3) -> Dict:
     """
-    Détecte les divergences RSI (bearish divergence = signal SHORT fort).
-    
-    Returns:
-        Dictionnaire avec 'has_divergence' (bool) et 'type' ('bearish' ou None)
+    Calcule l'Oscillateur Stochastique.
     """
-    if len(df) < lookback or len(rsi) < lookback:
-        return {'has_divergence': False, 'type': None}
+    low_min = df['low'].rolling(window=period).min()
+    high_max = df['high'].rolling(window=period).max()
     
-    try:
-        recent_prices = df['close'].tail(lookback)
-        recent_rsi = rsi.tail(lookback)
-        
-        # Chercher un pic de prix suivi d'un pic RSI plus bas (divergence bearish)
-        price_peaks = []
-        rsi_peaks = []
-        
-        for i in range(2, len(recent_prices) - 2):
-            if recent_prices.iloc[i] > recent_prices.iloc[i-1] and recent_prices.iloc[i] > recent_prices.iloc[i+1]:
-                price_peaks.append((i, recent_prices.iloc[i]))
-            if recent_rsi.iloc[i] > recent_rsi.iloc[i-1] and recent_rsi.iloc[i] > recent_rsi.iloc[i+1]:
-                rsi_peaks.append((i, recent_rsi.iloc[i]))
-        
-        # Vérifier divergence bearish (prix monte mais RSI baisse)
-        if len(price_peaks) >= 2 and len(rsi_peaks) >= 2:
-            last_price_peak = price_peaks[-1][1]
-            prev_price_peak = price_peaks[-2][1]
-            last_rsi_peak = rsi_peaks[-1][1]
-            prev_rsi_peak = rsi_peaks[-2][1]
-            
-            if last_price_peak > prev_price_peak and last_rsi_peak < prev_rsi_peak:
-                return {'has_divergence': True, 'type': 'bearish'}
-    except Exception:
-        pass
+    k = 100 * ((df['close'] - low_min) / (high_max - low_min))
+    d = k.rolling(window=d_period).mean()  # Signal line
     
-    return {'has_divergence': False, 'type': None}
+    return {'k': k, 'd': d}
+
+
+def calculate_ichimoku(df: pd.DataFrame) -> Dict:
+    """
+    Calcule les bases d'Ichimoku (Tenkan & Kijun) pour confirmation supplémentaire.
+    """
+    # Tenkan-sen (Conversion Line): (9-period high + 9-period low)/2))
+    period9_high = df['high'].rolling(window=9).max()
+    period9_low = df['low'].rolling(window=9).min()
+    tenkan_sen = (period9_high + period9_low) / 2
+
+    # Kijun-sen (Base Line): (26-period high + 26-period low)/2))
+    period26_high = df['high'].rolling(window=26).max()
+    period26_low = df['low'].rolling(window=26).min()
+    kijun_sen = (period26_high + period26_low) / 2
+    
+    return {'tenkan': tenkan_sen, 'kijun': kijun_sen}
 
 
 def calculate_indicators(df: pd.DataFrame) -> Dict:
     """
-    Calcule tous les indicateurs techniques pour le scalping.
+    Fonction MAÎTRESSE : Calcule TOUS les indicateurs et retourne un dictionnaire complet.
     
     Args:
         df: DataFrame avec colonnes: timestamp, open, high, low, close, volume
     
     Returns:
-        Dictionnaire avec tous les indicateurs calculés
+        Dictionnaire riche avec valeurs actuelles et état du marché.
     """
-    if df is None or len(df) == 0:
+    if df is None or len(df) < 200:
         return {}
     
     close = df['close']
     volume = df['volume']
     
-    # Indicateurs de base
-    sma20 = calculate_sma(close, 20)
+    # 1. MOYENNES MOBILES (Tendance)
+    # ----------------------------------------
     sma50 = calculate_sma(close, 50)
+    sma200 = calculate_sma(close, 200)
+    ema9 = calculate_ema(close, 9)   # Pour entrées rapides
+    ema21 = calculate_ema(close, 21) # Pour entrées rapides
     
-    # EMA rapides pour scalping (9, 21)
-    ema9 = calculate_ema(close, 9)
-    ema21 = calculate_ema(close, 21)
-    
-    # RSI
+    # 2. MOMENTUM & OSCILLATEURS
+    # ----------------------------------------
     rsi14 = calculate_rsi(close, 14)
+    macd_data = calculate_macd(close)
+    stoch_data = calculate_stochastic(df)
     
-    # MACD
-    macd_data = calculate_macd(close, fast=12, slow=26, signal=9)
+    # 3. VOLATILITÉ & FORCE
+    # ----------------------------------------
+    atr = calculate_atr(df, 14)
+    adx = calculate_adx(df, 14)
+    bb = calculate_bollinger_bands(close, 20, 2.0)
     
-    # Bollinger Bands
-    bb = calculate_bollinger_bands(close, period=20, std_dev=2.0)
-    
-    # ATR (volatilité)
-    atr = calculate_atr(df, period=14)
-    
-    # Momentum
-    momentum = calculate_momentum(close, period=10)
-    
-    # Stochastic
-    stoch = calculate_stochastic(df, period=14)
-    
-    # ADX (force de la tendance)
-    adx = calculate_adx(df, period=14)
-    
-    # Divergence RSI
-    rsi_divergence = detect_rsi_divergence(df, rsi14, lookback=20)
-    
-    # Patterns de chandeliers
-    candlestick_patterns = detect_candlestick_patterns(df)
-    
-    # Patterns chartistes
-    chart_patterns = detect_chart_patterns(df, lookback=50)
-    
-    # Zones de liquidité
-    liquidity_zones = find_liquidity_zones(df, lookback=100)
-    
-    # Niveaux Fibonacci
-    fibonacci_levels = calculate_fibonacci_levels(df, lookback=50)
-    
-    # Volume
+    # 4. VOLUME
+    # ----------------------------------------
     volume_ma20 = calculate_sma(volume, 20)
     
-    # Récupérer les dernières valeurs
+    # 5. PATTERNS & SUPPORTS (Si disponibles)
+    # ----------------------------------------
+    patterns = {}
+    support_zones = []
+    if HAS_PATTERNS:
+        try:
+            patterns = detect_candlestick_patterns(df)
+            liquidity = find_liquidity_zones(df, lookback=100)
+            support_zones = liquidity.get('support_zones', [])
+        except Exception:
+            pass
+
+    # 6. CONSTRUCTION DU DICTIONNAIRE FINAL
+    # ----------------------------------------
+    # On prend la dernière valeur (.iloc[-1]) pour le temps réel
+    # On prend parfois l'avant-dernière (.iloc[-2]) pour confirmer une clôture
+    
+    current_price = close.iloc[-1]
+    
     indicators = {
-        # Moyennes mobiles
-        'sma20': sma20.iloc[-1] if len(sma20) > 0 and not pd.isna(sma20.iloc[-1]) else None,
-        'sma50': sma50.iloc[-1] if len(sma50) > 0 and not pd.isna(sma50.iloc[-1]) else None,
-        'ema9': ema9.iloc[-1] if len(ema9) > 0 and not pd.isna(ema9.iloc[-1]) else None,
-        'ema21': ema21.iloc[-1] if len(ema21) > 0 and not pd.isna(ema21.iloc[-1]) else None,
+        # --- PRIX ---
+        'current_price': current_price,
+        'open_price': df['open'].iloc[-1],
+        'high_price': df['high'].iloc[-1],
+        'low_price': df['low'].iloc[-1],
         
-        # RSI
-        'rsi14': rsi14.iloc[-1] if len(rsi14) > 0 and not pd.isna(rsi14.iloc[-1]) else None,
+        # --- MOYENNES MOBILES (Fondamental pour Swing) ---
+        'sma50': sma50.iloc[-1],
+        'sma200': sma200.iloc[-1],
+        'ema9': ema9.iloc[-1],
+        'ema21': ema21.iloc[-1],
         
-        # MACD
-        'macd': macd_data['macd'].iloc[-1] if len(macd_data['macd']) > 0 and not pd.isna(macd_data['macd'].iloc[-1]) else None,
-        'macd_signal': macd_data['signal'].iloc[-1] if len(macd_data['signal']) > 0 and not pd.isna(macd_data['signal'].iloc[-1]) else None,
-        'macd_histogram': macd_data['histogram'].iloc[-1] if len(macd_data['histogram']) > 0 and not pd.isna(macd_data['histogram'].iloc[-1]) else None,
+        # Écarts (%) par rapport aux moyennes (utile pour détecter les extensions)
+        'dist_sma50_percent': ((current_price - sma50.iloc[-1]) / sma50.iloc[-1]) * 100,
+        'dist_sma200_percent': ((current_price - sma200.iloc[-1]) / sma200.iloc[-1]) * 100,
         
-        # Bollinger Bands
-        'bb_upper': bb['upper'].iloc[-1] if len(bb['upper']) > 0 and not pd.isna(bb['upper'].iloc[-1]) else None,
-        'bb_middle': bb['middle'].iloc[-1] if len(bb['middle']) > 0 and not pd.isna(bb['middle'].iloc[-1]) else None,
-        'bb_lower': bb['lower'].iloc[-1] if len(bb['lower']) > 0 and not pd.isna(bb['lower'].iloc[-1]) else None,
+        # --- MOMENTUM ---
+        'rsi14': rsi14.iloc[-1],
+        'rsi14_prev': rsi14.iloc[-2], # Pour voir la pente du RSI
         
-        # ATR (volatilité)
-        'atr': atr.iloc[-1] if len(atr) > 0 and not pd.isna(atr.iloc[-1]) else None,
-        'atr_percent': (atr.iloc[-1] / close.iloc[-1] * 100) if len(atr) > 0 and len(close) > 0 and not pd.isna(atr.iloc[-1]) and close.iloc[-1] > 0 else None,
+        'macd': macd_data['macd'].iloc[-1],
+        'macd_signal': macd_data['signal'].iloc[-1],
+        'macd_hist': macd_data['histogram'].iloc[-1],
+        'macd_hist_prev': macd_data['histogram'].iloc[-2], # Pour détecter retournement MACD
         
-        # Momentum
-        'momentum': momentum.iloc[-1] if len(momentum) > 0 and not pd.isna(momentum.iloc[-1]) else None,
-        'momentum_percent': (momentum.iloc[-1] / close.iloc[-10] * 100) if len(momentum) > 0 and len(close) > 10 and not pd.isna(momentum.iloc[-1]) and close.iloc[-10] > 0 else None,
+        'stoch_k': stoch_data['k'].iloc[-1],
+        'stoch_d': stoch_data['d'].iloc[-1],
         
-        # Stochastic
-        'stoch_k': stoch['k'].iloc[-1] if len(stoch['k']) > 0 and not pd.isna(stoch['k'].iloc[-1]) else None,
-        'stoch_d': stoch['d'].iloc[-1] if len(stoch['d']) > 0 and not pd.isna(stoch['d'].iloc[-1]) else None,
+        # --- VOLATILITÉ & TENDANCE ---
+        'atr': atr.iloc[-1],
+        'atr_percent': (atr.iloc[-1] / current_price) * 100,
+        'adx': adx.iloc[-1],
         
-        # ADX
-        'adx': adx.iloc[-1] if len(adx) > 0 and not pd.isna(adx.iloc[-1]) else None,
+        # --- BANDES DE BOLLINGER ---
+        'bb_upper': bb['upper'].iloc[-1],
+        'bb_lower': bb['lower'].iloc[-1],
+        'bb_width': bb['width'].iloc[-1],
+        'bb_percent': (current_price - bb['lower'].iloc[-1]) / (bb['upper'].iloc[-1] - bb['lower'].iloc[-1]),
         
-        # Divergence RSI
-        'rsi_divergence': rsi_divergence.get('has_divergence', False),
-        'rsi_divergence_type': rsi_divergence.get('type'),
+        # --- VOLUME ---
+        'current_volume': volume.iloc[-1],
+        'volume_ma20': volume_ma20.iloc[-1],
+        'volume_ratio': volume.iloc[-1] / volume_ma20.iloc[-1] if volume_ma20.iloc[-1] > 0 else 0,
         
-        # Patterns de chandeliers
-        'candlestick_patterns': candlestick_patterns.get('patterns', []),
-        'candlestick_bearish_signals': candlestick_patterns.get('bearish_signals', 0),
-        'has_bearish_candlestick': candlestick_patterns.get('has_bearish_pattern', False),
-        
-        # Patterns chartistes
-        'chart_patterns': chart_patterns.get('patterns', []),
-        'chart_bearish_signals': chart_patterns.get('bearish_signals', 0),
-        'has_bearish_chart_pattern': chart_patterns.get('has_bearish_pattern', False),
-        
-        # Zones de liquidité
-        'support_zones': liquidity_zones.get('support_zones', []),
-        'resistance_zones': liquidity_zones.get('resistance_zones', []),
-        'liquidity_clusters': liquidity_zones.get('liquidity_clusters', []),
-        'psychological_levels': liquidity_zones.get('psychological_levels', []),
-        'nearest_support': liquidity_zones.get('nearest_support'),
-        'nearest_resistance': liquidity_zones.get('nearest_resistance'),
-        
-        # Fibonacci
-        'fibonacci_levels': fibonacci_levels.get('levels', []),
-        'nearest_fibonacci': fibonacci_levels.get('nearest_level'),
-        'nearest_fib_ratio': fibonacci_levels.get('nearest_fib'),
-        
-        # Volume
-        'volume_ma20': volume_ma20.iloc[-1] if len(volume_ma20) > 0 and not pd.isna(volume_ma20.iloc[-1]) else None,
-        'current_volume': volume.iloc[-1] if len(volume) > 0 else None,
-        
-        # Prix actuel
-        'current_price': close.iloc[-1] if len(close) > 0 else None,
-        'high_24h': df['high'].tail(96).max() if len(df) >= 96 else df['high'].max(),  # 24h en 15min = 96 bougies
-        'low_24h': df['low'].tail(96).min() if len(df) >= 96 else df['low'].min(),
+        # --- PATTERNS & EXTRA ---
+        'candlestick_patterns': patterns.get('patterns', []),
+        'is_bearish_candle': patterns.get('has_bearish_pattern', False),
+        'support_zones': support_zones,
     }
     
+    # Nettoyage des valeurs NaN (au cas où)
+    for k, v in indicators.items():
+        if isinstance(v, (float, np.float64, np.float32)) and np.isnan(v):
+            indicators[k] = None
+            
     return indicators
