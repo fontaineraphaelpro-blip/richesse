@@ -1,228 +1,369 @@
 """
-Script principal du Crypto Signal Scanner Web.
-Version HYBRIDE : Bot Autonome + Dashboard d'Analyse Technique Complet.
-Indépendant et prêt pour le déploiement.
+Script principal: Crypto Swing Trader Bot & Dashboard.
+Version: ULTIMATE (Swing Trading 1H + Gestion PnL + Dashboard Complet)
 """
 
 import time
 import os
 import threading
-import traceback
 from datetime import datetime
 from flask import Flask, render_template_string
 
-# Imports des modules locaux (Assurez-vous que ces fichiers existent)
+# Import des modules internes
 from trader import PaperTrader
-try:
-    from data_fetcher import fetch_multiple_pairs
-    from indicators import calculate_indicators
-    from support import find_swing_low, calculate_distance_to_support
-    from scorer import calculate_opportunity_score
-except ImportError as e:
-    print(f"⚠️ Modules manquants : {e}. Assurez-vous d'avoir tous les fichiers.")
-    # On crée des mocks pour éviter le crash si on teste isolément
-    def fetch_multiple_pairs(*args, **kwargs): return {}, {}
+from data_fetcher import fetch_multiple_pairs
+from indicators import calculate_indicators
+from scorer import calculate_opportunity_score
 
-# Configuration globale
-SCAN_INTERVAL = 3600  # 1 heure en secondes (pour éviter les bans API et respecter la logique 1H)
+# --- CONFIGURATION DU BOT ---
+TIMEFRAME = '1h'           # Unité de temps (Swing Trading)
+CANDLE_LIMIT = 500         # Nécessaire pour la SMA 200
+TRADE_AMOUNT = 200         # Montant par trade (USDT)
+MIN_SCORE_TO_BUY = 70      # Score minimum pour acheter (0-100)
+SCAN_INTERVAL = 1800       # Temps de pause entre les scans (30 min)
 
-def run_scanner():
-    """
-    Exécute un scan complet, gère le trading auto, et retourne TOUTES les infos pour le dashboard.
-    """
-    print("\n" + "="*60)
-    print("🚀 CRYPTO SCANNER - Mode HYBRIDE (1h)")
-    print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    
-    try:
-        # 1. Récupération des données
-        print("📊 Récupération des données sur 500 bougies de 1h...")
-        # Note: limit=500 est souvent suffisant et plus rapide que 1000
-        data, real_prices = fetch_multiple_pairs(None, interval='1h', limit=500)
-        
-        if not data:
-            print("❌ Aucune donnée reçue des API.")
-            return []
-            
-        # ==============================================================================
-        # 2. GESTION DES SORTIES (Bot)
-        # ==============================================================================
-        trader = PaperTrader() # Charge automatiquement le wallet existant
-        if real_prices:
-            trader.check_positions(real_prices)
-        
-        # ==============================================================================
-        
-        # 3. Analyse Technique Complète
-        print("🔍 Analyse détaillée du marché...")
-        opportunities = []
-        
-        for i, (symbol, df) in enumerate(data.items(), 1):
-            try:
-                indicators = calculate_indicators(df)
-                current_price = real_prices.get(symbol) or indicators.get('current_price')
-                
-                if not current_price: continue
-
-                support = find_swing_low(df, lookback=50)
-                support_dist = calculate_distance_to_support(current_price, support) if support else None
-                
-                score_data = calculate_opportunity_score(indicators, support_dist, df)
-                
-                opportunities.append({
-                    'pair': symbol,
-                    'score': score_data.get('score', 0),
-                    'trend': score_data.get('trend', 'Neutral'),
-                    'signal_text': score_data.get('signal', '-'),
-                    'details': score_data.get('details', ''),
-                    'price': current_price,
-                    'rsi': indicators.get('rsi14'),
-                    'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
-                    'entry_price': score_data.get('entry_price'),
-                    'stop_loss': score_data.get('stop_loss'),
-                    'take_profit_1': score_data.get('take_profit_1'),
-                    'confidence': score_data.get('confidence', 0),
-                })
-            except Exception as inner_e:
-                # Si une paire échoue, on continue les autres
-                continue
-        
-        # Filtrage et Tri
-        opportunities.sort(key=lambda x: x['score'], reverse=True)
-        top_picks = opportunities[:20] 
-
-        for i, opp in enumerate(top_picks, 1):
-            opp['rank'] = i
-        
-        # Affichage Terminal
-        print("\n" + "-"*80)
-        print(f"{'Paire':<10} {'Score':<5} {'Signal':<6} {'Prix':<10} {'RSI':<6}")
-        print("-"*80)
-        
-        for opp in top_picks[:5]: # Affiche seulement le top 5 dans les logs pour clarté
-            price_str = f"${opp['price']:.4f}" if opp['price'] else "N/A"
-            rsi_str = f"{opp['rsi']:.1f}" if opp['rsi'] else "-"
-            print(f"{opp['pair']:<10} {opp['score']:<5} {opp['entry_signal']:<6} {price_str:<10} {rsi_str:<6}")
-        
-        # ==============================================================================
-        # 4. GESTION DES ENTRÉES (Bot Auto)
-        # ==============================================================================
-        my_positions = trader.get_open_positions()
-        balance = trader.get_usdt_balance()
-        
-        TRADE_AMOUNT = 100
-        MIN_SCORE = 80 
-        
-        if balance >= TRADE_AMOUNT:
-            for opp in top_picks:
-                if (opp['score'] >= MIN_SCORE and 
-                    opp['entry_signal'] == 'LONG' and 
-                    opp['pair'] not in my_positions and
-                    opp['stop_loss'] is not None):
-                    
-                    trader.place_buy_order(
-                        symbol=opp['pair'],
-                        amount_usdt=TRADE_AMOUNT,
-                        current_price=opp['price'], 
-                        stop_loss_price=opp['stop_loss'],
-                        take_profit_price=opp['take_profit_1']
-                    )
-                    # On ne prend qu'un trade par cycle pour prudence
-                    break 
-        
-        return top_picks
-        
-    except Exception as e:
-        print(f"\n❌ Erreur critique scan: {e}")
-        traceback.print_exc()
-        return []
-
-# Variable globale pour partager les données entre le Thread et Flask
+# Variable partagée entre le Scanner (Thread) et le Site Web (Flask)
 shared_data = {
-    'opportunities': [], 
+    'opportunities': [],
+    'last_prices': {},     # Pour calculer le PnL en temps réel
     'is_scanning': False,
     'last_update': 'Jamais'
 }
 
-def create_app():
-    """Factory function pour créer l'app Flask."""
-    app = Flask(__name__)
+app = Flask(__name__)
+
+def run_scanner():
+    """
+    Cœur du système : Scanne le marché, gère les positions et trouve des opportunités.
+    """
+    print("\n" + "="*70)
+    print(f"🦁 SWING BOT ACTIF - {datetime.now().strftime('%d/%m %H:%M:%S')}")
+    print("Stratégie: Trend Following (SMA 200) + Breakout")
+    print("="*70)
     
-    @app.route('/')
-    def home():
-        # On recharge le trader à chaque requête pour avoir le solde à jour
-        trader = PaperTrader()
-        balance = trader.get_usdt_balance()
-        trades = trader.get_trades_history()
-        positions = trader.get_open_positions()
+    try:
+        # --- ÉTAPE 1 : Récupération des données ---
+        print("📡 Récupération des données marché (Binance)...")
+        data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
         
-        # NOTE : J'ai gardé votre template HTML original mais abrégé ici pour la clarté.
-        # Il fonctionnera exactement comme avant.
-        HTML = """
-        <!DOCTYPE html>
-        <html lang="fr">
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="refresh" content="30">
-            <title>Crypto Trading Hub</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { font-family: system-ui, sans-serif; background: #f0f2f5; padding: 20px; color: #333; }
-                .container { max-width: 1200px; margin: 0 auto; }
-                .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
-                .badge { padding: 4px 8px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8em; }
-                .bg-green { background: #27ae60; } .bg-red { background: #c0392b; } .bg-blue { background: #2980b9; }
-                .header { display: flex; justify-content: space-between; align-items: center; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🚀 Crypto Hub</h1>
-                    <div>
-                        <span class="badge bg-blue">{{ "Scan en cours..." if is_scanning else "✅ Prêt" }}</span>
-                        <small>MAJ: {{ last_update }}</small>
+        if not data:
+            print("❌ Erreur critique : Aucune donnée reçue.")
+            return []
+            
+        # Mise à jour des prix en temps réel pour le dashboard
+        shared_data['last_prices'] = real_prices
+
+        # --- ÉTAPE 2 : Gestion des Positions Existantes (Stop Loss / Take Profit) ---
+        print("💼 Vérification du portefeuille...")
+        trader = PaperTrader()
+        
+        # Le trader vérifie s'il doit vendre des positions
+        if real_prices:
+            trader.check_positions(real_prices)
+        
+        # --- ÉTAPE 3 : Analyse Technique (Scan) ---
+        print("🔍 Analyse des 50 paires...")
+        opportunities = []
+        
+        for symbol, df in data.items():
+            # 1. Calcul des indicateurs (SMA, RSI, MACD, ATR...)
+            indicators = calculate_indicators(df)
+            
+            # 2. Calcul du Score et Signaux
+            # On passe le DataFrame complet pour la validation du volume
+            score_data = calculate_opportunity_score(indicators, None, df)
+            
+            # 3. Filtrage : On ne garde que ce qui a un signal (même faible)
+            if score_data['entry_signal'] != 'NEUTRAL':
+                opportunities.append({
+                    'pair': symbol,
+                    'score': score_data['score'],
+                    'trend': score_data['trend'],
+                    'signal': score_data['signal'],
+                    'price': indicators['current_price'],
+                    'entry_signal': score_data['entry_signal'],
+                    'stop_loss': score_data['stop_loss'],
+                    'take_profit': score_data['take_profit_1'],
+                    'details': score_data.get('details', ''),
+                    'confidence': score_data.get('confidence', 0),
+                    'atr_percent': score_data.get('atr_percent', 0)
+                })
+
+        # Tri par Score décroissant (Les meilleures opportunités en haut)
+        opportunities.sort(key=lambda x: x['score'], reverse=True)
+        
+        # On garde le Top 15 pour l'affichage
+        top_picks = opportunities[:15]
+        
+        # Affichage Terminal propre
+        print("\n" + "-"*95)
+        print(f"{'Paire':<10} {'Score':<5} {'Signal':<6} {'Prix':<10} {'SL':<10} {'Détails'}")
+        print("-"*95)
+        for opp in top_picks:
+            print(f"{opp['pair']:<10} {opp['score']:<5} {opp['entry_signal']:<6} ${opp['price']:.4f} ${opp['stop_loss']:.4f} {opp['details'][:35]}...")
+
+        # --- ÉTAPE 4 : Exécution Automatique (Achat) ---
+        print("\n🤖 Auto-Trading...")
+        my_positions = trader.get_open_positions() # Retourne un dictionnaire
+        balance = trader.get_usdt_balance()
+        
+        for opp in top_picks:
+            # RÈGLES D'ACHAT STRICTES :
+            # 1. Score >= 70 (Qualité)
+            # 2. Signal LONG (On achète)
+            # 3. Pas déjà en portefeuille
+            # 4. Solde suffisant
+            
+            if (opp['score'] >= MIN_SCORE_TO_BUY and 
+                opp['entry_signal'] == 'LONG' and 
+                opp['pair'] not in my_positions):
+                
+                if balance >= TRADE_AMOUNT:
+                    success = trader.place_buy_order(
+                        symbol=opp['pair'],
+                        amount_usdt=TRADE_AMOUNT,
+                        current_price=opp['price'],
+                        stop_loss_price=opp['stop_loss'],
+                        take_profit_price=opp['take_profit']
+                    )
+                    if success:
+                        balance -= TRADE_AMOUNT # Mise à jour locale pour la boucle
+                else:
+                    print("⚠️ Solde insuffisant pour nouveaux trades.")
+                    break
+        
+        return top_picks
+        
+    except Exception as e:
+        print(f"\n❌ Erreur Scan: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+# --- PARTIE WEB (FLASK DASHBOARD) ---
+
+@app.route('/')
+def dashboard():
+    trader = PaperTrader()
+    balance = trader.get_usdt_balance()
+    all_trades = trader.get_trades_history()
+    open_positions = trader.get_open_positions() # Dict: {'BTCUSDT': {...}}
+    
+    # 1. Séparer les trades terminés (Ventes)
+    history = [t for t in all_trades if 'VENTE' in t['type']]
+    
+    # 2. Calculer le PnL en temps réel des positions ouvertes
+    positions_view = []
+    total_unrealized_pnl = 0
+    
+    for symbol, pos_data in open_positions.items():
+        entry = pos_data['entry_price']
+        # Prix actuel (soit du dernier scan, soit l'entrée si scan pas encore fait)
+        current = shared_data['last_prices'].get(symbol, entry)
+        
+        # Calcul PnL non réalisé
+        pnl_value = (current - entry) * pos_data['quantity']
+        pnl_percent = ((current - entry) / entry) * 100
+        
+        total_unrealized_pnl += pnl_value
+        
+        positions_view.append({
+            'symbol': symbol,
+            'entry': entry,
+            'current': current,
+            'amount': pos_data['amount_usdt'],
+            'pnl_value': pnl_value,
+            'pnl_percent': pnl_percent,
+            'sl': pos_data['stop_loss'],
+            'tp': pos_data['take_profit']
+        })
+
+    # Template HTML/CSS Complet
+    HTML = """
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>🦁 Swing Bot Master</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+        <style>
+            :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #3b82f6; --green: #10b981; --red: #ef4444; }
+            body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+            .container { max-width: 1400px; margin: 0 auto; }
+            
+            /* Header */
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #334155; padding-bottom: 20px; }
+            .status { background: rgba(59, 130, 246, 0.1); color: var(--accent); padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.9em; border: 1px solid rgba(59, 130, 246, 0.2); }
+            .scanning { animation: pulse 2s infinite; color: #fbbf24; border-color: #fbbf24; }
+            
+            /* Stats Cards */
+            .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px; }
+            .card { background: var(--card); padding: 25px; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+            .stat-label { color: #94a3b8; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+            .stat-value { font-size: 2em; font-weight: 800; }
+            .positive { color: var(--green); }
+            .negative { color: var(--red); }
+            
+            /* Tables */
+            h2 { font-size: 1.2em; margin-bottom: 15px; color: #e2e8f0; display: flex; align-items: center; gap: 10px; }
+            .table-container { overflow-x: auto; }
+            table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+            th { text-align: left; padding: 15px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #334155; }
+            td { padding: 15px; border-bottom: 1px solid #334155; vertical-align: middle; }
+            tr:last-child td { border-bottom: none; }
+            
+            /* Badges */
+            .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: 700; }
+            .b-green { background: rgba(16, 185, 129, 0.2); color: var(--green); }
+            .b-red { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+            .score { font-weight: 800; }
+            .s-high { color: var(--green); }
+            .s-med { color: #fbbf24; }
+            
+            @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+            
+            .refresh-btn { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+            .refresh-btn:hover { opacity: 0.9; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div>
+                    <h1 style="margin:0">🦁 Swing Bot Dashboard</h1>
+                    <div style="color:#94a3b8; font-size:0.9em; margin-top:5px">Mise à jour: {{ last_update }}</div>
+                </div>
+                <div class="status {% if is_scanning %}scanning{% endif %}">
+                    {% if is_scanning %}🔄 SCAN EN COURS...{% else %}✅ SYSTÈME PRÊT{% endif %}
+                </div>
+            </div>
+
+            <div class="grid-stats">
+                <div class="card">
+                    <div class="stat-label">Solde Disponible</div>
+                    <div class="stat-value">${{ "%.2f"|format(balance) }}</div>
+                </div>
+                <div class="card">
+                    <div class="stat-label">PnL Latent (Positions)</div>
+                    <div class="stat-value {% if total_unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ "%+.2f"|format(total_unrealized_pnl) }} $
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="stat-label">Positions Actives</div>
+                    <div class="stat-value">{{ positions|length }}</div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                
+                <div class="card">
+                    <h2>💼 Portefeuille Actif</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Paire</th>
+                                    <th>Entrée</th>
+                                    <th>Actuel</th>
+                                    <th>Montant</th>
+                                    <th>PnL</th>
+                                    <th>SL / TP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if not positions %}
+                                <tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b">Aucune position ouverte</td></tr>
+                                {% else %}
+                                {% for pos in positions %}
+                                <tr>
+                                    <td style="font-weight:bold">{{ pos.symbol }}</td>
+                                    <td>${{ "%.2f"|format(pos.entry) }}</td>
+                                    <td>${{ "%.2f"|format(pos.current) }}</td>
+                                    <td>${{ "%.0f"|format(pos.amount) }}</td>
+                                    <td>
+                                        <span class="badge {% if pos.pnl_value >= 0 %}b-green{% else %}b-red{% endif %}">
+                                            {{ "%+.2f"|format(pos.pnl_percent) }}%
+                                        </span>
+                                        <div style="font-size:0.8em; margin-top:4px; opacity:0.8">${{ "%+.2f"|format(pos.pnl_value) }}</div>
+                                    </td>
+                                    <td style="font-size:0.85em">
+                                        <span style="color:#ef4444">SL: {{ "%.2f"|format(pos.sl) }}</span><br>
+                                        <span style="color:#10b981">TP: {{ "%.2f"|format(pos.tp) }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <div class="card" style="border-left: 5px solid #2980b9;">
-                    <h2>💰 Portefeuille: ${{ "%.2f"|format(balance) }}</h2>
-                    <p>Positions ouvertes: {{ positions|length }} | Trades: {{ trades|length }}</p>
-                    
-                    {% if positions %}
-                    <h3>Positions Actuelles</h3>
-                    <ul>
-                        {% for sym, pos in positions.items() %}
-                        <li><strong>{{ sym }}</strong> - Entrée: ${{ "%.4f"|format(pos.entry_price) }} ({{ pos.entry_time }})</li>
-                        {% endfor %}
-                    </ul>
-                    {% endif %}
+                <div class="card">
+                    <h2>📜 Dernières Clôtures</h2>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Paire</th>
+                                    <th>Résultat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if not history %}
+                                <tr><td colspan="2" style="text-align:center; color:#64748b">Aucun historique</td></tr>
+                                {% else %}
+                                {% for trade in history[:8] %}
+                                <tr>
+                                    <td>
+                                        <div><strong>{{ trade.symbol }}</strong></div>
+                                        <div style="font-size:0.8em; color:#64748b">{{ trade.time }}</div>
+                                    </td>
+                                    <td style="text-align:right">
+                                        <span class="{% if trade.pnl > 0 %}positive{% else %}negative{% endif %}" style="font-weight:bold">
+                                            {{ "%+.2f"|format(trade.pnl) }}$
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
+            </div>
 
-                <div class="card" style="border-left: 5px solid #27ae60;">
-                    <h2>📡 Opportunités (Top 20)</h2>
+            <div class="card" style="margin-top: 20px;">
+                <h2>📡 Scanner Opportunités (Top 15)</h2>
+                <div class="table-container">
                     <table>
                         <thead>
-                            <tr><th>#</th><th>Paire</th><th>Score</th><th>Signal</th><th>Prix</th><th>RSI</th><th>SL / TP</th></tr>
+                            <tr>
+                                <th>#</th>
+                                <th>Paire</th>
+                                <th>Score</th>
+                                <th>Action</th>
+                                <th>Prix</th>
+                                <th>Détails Technique</th>
+                            </tr>
                         </thead>
                         <tbody>
                             {% if not opportunities %}
-                            <tr><td colspan="7">Scan en attente ou données insuffisantes...</td></tr>
+                            <tr><td colspan="6" style="text-align:center; padding:30px">En attente du prochain scan...</td></tr>
                             {% else %}
                             {% for opp in opportunities %}
                             <tr>
-                                <td>{{ opp.rank }}</td>
-                                <td><strong>{{ opp.pair }}</strong></td>
-                                <td style="font-weight:bold; color: {% if opp.score >= 80 %}#27ae60{% else %}#f39c12{% endif %}">{{ opp.score }}</td>
-                                <td><span class="badge {% if opp.entry_signal == 'LONG' %}bg-green{% elif opp.entry_signal == 'SHORT' %}bg-red{% else %}bg-gray{% endif %}">{{ opp.entry_signal }}</span></td>
-                                <td>${{ "%.4f"|format(opp.price) }}</td>
-                                <td>{{ "%.1f"|format(opp.rsi) if opp.rsi else "-" }}</td>
-                                <td style="font-size:0.9em">
-                                    <span style="color:#c0392b">SL: {{ "%.4f"|format(opp.stop_loss) if opp.stop_loss else "-" }}</span><br>
-                                    <span style="color:#27ae60">TP: {{ "%.4f"|format(opp.take_profit_1) if opp.take_profit_1 else "-" }}</span>
+                                <td>{{ loop.index }}</td>
+                                <td style="font-weight:bold; color:var(--accent)">{{ opp.pair }}</td>
+                                <td class="score {% if opp.score >= 70 %}s-high{% else %}s-med{% endif %}">{{ opp.score }}</td>
+                                <td>
+                                    <span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">
+                                        {{ opp.entry_signal }}
+                                    </span>
                                 </td>
+                                <td>${{ "%.4f"|format(opp.price) }}</td>
+                                <td style="font-size:0.9em; color:#cbd5e1">{{ opp.details }}</td>
                             </tr>
                             {% endfor %}
                             {% endif %}
@@ -230,46 +371,50 @@ def create_app():
                     </table>
                 </div>
             </div>
-        </body>
-        </html>
-        """
-        
-        return render_template_string(HTML, 
-                                     opportunities=shared_data['opportunities'], 
-                                     last_update=shared_data['last_update'],
-                                     is_scanning=shared_data['is_scanning'],
-                                     balance=balance,
-                                     trades=trades,
-                                     positions=positions)
-    return app
+        </div>
+        <script>
+            // Rafraîchissement automatique toutes les 10 secondes
+            setTimeout(function(){ location.reload(); }, 10000);
+        </script>
+    </body>
+    </html>
+    """
+    
+    return render_template_string(HTML, 
+                                 balance=balance,
+                                 positions=positions_view,
+                                 total_unrealized_pnl=total_unrealized_pnl,
+                                 history=history,
+                                 opportunities=shared_data['opportunities'],
+                                 is_scanning=shared_data['is_scanning'],
+                                 last_update=shared_data['last_update'])
+
+# --- BOUCLE PRINCIPALE (THREAD) ---
 
 def run_loop():
-    """Boucle infinie exécutée dans un thread séparé."""
-    print("🔄 Démarrage de la boucle de scan...")
+    """Boucle infinie qui lance le scanner périodiquement."""
+    print("⏳ Démarrage de la boucle de scan...")
     while True:
         shared_data['is_scanning'] = True
         try:
-            results = run_scanner()
-            shared_data['opportunities'] = results
-            shared_data['last_update'] = datetime.now().strftime('%H:%M')
+            shared_data['opportunities'] = run_scanner()
+            shared_data['last_update'] = datetime.now().strftime('%H:%M:%S')
         except Exception as e:
-            print(f"⚠️ Erreur dans la boucle principale: {e}")
+            print(f"❌ Erreur Loop: {e}")
         finally:
             shared_data['is_scanning'] = False
         
-        print(f"💤 Pause de {SCAN_INTERVAL/60} min...")
+        print(f"💤 Pause de {SCAN_INTERVAL/60} minutes...")
         time.sleep(SCAN_INTERVAL)
 
-def main():
-    # 1. Lancer le thread de scan en arrière-plan
+# --- LANCEMENT ---
+
+if __name__ == '__main__':
+    # 1. Lancer le scanner dans un thread séparé (background)
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
     
-    # 2. Lancer le serveur Web Flask
-    app = create_app()
+    # 2. Lancer le serveur Web Flask (bloquant)
+    print("🌍 Dashboard accessible sur http://localhost:8080")
     port = int(os.environ.get('PORT', 8080))
-    # use_reloader=False est important pour éviter de lancer 2 fois le thread scanner en mode debug local
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
-if __name__ == '__main__':
-    main()
+    app.run(host='0.0.0.0', port=port, debug=False)
