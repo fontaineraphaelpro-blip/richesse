@@ -25,7 +25,7 @@ TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
 MIN_SCORE_BUY    = 70      # Score min pour auto-buy
-SCAN_INTERVAL    = 1800    # Secondes entre scans (30 min)
+SCAN_INTERVAL    = 700    # Secondes entre scans (30 min)
 MAX_POSITIONS    = 5       # Positions simultanées max
 RISK_PERCENT     = 2.0     # % du capital par trade (risk management)
 
