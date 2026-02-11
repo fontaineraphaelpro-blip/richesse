@@ -1,5 +1,5 @@
-"""
-Point d'entrée WSGI pour Gunicorn (production).
+﻿"""
+Point d'entr├®e WSGI pour Gunicorn (production).
 """
 
 import sys
@@ -15,104 +15,80 @@ src_dir = os.path.join(base_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-# Variables globales
+# Importer les modules n├®cessaires
+from fetch_pairs import get_top_usdt_pairs
+from data_fetcher import fetch_multiple_pairs
+from indicators import calculate_indicators
+from support import find_swing_low, calculate_distance_to_support
+from scorer import calculate_opportunity_score
+
+# Variable globale pour les opportunit├®s
 opportunities_data = {'data': []}
-app = None
-HEROKU_ENV = os.environ.get('DYNO', '') != ''  # Détecte si on est sur Heroku
 
-# Fonction pour importer les modules en toute sécurité
-def safe_import():
-    """Importe les modules nécessaires avec gestion d'erreur."""
-    try:
-        from fetch_pairs import get_top_usdt_pairs
-        from data_fetcher import fetch_multiple_pairs
-        from indicators import calculate_indicators
-        from support import find_swing_low, calculate_distance_to_support
-        from scorer import calculate_opportunity_score
-        return {
-            'get_top_usdt_pairs': get_top_usdt_pairs,
-            'fetch_multiple_pairs': fetch_multiple_pairs,
-            'calculate_indicators': calculate_indicators,
-            'find_swing_low': find_swing_low,
-            'calculate_distance_to_support': calculate_distance_to_support,
-            'calculate_opportunity_score': calculate_opportunity_score
-        }
-    except Exception as e:
-        print(f"⚠️ Erreur lors de l'import des modules: {e}")
-        print("⚠️ Le scanner fonctionnera en mode dégradé")
-        return None
-
-# Importer les modules
-modules = safe_import()
-
-# Fonction pour exécuter un scan
+# Fonction pour ex├®cuter un scan
 def run_scanner():
-    """Exécute un scan complet et retourne les Top 10 opportunités."""
-    if modules is None:
-        print("⚠️ Modules non chargés - Mode dégradé activé")
-        return []
-    
+    """Ex├®cute un scan complet et retourne les Top 10 opportunit├®s."""
     from datetime import datetime
     
     print("\n" + "="*60)
-    print("🚀 CRYPTO SIGNAL SCANNER - Démarrage du scan")
+    print("­ƒÜÇ CRYPTO SIGNAL SCANNER - D├®marrage du scan")
     print("="*60)
-    print(f"⏰ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+    print(f"ÔÅ░ {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
     
     try:
-        # 1. Récupérer les principales paires USDT
-        print("📋 Étape 1: Récupération des paires USDT...")
-        # Réduire à 30 paires pour accélérer le scan initial
-        pairs = modules['get_top_usdt_pairs'](limit=30)
+        # 1. R├®cup├®rer les principales paires USDT
+        print("­ƒôï ├ëtape 1: R├®cup├®ration des paires USDT...")
+        # R├®duire ├á 30 paires pour acc├®l├®rer le scan initial
+        pairs = get_top_usdt_pairs(limit=30)
         
         if not pairs:
-            print("❌ Aucune paire trouvée. Arrêt du scanner.")
+            print("ÔØî Aucune paire trouv├®e. Arr├¬t du scanner.")
             return []
         
-        # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
-        print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
-        print("💡 Mode SCALPING - Récupération des prix réels depuis CryptoCompare API publique")
-        data, real_prices = modules['fetch_multiple_pairs'](pairs, interval='15m', limit=200)
+        # 2. R├®cup├®rer les prix r├®els et g├®n├®rer les donn├®es OHLCV pour scalping (15min)
+        print("\n­ƒôè ├ëtape 2: R├®cup├®ration des prix r├®els et g├®n├®ration OHLCV (15min, 200 bougies)...")
+        print("­ƒÆí Mode SCALPING - R├®cup├®ration des prix r├®els depuis CryptoCompare API publique")
+        data, real_prices = fetch_multiple_pairs(pairs, interval='15m', limit=200)
         
         if not data:
-            print("❌ Aucune donnée récupérée. Arrêt du scanner.")
+            print("ÔØî Aucune donn├®e r├®cup├®r├®e. Arr├¬t du scanner.")
             return []
         
         # 3. Calculer les indicateurs et scores pour chaque paire
-        print("\n🔍 Étape 3: Calcul des indicateurs et scores...")
+        print("\n­ƒöì ├ëtape 3: Calcul des indicateurs et scores...")
         opportunities = []
         total = len(data)
         
         for i, (symbol, df) in enumerate(data.items(), 1):
-            print(f"📊 Analyse {symbol} ({i}/{total})...", end='\r')
+            print(f"­ƒôè Analyse {symbol} ({i}/{total})...", end='\r')
             
             # Calculer les indicateurs techniques
-            indicators = modules['calculate_indicators'](df)
+            indicators = calculate_indicators(df)
             
-            # UTILISER LE PRIX RÉEL RÉCUPÉRÉ, pas le prix généré
+            # UTILISER LE PRIX R├ëEL R├ëCUP├ëR├ë, pas le prix g├®n├®r├®
             current_price = real_prices.get(symbol)
             if not current_price:
-                # Fallback: utiliser le prix du DataFrame si pas de prix réel
+                # Fallback: utiliser le prix du DataFrame si pas de prix r├®el
                 current_price = indicators.get('current_price')
             
-            # Détecter le support
-            support = modules['find_swing_low'](df, lookback=30)
+            # D├®tecter le support
+            support = find_swing_low(df, lookback=30)
             support_distance = None
             
             if current_price and support:
-                support_distance = modules['calculate_distance_to_support'](current_price, support)
+                support_distance = calculate_distance_to_support(current_price, support)
             
-            # Calculer le score d'opportunité (avec DataFrame pour résistance)
-            score_data = modules['calculate_opportunity_score'](indicators, support_distance, df)
+            # Calculer le score d'opportunit├® (avec DataFrame pour r├®sistance)
+            score_data = calculate_opportunity_score(indicators, support_distance, df)
             
-            # Ajouter à la liste des opportunités avec toutes les infos scalping
+            # Ajouter ├á la liste des opportunit├®s avec toutes les infos scalping
             opportunities.append({
                 'pair': symbol,
                 'score': score_data['score'],
                 'trend': score_data['trend'],
                 'rsi': indicators.get('rsi14'),
                 'signal': score_data['signal'],
-                'price': current_price,  # PRIX RÉEL récupéré depuis CoinGecko
+                'price': current_price,  # PRIX R├ëEL r├®cup├®r├® depuis CoinGecko
                 # Signaux scalping
                 'entry_signal': score_data.get('entry_signal', 'NEUTRAL'),
                 'entry_price': score_data.get('entry_price'),
@@ -122,7 +98,7 @@ def run_scanner():
                 'risk_reward_ratio': score_data.get('risk_reward_ratio'),
                 'exit_signal': score_data.get('exit_signal', 'HOLD'),
                 'confidence': score_data.get('confidence', 0),
-                # Indicateurs supplémentaires
+                # Indicateurs suppl├®mentaires
                 'ema9': indicators.get('ema9'),
                 'ema21': indicators.get('ema21'),
                 'macd': indicators.get('macd'),
@@ -131,11 +107,11 @@ def run_scanner():
                 'volume_ratio': (indicators.get('current_volume') / indicators.get('volume_ma20')) if (indicators.get('current_volume') and indicators.get('volume_ma20') and indicators.get('volume_ma20') > 0) else None
             })
         
-        print(f"\n✅ {len(opportunities)} paires analysées")
+        print(f"\nÔ£à {len(opportunities)} paires analys├®es")
         
-        # 4. Filtrer UNIQUEMENT les opportunités SHORT de qualité ULTRA-STRICTE
+        # 4. Filtrer UNIQUEMENT les opportunit├®s SHORT de qualit├® ULTRA-STRICTE
         # Score >= 65, signal SHORT uniquement, confiance >= 75
-        # Avec validation de cohérence et force du signal
+        # Avec validation de coh├®rence et force du signal
         from signal_validation import validate_signal_coherence, calculate_signal_strength
         
         quality_opportunities = []
@@ -163,7 +139,7 @@ def run_scanner():
                 validation = validate_signal_coherence(indicators_for_validation, 'SHORT')
                 strength = calculate_signal_strength(indicators_for_validation, 'SHORT', opp.get('confidence', 0))
                 
-                # Filtrer uniquement les signaux excellents ou très bons
+                # Filtrer uniquement les signaux excellents ou tr├¿s bons
                 if (validation['is_valid'] and 
                     validation['coherence_score'] >= 75 and
                     strength['quality'] in ['EXCELLENT', 'VERY_GOOD', 'GOOD'] and
@@ -175,13 +151,13 @@ def run_scanner():
                     opp['risk_level'] = strength['risk_level']
                     quality_opportunities.append(opp)
         
-        print(f"📊 {len(quality_opportunities)} opportunités SHORT ULTRA-QUALITÉ trouvées (score >= 65, confiance >= 75, cohérence >= 75%)")
+        print(f"­ƒôè {len(quality_opportunities)} opportunit├®s SHORT ULTRA-QUALIT├ë trouv├®es (score >= 65, confiance >= 75, coh├®rence >= 75%)")
         
-        # Trier par score décroissant et prendre le Top 10
+        # Trier par score d├®croissant et prendre le Top 10
         quality_opportunities.sort(key=lambda x: x['score'], reverse=True)
         top_10 = quality_opportunities[:10]
         
-        # Si moins de 10 opportunités de qualité, compléter avec les meilleures autres
+        # Si moins de 10 opportunit├®s de qualit├®, compl├®ter avec les meilleures autres
         if len(top_10) < 10:
             remaining = [opp for opp in opportunities if opp not in quality_opportunities]
             remaining.sort(key=lambda x: x['score'], reverse=True)
@@ -191,16 +167,16 @@ def run_scanner():
         for i, opp in enumerate(top_10, 1):
             opp['rank'] = i
         
-        print("\n✅ Scan terminé avec succès!")
+        print("\nÔ£à Scan termin├® avec succ├¿s!")
         return top_10
         
     except Exception as e:
-        print(f"\n❌ Erreur lors du scan: {e}")
+        print(f"\nÔØî Erreur lors du scan: {e}")
         import traceback
         traceback.print_exc()
         return []
 
-# Créer l'app Flask
+# Cr├®er l'app Flask
 app = Flask(__name__)
 
 # Template HTML
@@ -272,10 +248,10 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Crypto Signal Scanner</h1>
-            <p>Top 10 Opportunités Crypto</p>
+            <h1>­ƒÜÇ Crypto Signal Scanner</h1>
+            <p>Top 10 Opportunit├®s Crypto</p>
             <div class="last-update">
-                Dernière mise à jour: {{ last_update }}
+                Derni├¿re mise ├á jour: {{ last_update }}
             </div>
         </div>
         <div class="main-content">
@@ -311,7 +287,7 @@ HTML_TEMPLATE = """
             </table>
         </div>
         <div class="footer">
-            <p><strong>⚠️ Avertissement:</strong> Ce scanner fournit des indications statistiques, pas des conseils financiers.</p>
+            <p><strong>ÔÜá´©Å Avertissement:</strong> Ce scanner fournit des indications statistiques, pas des conseils financiers.</p>
             <p>Ne pas utiliser pour des ordres automatiques. Toujours faire vos propres recherches (DYOR).</p>
         </div>
     </div>
@@ -321,78 +297,49 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    """Page d'accueil avec le tableau des opportunités."""
+    """Page d'accueil avec le tableau des opportunit├®s."""
     last_update = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
     return render_template_string(HTML_TEMPLATE, opportunities=opportunities_data['data'], last_update=last_update)
 
 @app.route('/health')
 def health():
-    """Route de santé."""
+    """Route de sant├®."""
     return {'status': 'ok', 'opportunities_count': len(opportunities_data['data'])}, 200
 
-# Fonction pour exécuter le scanner en arrière-plan
+# Fonction pour ex├®cuter le scanner en arri├¿re-plan
 def run_scanner_background():
-    """Exécute le scanner en arrière-plan."""
+    """Ex├®cute le scanner en arri├¿re-plan."""
     try:
-        print("🚀 Démarrage du scan initial en arrière-plan...")
+        print("­ƒÜÇ D├®marrage du scan initial en arri├¿re-plan...")
         new_opportunities = run_scanner()
         opportunities_data['data'] = new_opportunities
-        print("✅ Scan initial terminé!")
+        print("Ô£à Scan initial termin├®!")
     except Exception as e:
-        print(f"❌ Erreur lors du scan: {e}")
+        print(f"ÔØî Erreur lors du scan: {e}")
         import traceback
         traceback.print_exc()
 
-# Fonction pour mettre à jour les opportunités toutes les heures
+# Fonction pour mettre ├á jour les opportunit├®s toutes les heures
 def update_opportunities():
-    """Met à jour les opportunités toutes les heures."""
+    """Met ├á jour les opportunit├®s toutes les heures."""
     while True:
         time.sleep(3600)  # Attendre 1 heure
         try:
-            print("\n🔄 Mise à jour automatique...")
+            print("\n­ƒöä Mise ├á jour automatique...")
             new_opportunities = run_scanner()
             opportunities_data['data'] = new_opportunities
         except Exception as e:
-            print(f"❌ Erreur lors de la mise à jour: {e}")
+            print(f"ÔØî Erreur lors de la mise ├á jour: {e}")
 
-# Fonction pour exécuter le scanner en arrière-plan
-def run_scanner_background():
-    """Exécute le scanner en arrière-plan."""
-    try:
-        print("🚀 Démarrage du scan initial en arrière-plan...")
-        new_opportunities = run_scanner()
-        opportunities_data['data'] = new_opportunities
-        print("✅ Scan initial terminé!")
-    except Exception as e:
-        print(f"❌ Erreur lors du scan: {e}")
-        import traceback
-        traceback.print_exc()
+# Lancer le scanner initial en arri├¿re-plan (non-bloquant)
+scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
+scanner_thread.start()
 
-# Fonction pour mettre à jour les opportunités toutes les heures
-def update_opportunities():
-    """Met à jour les opportunités toutes les heures."""
-    while True:
-        time.sleep(3600)  # Attendre 1 heure
-        try:
-            print("\n🔄 Mise à jour automatique...")
-            new_opportunities = run_scanner()
-            opportunities_data['data'] = new_opportunities
-        except Exception as e:
-            print(f"❌ Erreur lors de la mise à jour: {e}")
+# Lancer la mise ├á jour p├®riodique en arri├¿re-plan
+update_thread = threading.Thread(target=update_opportunities, daemon=True)
+update_thread.start()
 
-# Lancer les threads SEULEMENT si les modules sont chargés et en production
-if modules is not None:
-    # Lancer le scanner initial en arrière-plan (non-bloquant)
-    scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
-    scanner_thread.start()
-
-    # Lancer la mise à jour périodique en arrière-plan
-    update_thread = threading.Thread(target=update_opportunities, daemon=True)
-    update_thread.start()
-
-    print("✅ Serveur web prêt - Scanner en cours d'initialisation en arrière-plan...")
-else:
-    print("⚠️ Mode dégradé - Scanner non lancé (modules manquants)")
+print("Ô£à Serveur web pr├¬t - Scanner en cours d'initialisation en arri├¿re-plan...")
 
 # Exporter pour Gunicorn
 application = app
