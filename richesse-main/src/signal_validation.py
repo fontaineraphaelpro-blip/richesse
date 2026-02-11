@@ -94,9 +94,9 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
     # Calcul final
     coherence_percent = (coherence_score / max_score * 100) if max_score > 0 else 0
     
-    # Validation assouplie : 50% de cohérence suffit pour afficher le signal
-    # On laisse l'utilisateur juger
-    is_valid = coherence_percent >= 50
+    # Validation stricte : 65% de cohérence minimum (au lieu de 50%)
+    # Cela améliore la qualité des signaux et augmente le taux de réussite
+    is_valid = coherence_percent >= 65
 
     return {
         'is_valid': is_valid,
@@ -123,4 +123,50 @@ def calculate_signal_strength(indicators: Dict, entry_signal: str, confidence: i
         'strength': strength_score,
         'quality': quality,
         'risk_level': 'LOW' if strength_score > 60 else 'MEDIUM'
+    }
+
+
+def calculate_position_size(balance_usdt: float, entry_price: float, stop_loss: float, risk_per_trade: float = 0.01, min_usdt: float = 5.0) -> Dict:
+    """
+    Calcule la taille de position (en USDT et en quantité) basée sur le risque par trade.
+
+    Args:
+        balance_usdt: Solde disponible en USDT
+        entry_price: Prix d'entrée
+        stop_loss: Prix du stop loss
+        risk_per_trade: Fraction du solde à risquer (ex: 0.01 = 1%)
+        min_usdt: Taille minimale d'investissement acceptée
+
+    Returns:
+        Dictionnaire avec 'risk_amount_usdt', 'position_usdt', 'quantity' et 'notes'
+    """
+    notes = []
+
+    # Validation basique
+    if not entry_price or not stop_loss or entry_price == stop_loss:
+        return {'risk_amount_usdt': 0, 'position_usdt': 0, 'quantity': 0, 'notes': ['Invalid price or stop_loss']}
+
+    # Calcul du risque en USDT (ce qu'on est prêt à perdre)
+    risk_amount = balance_usdt * float(risk_per_trade)
+
+    # Distance en prix
+    risk_dist = abs(entry_price - stop_loss)
+    if risk_dist == 0:
+        return {'risk_amount_usdt': 0, 'position_usdt': 0, 'quantity': 0, 'notes': ['Zero risk distance']}
+
+    # Position size en quantité = risk_amount / risk_dist
+    quantity = risk_amount / risk_dist
+
+    # Montant à investir approximatif
+    position_usdt = quantity * entry_price
+
+    # Si la position est trop petite (frais / minimum), on lève une note
+    if position_usdt < min_usdt:
+        notes.append(f'Position too small (${position_usdt:.2f} < ${min_usdt})')
+
+    return {
+        'risk_amount_usdt': round(risk_amount, 6),
+        'position_usdt': round(position_usdt, 6),
+        'quantity': round(quantity, 8),
+        'notes': notes
     }
