@@ -15,19 +15,43 @@ src_dir = os.path.join(base_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-# Importer les modules nécessaires
-from fetch_pairs import get_top_usdt_pairs
-from data_fetcher import fetch_multiple_pairs
-from indicators import calculate_indicators
-from support import find_swing_low, calculate_distance_to_support
-from scorer import calculate_opportunity_score
-
-# Variable globale pour les opportunités
+# Variables globales
 opportunities_data = {'data': []}
+app = None
+HEROKU_ENV = os.environ.get('DYNO', '') != ''  # Détecte si on est sur Heroku
+
+# Fonction pour importer les modules en toute sécurité
+def safe_import():
+    """Importe les modules nécessaires avec gestion d'erreur."""
+    try:
+        from fetch_pairs import get_top_usdt_pairs
+        from data_fetcher import fetch_multiple_pairs
+        from indicators import calculate_indicators
+        from support import find_swing_low, calculate_distance_to_support
+        from scorer import calculate_opportunity_score
+        return {
+            'get_top_usdt_pairs': get_top_usdt_pairs,
+            'fetch_multiple_pairs': fetch_multiple_pairs,
+            'calculate_indicators': calculate_indicators,
+            'find_swing_low': find_swing_low,
+            'calculate_distance_to_support': calculate_distance_to_support,
+            'calculate_opportunity_score': calculate_opportunity_score
+        }
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'import des modules: {e}")
+        print("⚠️ Le scanner fonctionnera en mode dégradé")
+        return None
+
+# Importer les modules
+modules = safe_import()
 
 # Fonction pour exécuter un scan
 def run_scanner():
     """Exécute un scan complet et retourne les Top 10 opportunités."""
+    if modules is None:
+        print("⚠️ Modules non chargés - Mode dégradé activé")
+        return []
+    
     from datetime import datetime
     
     print("\n" + "="*60)
@@ -39,7 +63,7 @@ def run_scanner():
         # 1. Récupérer les principales paires USDT
         print("📋 Étape 1: Récupération des paires USDT...")
         # Réduire à 30 paires pour accélérer le scan initial
-        pairs = get_top_usdt_pairs(limit=30)
+        pairs = modules['get_top_usdt_pairs'](limit=30)
         
         if not pairs:
             print("❌ Aucune paire trouvée. Arrêt du scanner.")
@@ -48,7 +72,7 @@ def run_scanner():
         # 2. Récupérer les prix réels et générer les données OHLCV pour scalping (15min)
         print("\n📊 Étape 2: Récupération des prix réels et génération OHLCV (15min, 200 bougies)...")
         print("💡 Mode SCALPING - Récupération des prix réels depuis CryptoCompare API publique")
-        data, real_prices = fetch_multiple_pairs(pairs, interval='15m', limit=200)
+        data, real_prices = modules['fetch_multiple_pairs'](pairs, interval='15m', limit=200)
         
         if not data:
             print("❌ Aucune donnée récupérée. Arrêt du scanner.")
@@ -63,7 +87,7 @@ def run_scanner():
             print(f"📊 Analyse {symbol} ({i}/{total})...", end='\r')
             
             # Calculer les indicateurs techniques
-            indicators = calculate_indicators(df)
+            indicators = modules['calculate_indicators'](df)
             
             # UTILISER LE PRIX RÉEL RÉCUPÉRÉ, pas le prix généré
             current_price = real_prices.get(symbol)
@@ -72,14 +96,14 @@ def run_scanner():
                 current_price = indicators.get('current_price')
             
             # Détecter le support
-            support = find_swing_low(df, lookback=30)
+            support = modules['find_swing_low'](df, lookback=30)
             support_distance = None
             
             if current_price and support:
-                support_distance = calculate_distance_to_support(current_price, support)
+                support_distance = modules['calculate_distance_to_support'](current_price, support)
             
             # Calculer le score d'opportunité (avec DataFrame pour résistance)
-            score_data = calculate_opportunity_score(indicators, support_distance, df)
+            score_data = modules['calculate_opportunity_score'](indicators, support_distance, df)
             
             # Ajouter à la liste des opportunités avec toutes les infos scalping
             opportunities.append({
@@ -331,15 +355,44 @@ def update_opportunities():
         except Exception as e:
             print(f"❌ Erreur lors de la mise à jour: {e}")
 
-# Lancer le scanner initial en arrière-plan (non-bloquant)
-scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
-scanner_thread.start()
+# Fonction pour exécuter le scanner en arrière-plan
+def run_scanner_background():
+    """Exécute le scanner en arrière-plan."""
+    try:
+        print("🚀 Démarrage du scan initial en arrière-plan...")
+        new_opportunities = run_scanner()
+        opportunities_data['data'] = new_opportunities
+        print("✅ Scan initial terminé!")
+    except Exception as e:
+        print(f"❌ Erreur lors du scan: {e}")
+        import traceback
+        traceback.print_exc()
 
-# Lancer la mise à jour périodique en arrière-plan
-update_thread = threading.Thread(target=update_opportunities, daemon=True)
-update_thread.start()
+# Fonction pour mettre à jour les opportunités toutes les heures
+def update_opportunities():
+    """Met à jour les opportunités toutes les heures."""
+    while True:
+        time.sleep(3600)  # Attendre 1 heure
+        try:
+            print("\n🔄 Mise à jour automatique...")
+            new_opportunities = run_scanner()
+            opportunities_data['data'] = new_opportunities
+        except Exception as e:
+            print(f"❌ Erreur lors de la mise à jour: {e}")
 
-print("✅ Serveur web prêt - Scanner en cours d'initialisation en arrière-plan...")
+# Lancer les threads SEULEMENT si les modules sont chargés et en production
+if modules is not None:
+    # Lancer le scanner initial en arrière-plan (non-bloquant)
+    scanner_thread = threading.Thread(target=run_scanner_background, daemon=True)
+    scanner_thread.start()
+
+    # Lancer la mise à jour périodique en arrière-plan
+    update_thread = threading.Thread(target=update_opportunities, daemon=True)
+    update_thread.start()
+
+    print("✅ Serveur web prêt - Scanner en cours d'initialisation en arrière-plan...")
+else:
+    print("⚠️ Mode dégradé - Scanner non lancé (modules manquants)")
 
 # Exporter pour Gunicorn
 application = app
