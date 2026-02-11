@@ -1,0 +1,16 @@
+# Railfile - Railpack Configuration
+# Déclare explicitement le type d'app et le buildpack
+
+stack "ubuntu-22.04"
+
+language "Python" do
+  version "3.11.8"
+  runtime_dir "/"
+end
+
+# Build commands
+run "pip install --upgrade pip"
+run "pip install -r requirements.txt"
+
+# Start command  
+cmd "gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile - wsgi:application"
