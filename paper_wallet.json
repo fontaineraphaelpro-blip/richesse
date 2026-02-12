@@ -1,0 +1,13 @@
+{
+    "USDT": 850.0,
+    "positions": {
+        "BTCUSDT": {
+            "amount_usdt": 150.0,
+            "quantity": 0.0015,
+            "entry_price": 50000.0,
+            "entry_time": "2026-02-12 14:30",
+            "stop_loss": 48500.0,
+            "take_profit": 52500.0
+        }
+    }
+}
