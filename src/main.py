@@ -6,12 +6,15 @@ Version: ULTIMATE (Swing Trading 1H + Gestion PnL + Dashboard Complet)
 import time
 import os
 import threading
+import json
 from datetime import datetime
 try:
-    from flask import Flask, render_template_string
+    from flask import Flask, render_template_string, jsonify
 except Exception:
     Flask = None
     def render_template_string(template, **kwargs):
+        raise RuntimeError('Flask not available in this environment')
+    def jsonify(*args, **kwargs):
         raise RuntimeError('Flask not available in this environment')
 
 # Import des modules internes
@@ -261,9 +264,9 @@ def dashboard():
             <div class="header">
                 <div>
                     <h1 style="margin:0">🦁 Swing Bot Dashboard</h1>
-                    <div style="color:#94a3b8; font-size:0.9em; margin-top:5px">Mise à jour: {{ last_update }}</div>
+                    <div style="color:#94a3b8; font-size:0.9em; margin-top:5px">Mise à jour: <span id="last-update">{{ last_update }}</span></div>
                 </div>
-                <div class="status {% if is_scanning %}scanning{% endif %}">
+                <div class="status {% if is_scanning %}scanning{% endif %}" id="status-badge">
                     {% if is_scanning %}🔄 SCAN EN COURS...{% else %}✅ SYSTÈME PRÊT{% endif %}
                 </div>
             </div>
@@ -271,17 +274,17 @@ def dashboard():
             <div class="grid-stats">
                 <div class="card">
                     <div class="stat-label">Solde Disponible</div>
-                    <div class="stat-value">${{ "%.2f"|format(balance) }}</div>
+                    <div class="stat-value" id="balance-value">${{ "%.2f"|format(balance) }}</div>
                 </div>
                 <div class="card">
                     <div class="stat-label">PnL Latent (Positions)</div>
-                    <div class="stat-value {% if total_unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}">
+                    <div class="stat-value {% if total_unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}" id="pnl-value">
                         {{ "%+.2f"|format(total_unrealized_pnl) }} $
                     </div>
                 </div>
                 <div class="card">
                     <div class="stat-label">Positions Actives</div>
-                    <div class="stat-value">{{ positions|length }} / 10</div>
+                    <div class="stat-value" id="positions-count">{{ positions|length }} / 10</div>
                 </div>
                 <div class="card">
                     <div class="stat-label">Levier Appliqué</div>
@@ -431,7 +434,45 @@ def dashboard():
             </div>
         </div>
         <script>
-            // Auto-refresh désactivé
+            // Auto-refresh temps réel - Rafraîchit les données toutes les 5 secondes
+            async function refreshData() {
+                try {
+                    const response = await fetch('/api/data');
+                    const data = await response.json();
+                    
+                    // Mise à jour du solde
+                    document.getElementById('balance-value').textContent = '$' + data.balance.toFixed(2);
+                    
+                    // Mise à jour du PnL
+                    const pnlElement = document.getElementById('pnl-value');
+                    pnlElement.textContent = (data.total_unrealized_pnl >= 0 ? '+' : '') + data.total_unrealized_pnl.toFixed(2) + ' $';
+                    pnlElement.className = 'stat-value ' + (data.total_unrealized_pnl >= 0 ? 'positive' : 'negative');
+                    
+                    // Mise à jour du nombre de positions
+                    document.getElementById('positions-count').textContent = data.positions.length + ' / 10';
+                    
+                    // Mise à jour du timestamp
+                    document.getElementById('last-update').textContent = data.last_update;
+                    
+                    // Mise à jour du statut scanning
+                    const statusElement = document.getElementById('status-badge');
+                    if (data.is_scanning) {
+                        statusElement.innerHTML = '🔄 SCAN EN COURS...';
+                        statusElement.classList.add('scanning');
+                    } else {
+                        statusElement.innerHTML = '✅ SYSTÈME PRÊT';
+                        statusElement.classList.remove('scanning');
+                    }
+                    
+                    console.log('Dashboard refresh:', new Date().toLocaleTimeString());
+                } catch (error) {
+                    console.error('Erreur refresh:', error);
+                }
+            }
+            
+            // Refresh initial et toutes les 5 secondes
+            refreshData();
+            setInterval(refreshData, 5000);
         </script>
     </body>
     </html>
@@ -447,6 +488,61 @@ def dashboard():
                                  last_update=shared_data['last_update'],
                                  min_score=MIN_SCORE_TO_BUY,
                                  trade_amount=TRADE_AMOUNT)
+
+# --- API TEMPS RÉEL ---
+
+@app.route('/api/data')
+def api_data():
+    """Endpoint API pour obtenir les données temps réel en JSON."""
+    try:
+        trader = PaperTrader()
+        balance = trader.get_usdt_balance()
+        all_trades = trader.get_trades_history()
+        open_positions = trader.get_open_positions()
+        
+        # Séparer les trades terminés
+        history = [t for t in all_trades if 'VENTE' in t['type']]
+        
+        # Calculer les positions avec PnL
+        positions_view = []
+        total_unrealized_pnl = 0
+        
+        for symbol, pos_data in open_positions.items():
+            entry = pos_data['entry_price']
+            current = shared_data['last_prices'].get(symbol, entry)
+            
+            pnl_value = (current - entry) * pos_data['quantity']
+            pnl_percent = ((current - entry) / entry) * 100
+            
+            total_unrealized_pnl += pnl_value
+            
+            positions_view.append({
+                'symbol': symbol,
+                'entry': entry,
+                'current': current,
+                'amount': pos_data['amount_usdt'],
+                'quantity': pos_data['quantity'],
+                'pnl_value': pnl_value,
+                'pnl_percent': pnl_percent,
+                'sl': pos_data['stop_loss'],
+                'tp': pos_data['take_profit']
+            })
+        
+        return jsonify({
+            'balance': balance,
+            'total_unrealized_pnl': total_unrealized_pnl,
+            'positions': positions_view,
+            'history': history[:20],
+            'opportunities': shared_data['opportunities'][:15],
+            'is_scanning': shared_data['is_scanning'],
+            'last_update': shared_data['last_update'],
+            'min_score': MIN_SCORE_TO_BUY,
+            'trade_amount': TRADE_AMOUNT,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"❌ Erreur API: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # --- BOUCLE PRINCIPALE (THREAD) ---
 
