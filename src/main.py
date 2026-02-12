@@ -1363,17 +1363,9 @@ function showToast(msg, isError = false) {
     setTimeout(() => t.remove(), 3000);
 }
 
-// ── Auto-refresh ─────────────────────────────────────
-let countdown = 15;
-const refreshInterval = setInterval(() => {
-    countdown--;
-    if (countdown <= 0) { location.reload(); }
-}, 1000);
+// ── Auto-refresh désactivé ─────────────────────────────────────
+// Refresh disabled - scan continues in background
 
-// Afficher le compte à rebours dans le titre
-setInterval(() => {
-    document.title = `⚡ SCANNER [${countdown}s] — ${document.title.split(' — ')[1] || 'CRYPTO'}`;
-}, 1000);
 </script>
 </body>
 </html>
