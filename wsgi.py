@@ -1,32 +1,27 @@
 """
 Point d'entrée WSGI pour Gunicorn (production).
+Utilise src/main.py pour le bot de paper trading.
 """
 
 import sys
 import os
 import threading
-import time
-from flask import Flask, render_template_string
-from datetime import datetime
 
 # Ajouter src au path
 base_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.join(base_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
+# Importer le bot principal
+from main import app, run_loop
 
-# Importer les modules nécessaires
-from fetch_pairs import get_top_usdt_pairs
-from data_fetcher import fetch_multiple_pairs
-from indicators import calculate_indicators
-from support import find_swing_low, calculate_distance_to_support
-from scorer import calculate_opportunity_score
+# Démarrer le scanner en arrière-plan au chargement
+scanner_thread = threading.Thread(target=run_loop, daemon=True)
+scanner_thread.start()
 
-# Variable globale pour les opportunités
-opportunities_data = {'data': []}
+# Application WSGI
+application = app
 
-# Fonction pour exécuter un scan
-def run_scanner():
     """Exécute un scan complet et retourne les Top 10 opportunités."""
     from datetime import datetime
     
