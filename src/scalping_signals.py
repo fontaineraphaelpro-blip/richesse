@@ -70,74 +70,49 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 bearish_confirmations += 2 
                 confidence += 20
 
-    # --- 4. Analyse du Momentum (RSI) - Améliorée ---
+    # --- 4. Analyse du Momentum (RSI) ---
     # Scalping : On cherche les rebonds ou les continuités, mais on évite les extrêmes absolus
     if rsi14 is not None:
         # Logique LONG : On veut un RSI qui a de la marge pour monter (pas > 70)
-        # Amélioré: Plus restrictif en zone oversold (30-45) = meilleurs signaux
-        if 45 <= rsi14 <= 65: 
-            if ema_trend == 'BULLISH':
-                bullish_confirmations += 2  # Augmenté de 1 à 2
-                confidence += 20  # Augmenté de 15 à 20
-        elif 30 <= rsi14 < 45:  # Zone rebond possible
+        if 40 <= rsi14 <= 65: 
             if ema_trend == 'BULLISH':
                 bullish_confirmations += 1
-                confidence += 10
+                confidence += 15
         
         # Logique SHORT : On veut un RSI qui a de la marge pour descendre (pas < 30)
-        # Amélioré: Plus restrictif en zone overbought (55-70) = meilleurs signaux
-        if 35 <= rsi14 <= 55: 
-            if ema_trend == 'BEARISH':
-                bearish_confirmations += 2  # Augmenté de 1 à 2
-                confidence += 20  # Augmenté de 15 à 20
-        elif 55 < rsi14 <= 70:  # Zone rebond possible
+        if 35 <= rsi14 <= 60: 
             if ema_trend == 'BEARISH':
                 bearish_confirmations += 1
-                confidence += 10
+                confidence += 15
                 
         # Divergences (Si calculées)
         div_type = indicators.get('rsi_divergence_type')
         if indicators.get('rsi_divergence'):
             if div_type == 'bearish':
-                bearish_confirmations += 2  # Amélioré: signal fort
-                confidence += 20  # Augmenté de 15 à 20
+                bearish_confirmations += 2
+                confidence += 15
             elif div_type == 'bullish':
-                bullish_confirmations += 2  # Amélioré: signal fort
-                confidence += 20  # Augmenté de 15 à 20
+                bullish_confirmations += 2
+                confidence += 15
 
-    # --- 5. Analyse MACD (Améliorée - Momentum fort) ---
+    # --- 5. Analyse MACD ---
     if macd is not None and macd_signal is not None:
-        macd_diff = macd - macd_signal
-        
-        # Amélioré: On vérifie que ce n'est pas juste un croisement mou
         if macd > macd_signal:
-            confidence += 15  # Augmenté de 10 à 15
-            # Bonus si MACD s'éloigne du signal (momentum fort)
-            if macd_diff > 0.00005:  # Seuil pour momentum visible
-                bullish_confirmations += 2  # Signal fort
-                confidence += 10  # Bonus momentum
-            else:
-                bullish_confirmations += 1  # Juste le croisement
+            bullish_confirmations += 1
+            confidence += 10
         elif macd < macd_signal:
-            confidence += 15  # Augmenté de 10 à 15
-            # Bonus si MACD s'éloigne du signal (momentum fort)
-            if macd_diff < -0.00005:  # Seuil pour momentum visible
-                bearish_confirmations += 2  # Signal fort
-                confidence += 10  # Bonus momentum
-            else:
-                bearish_confirmations += 1  # Juste le croisement
+            bearish_confirmations += 1
+            confidence += 10
 
-    # --- 6. Analyse Volume (Améliorée pour meilleure qualité) ---
-    # Le volume DOIT valider le mouvement (sinon c'est un piège)
-    if volume_ratio >= 1.3: # Volume 30% supérieur à la moyenne (était 20%)
-        confidence += 15  # Bonus augmenté
+    # --- 6. Analyse Volume ---
+    # Le volume valide le mouvement
+    if volume_ratio >= 1.2: # Volume 20% supérieur à la moyenne
+        confidence += 10
         # Le volume confirme la direction de la bougie actuelle
         if ema_trend == 'BULLISH':
-            bullish_confirmations += 2  # Augmenté de 1 à 2
+            bullish_confirmations += 1
         elif ema_trend == 'BEARISH':
-            bearish_confirmations += 2  # Augmenté de 1 à 2
-    elif volume_ratio >= 1.0:
-        confidence += 5  # Petit bonus si volume normal
+            bearish_confirmations += 1
 
     # --- 7. Analyse Bollinger ---
     if bb_upper and bb_lower:
@@ -159,25 +134,25 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
         bearish_confirmations += 1
         confidence += 5
     
-    # --- 9. DÉCISION FINALE (Thresholds améliorés pour meilleure qualité) ---
+    # --- 9. DÉCISION FINALE (Seuils Assouplis pour Réalité Marché) ---
     
     entry_signal = 'NEUTRAL'
     entry_price = None
     
     # Vérification ADX (La tendance existe-t-elle ?)
-    # Augmenté de 15 à 20 : On veut une vraie tendance, pas du range
-    if adx is not None and adx < 20:
-        confidence -= 25 # Pénalité encore plus forte
+    # Si ADX < 15, le marché est en range (plat), scalping dangereux avec cette stratégie
+    if adx is not None and adx < 15:
+        confidence -= 20 # Pénalité forte
 
-    # CRITÈRES D'ENTRÉE (AMÉLIORÉS) :
-    # 1. Minimum 5 confirmations (était 4) - Plus strict
-    # 2. Confiance > 55% (était 50%) - Plus exigeant
+    # CRITÈRES D'ENTRÉE :
+    # 1. Minimum 4 confirmations (Indicateurs qui vont dans le même sens)
+    # 2. Confiance > 50%
     
-    if bearish_confirmations >= 5 and confidence >= 55 and ema_trend == 'BEARISH':
+    if bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH':
         entry_signal = 'SHORT'
         entry_price = current_price
         
-    elif bullish_confirmations >= 5 and confidence >= 55 and ema_trend == 'BULLISH':
+    elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH':
         entry_signal = 'LONG'
         entry_price = current_price
 
