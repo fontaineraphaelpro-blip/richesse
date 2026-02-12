@@ -170,9 +170,7 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        quantity = amount_usdt / current_price
-
-        # Pour un short, on réserve le capital comme marge
+        quantity = (amount_usdt / current_price) * 15  # Levier 15x appliqué
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
