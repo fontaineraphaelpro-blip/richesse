@@ -167,13 +167,17 @@ def run_scanner():
 
 @app.route('/')
 def dashboard():
-    trader = PaperTrader()
-    balance = trader.get_usdt_balance()
-    all_trades = trader.get_trades_history()
-    open_positions = trader.get_open_positions() # Dict: {'BTCUSDT': {...}}
-    
-    # 1. Séparer les trades terminés (Ventes)
-    history = [t for t in all_trades if 'VENTE' in t['type']]
+    try:
+        trader = PaperTrader()
+        balance = trader.get_usdt_balance()
+        all_trades = trader.get_trades_history()
+        open_positions = trader.get_open_positions() # Dict: {'BTCUSDT': {...}}
+        
+        # 1. Séparer les trades terminés (Ventes)
+        history = [t for t in all_trades if 'VENTE' in t['type']]
+    except Exception as e:
+        print(f"❌ Erreur Dashboard: {e}")
+        return f"Erreur serveur: {str(e)}", 500
     
     # 2. Calculer le PnL en temps réel des positions ouvertes
     positions_view = []
@@ -459,4 +463,4 @@ if __name__ == '__main__':
     # 2. Lancer le serveur Web Flask (bloquant)
     print("🌍 Dashboard accessible sur http://localhost:8080")
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)

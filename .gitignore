@@ -38,8 +38,10 @@ report.html
 *.log
 opportunities_data.json
 .scanning
-opportunities_data.json
-.scanning
+
+# Fichiers sensibles (données de wallet et trades)
+paper_wallet.json
+paper_trades.json
 
 # OS
 .DS_Store
