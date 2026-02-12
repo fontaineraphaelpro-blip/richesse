@@ -8,7 +8,7 @@ class Config:
     # App
     TIMEFRAME = os.environ.get('TIMEFRAME', '15m')
     CANDLE_LIMIT = int(os.environ.get('CANDLE_LIMIT', '500'))
-    TRADE_AMOUNT = float(os.environ.get('TRADE_AMOUNT', '150'))  # Réduit pour + de trades simultanés
+    TRADE_AMOUNT = float(os.environ.get('TRADE_AMOUNT', '100'))  # 100€ par position pour 10+ simultanées
     MIN_SCORE_TO_BUY = int(os.environ.get('MIN_SCORE_TO_BUY', '70'))  # Score production
     SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '900'))  # 15 min pour scanning plus fréquent
     MAX_OPEN_POSITIONS = int(os.environ.get('MAX_OPEN_POSITIONS', '10'))  # Max trades simultanés

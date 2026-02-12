@@ -199,6 +199,7 @@ def dashboard():
             'entry': entry,
             'current': current,
             'amount': pos_data['amount_usdt'],
+            'quantity': pos_data['quantity'],
             'pnl_value': pnl_value,
             'pnl_percent': pnl_percent,
             'sl': pos_data['stop_loss'],
@@ -247,6 +248,7 @@ def dashboard():
             .score { font-weight: 800; }
             .s-high { color: var(--green); }
             .s-med { color: #fbbf24; }
+            .s-low { color: #f87171; }
             
             @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
             
@@ -279,7 +281,11 @@ def dashboard():
                 </div>
                 <div class="card">
                     <div class="stat-label">Positions Actives</div>
-                    <div class="stat-value">{{ positions|length }}</div>
+                    <div class="stat-value">{{ positions|length }} / 10</div>
+                </div>
+                <div class="card">
+                    <div class="stat-label">Levier Appliqué</div>
+                    <div class="stat-value" style="color:#fbbf24">10x</div>
                 </div>
             </div>
 
@@ -292,28 +298,31 @@ def dashboard():
                             <thead>
                                 <tr>
                                     <th>Paire</th>
+                                    <th>Quantité</th>
                                     <th>Entrée</th>
                                     <th>Actuel</th>
                                     <th>Montant</th>
-                                    <th>PnL</th>
+                                    <th>PnL Value</th>
+                                    <th>PnL %</th>
                                     <th>SL / TP</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% if not positions %}
-                                <tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b">Aucune position ouverte</td></tr>
+                                <tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b">Aucune position ouverte</td></tr>
                                 {% else %}
                                 {% for pos in positions %}
                                 <tr>
                                     <td style="font-weight:bold">{{ pos.symbol }}</td>
+                                    <td style="font-size:0.9em">{{ "%.4f"|format(pos.quantity|default(0)) }}</td>
                                     <td>${{ "%.2f"|format(pos.entry) }}</td>
                                     <td>${{ "%.2f"|format(pos.current) }}</td>
                                     <td>${{ "%.0f"|format(pos.amount) }}</td>
+                                    <td><span class="{% if pos.pnl_value >= 0 %}positive{% else %}negative{% endif %}" style="font-weight:bold">${{ "%+.2f"|format(pos.pnl_value) }}</span></td>
                                     <td>
                                         <span class="badge {% if pos.pnl_value >= 0 %}b-green{% else %}b-red{% endif %}">
                                             {{ "%+.2f"|format(pos.pnl_percent) }}%
                                         </span>
-                                        <div style="font-size:0.8em; margin-top:4px; opacity:0.8">${{ "%+.2f"|format(pos.pnl_value) }}</div>
                                     </td>
                                     <td style="font-size:0.85em">
                                         <span style="color:#ef4444">SL: {{ "%.2f"|format(pos.sl) }}</span><br>
@@ -363,6 +372,9 @@ def dashboard():
 
             <div class="card" style="margin-top: 20px;">
                 <h2>📡 Scanner Opportunités (Top 15)</h2>
+                <div style="margin-bottom: 15px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; font-size: 0.9em;">
+                    <strong>Configuration:</strong> Score Min: {{ min_score }} | Levier: 10x | Capital: $1000 | Par Position: ${{ trade_amount }}
+                </div>
                 <div class="table-container">
                     <table>
                         <thead>
@@ -370,27 +382,46 @@ def dashboard():
                                 <th>#</th>
                                 <th>Paire</th>
                                 <th>Score</th>
-                                <th>Action</th>
+                                <th>Trend</th>
+                                <th>Signal</th>
                                 <th>Prix</th>
-                                <th>Détails Technique</th>
+                                <th>SL / TP</th>
+                                <th>Confiance</th>
+                                <th>ATR%</th>
+                                <th>Détails</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% if not opportunities %}
-                            <tr><td colspan="6" style="text-align:center; padding:30px">En attente du prochain scan...</td></tr>
+                            <tr><td colspan="10" style="text-align:center; padding:30px; color:#64748b">En attente du prochain scan...</td></tr>
                             {% else %}
                             {% for opp in opportunities %}
                             <tr>
                                 <td>{{ loop.index }}</td>
                                 <td style="font-weight:bold; color:var(--accent)">{{ opp.pair }}</td>
-                                <td class="score {% if opp.score >= 70 %}s-high{% else %}s-med{% endif %}">{{ opp.score }}</td>
+                                <td class="score {% if opp.score >= 70 %}s-high{% elif opp.score >= 60 %}s-med{% else %}s-low{% endif %}">{{ opp.score }}</td>
+                                <td>
+                                    <span class="badge {% if 'UP' in opp.trend|upper %}b-green{% else %}b-red{% endif %}">
+                                        {{ opp.trend }}
+                                    </span>
+                                </td>
                                 <td>
                                     <span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">
                                         {{ opp.entry_signal }}
                                     </span>
                                 </td>
                                 <td>${{ "%.4f"|format(opp.price) }}</td>
-                                <td style="font-size:0.9em; color:#cbd5e1">{{ opp.details }}</td>
+                                <td style="font-size:0.8em">
+                                    <div style="color:#ef4444">SL: ${{ "%.4f"|format(opp.stop_loss) }}</div>
+                                    <div style="color:#10b981">TP: ${{ "%.4f"|format(opp.take_profit) }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {% if opp.confidence|default(0) >= 80 %}b-green{% else %}b-red{% endif %}">
+                                        {{ "%.0f"|format(opp.confidence|default(0)) }}%
+                                    </span>
+                                </td>
+                                <td style="color:#fbbf24; font-weight:600">{{ "%.2f"|format(opp.atr_percent|default(0)) }}%</td>
+                                <td style="font-size:0.85em; max-width:150px; white-space:normal">{{ opp.details }}</td>
                             </tr>
                             {% endfor %}
                             {% endif %}
@@ -413,7 +444,9 @@ def dashboard():
                                  history=history,
                                  opportunities=shared_data['opportunities'],
                                  is_scanning=shared_data['is_scanning'],
-                                 last_update=shared_data['last_update'])
+                                 last_update=shared_data['last_update'],
+                                 min_score=MIN_SCORE_TO_BUY,
+                                 trade_amount=TRADE_AMOUNT)
 
 # --- BOUCLE PRINCIPALE (THREAD) ---
 
