@@ -464,9 +464,130 @@ def dashboard():
                         statusElement.classList.remove('scanning');
                     }
                     
-                    console.log('Dashboard refresh:', new Date().toLocaleTimeString());
+                    // Mise à jour de la table des positions
+                    updatePositionsTable(data.positions);
+                    
+                    // Mise à jour de la table l'historique
+                    updateHistoryTable(data.history);
+                    
+                    // Mise à jour de la table des opportunités
+                    updateOpportunitiesTable(data.opportunities);
+                    
+                    console.log('✅ Dashboard refresh:', new Date().toLocaleTimeString());
                 } catch (error) {
-                    console.error('Erreur refresh:', error);
+                    console.error('❌ Erreur refresh:', error);
+                }
+            }
+            
+            function updatePositionsTable(positions) {
+                const tbody = document.querySelector('table tbody');
+                if (!tbody || positions.length === 0) return;
+                
+                // Trouver la première table (portefeuille actif)
+                const tables = document.querySelectorAll('table tbody');
+                if (tables.length < 1) return;
+                
+                const portfolioTbody = tables[0];
+                if (portfolioTbody.querySelector('td[colspan]')) {
+                    portfolioTbody.innerHTML = positions.map(pos => `
+                        <tr>
+                            <td style="font-weight:bold">${pos.symbol}</td>
+                            <td style="font-size:0.9em">${pos.quantity.toFixed(4)}</td>
+                            <td>$${pos.entry.toFixed(2)}</td>
+                            <td>$${pos.current.toFixed(2)}</td>
+                            <td>$${pos.amount.toFixed(0)}</td>
+                            <td><span style="${pos.pnl_value >= 0 ? 'color:#10b981' : 'color:#ef4444'}; font-weight:bold">$${pos.pnl_value > 0 ? '+' : ''}${pos.pnl_value.toFixed(2)}</span></td>
+                            <td>
+                                <span class="badge ${pos.pnl_value >= 0 ? 'b-green' : 'b-red'}">
+                                    ${pos.pnl_percent > 0 ? '+' : ''}${pos.pnl_percent.toFixed(2)}%
+                                </span>
+                            </td>
+                            <td style="font-size:0.85em">
+                                <span style="color:#ef4444">SL: ${pos.sl.toFixed(2)}</span><br>
+                                <span style="color:#10b981">TP: ${pos.tp.toFixed(2)}</span>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else if (positions.length > 0) {
+                    portfolioTbody.innerHTML = positions.map(pos => `
+                        <tr>
+                            <td style="font-weight:bold">${pos.symbol}</td>
+                            <td style="font-size:0.9em">${pos.quantity.toFixed(4)}</td>
+                            <td>$${pos.entry.toFixed(2)}</td>
+                            <td>$${pos.current.toFixed(2)}</td>
+                            <td>$${pos.amount.toFixed(0)}</td>
+                            <td><span style="${pos.pnl_value >= 0 ? 'color:#10b981' : 'color:#ef4444'}; font-weight:bold">$${pos.pnl_value > 0 ? '+' : ''}${pos.pnl_value.toFixed(2)}</span></td>
+                            <td>
+                                <span class="badge ${pos.pnl_value >= 0 ? 'b-green' : 'b-red'}">
+                                    ${pos.pnl_percent > 0 ? '+' : ''}${pos.pnl_percent.toFixed(2)}%
+                                </span>
+                            </td>
+                            <td style="font-size:0.85em">
+                                <span style="color:#ef4444">SL: ${pos.sl.toFixed(2)}</span><br>
+                                <span style="color:#10b981">TP: ${pos.tp.toFixed(2)}</span>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
+            
+            function updateHistoryTable(history) {
+                const tables = document.querySelectorAll('table tbody');
+                if (tables.length < 2) return;
+                
+                const historyTbody = tables[1];
+                if (history && history.length > 0) {
+                    historyTbody.innerHTML = history.slice(0, 8).map(trade => `
+                        <tr>
+                            <td>
+                                <div><strong>${trade.symbol}</strong></div>
+                                <div style="font-size:0.8em; color:#64748b">${trade.time}</div>
+                            </td>
+                            <td style="text-align:right">
+                                <span style="font-weight:bold; ${trade.pnl > 0 ? 'color:#10b981' : 'color:#ef4444'}">
+                                    ${trade.pnl > 0 ? '+' : ''}$${trade.pnl.toFixed(2)}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
+            
+            function updateOpportunitiesTable(opportunities) {
+                const tables = document.querySelectorAll('table tbody');
+                if (tables.length < 3) return;
+                
+                const oppTbody = tables[2];
+                if (opportunities && opportunities.length > 0) {
+                    oppTbody.innerHTML = opportunities.map((opp, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td style="font-weight:bold; color:#3b82f6">${opp.pair}</td>
+                            <td class="score ${opp.score >= 70 ? 's-high' : opp.score >= 60 ? 's-med' : 's-low'}">${opp.score}</td>
+                            <td>
+                                <span class="badge ${opp.trend && 'UP' in opp.trend.toUpperCase() ? 'b-green' : 'b-red'}">
+                                    ${opp.trend || 'N/A'}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge ${opp.entry_signal === 'LONG' ? 'b-green' : 'b-red'}">
+                                    ${opp.entry_signal}
+                                </span>
+                            </td>
+                            <td>$${opp.price.toFixed(4)}</td>
+                            <td style="font-size:0.8em">
+                                <div style="color:#ef4444">SL: $${opp.stop_loss.toFixed(4)}</div>
+                                <div style="color:#10b981">TP: $${opp.take_profit.toFixed(4)}</div>
+                            </td>
+                            <td>
+                                <span class="badge ${opp.confidence >= 80 ? 'b-green' : 'b-red'}">
+                                    ${Math.round(opp.confidence || 0)}%
+                                </span>
+                            </td>
+                            <td style="color:#fbbf24; font-weight:600">${(opp.atr_percent || 0).toFixed(2)}%</td>
+                            <td style="font-size:0.85em; max-width:150px; white-space:normal">${opp.details || ''}</td>
+                        </tr>
+                    `).join('');
                 }
             }
             
