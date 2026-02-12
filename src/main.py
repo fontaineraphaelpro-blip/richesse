@@ -56,10 +56,11 @@ def run_scanner():
     try:
         # --- ÉTAPE 1 : Récupération des données ---
         print("📡 Récupération des données marché (Binance)...")
-        data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
+        data, real_prices = fetch_multiple_pairs(interval=TIMEFRAME, limit=CANDLE_LIMIT)
         
         if not data:
             print("❌ Erreur critique : Aucune donnée reçue.")
+            print("   Vérifier connexion Internet et API Binance")
             return []
             
         # Mise à jour des prix en temps réel pour le dashboard
@@ -111,8 +112,13 @@ def run_scanner():
         print("\n" + "-"*95)
         print(f"{'Paire':<10} {'Score':<5} {'Signal':<6} {'Prix':<10} {'SL':<10} {'Détails'}")
         print("-"*95)
+        found_count = 0
         for opp in top_picks:
+            found_count += 1
             print(f"{opp['pair']:<10} {opp['score']:<5} {opp['entry_signal']:<6} ${opp['price']:.4f} ${opp['stop_loss']:.4f} {opp['details'][:35]}...")
+        
+        if found_count == 0:
+            print("⚠️ Aucune opportunité trouvée avec score >= 50. Ajuster les paramètres.")
 
         # --- ÉTAPE 4 : Exécution Automatique (Achat) ---
         print("\n🤖 Auto-Trading (Support Multi-Positions)...")
@@ -130,12 +136,14 @@ def run_scanner():
         
         new_trades_count = 0
         for opp in top_picks:
-            # RÈGLES D'ACHAT STRICTES :
-            # 1. Score >= MIN_SCORE_TO_BUY (Qualité améliorée)
+            # RÈGLES D'ACHAT :
+            # 1. Score >= MIN_SCORE_TO_BUY
             # 2. Signal LONG (On achète)
             # 3. Pas déjà en portefeuille
             # 4. Solde suffisant
             # 5. Position max non atteinte
+            
+            print(f"  Teste {opp['pair']}: Score={opp['score']}, Signal={opp['entry_signal']}, EnPF={opp['pair'] in my_positions}, Balance=${balance:.0f}")
             
             if (opp['score'] >= MIN_SCORE_TO_BUY and 
                 opp['entry_signal'] == 'LONG' and 
@@ -151,12 +159,15 @@ def run_scanner():
                         take_profit_price=opp['take_profit']
                     )
                     if success:
-                        balance -= TRADE_AMOUNT # Mise à jour locale pour la boucle
+                        balance = trader.get_usdt_balance()  # Reload actual balance
                         new_trades_count += 1
                         print(f"✅ Trade #{new_trades_count}: {opp['pair']} (Score: {opp['score']}, Prix: ${opp['price']:.4f})")
                 else:
                     print("⚠️ Solde insuffisant pour nouveaux trades.")
                     break
+        
+        if new_trades_count == 0:
+            print("ℹ️ Aucun trade exécuté ce scan.")
         
         return top_picks
         
