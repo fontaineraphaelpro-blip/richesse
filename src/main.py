@@ -1558,9 +1558,6 @@ function closePos(symbol) {
     }
 }
 
-// Auto-refresh every 30 seconds
-setTimeout(() => location.reload(), 30000);
-
 // Fetch Fear & Greed
 fetch('/api/social/fear_greed')
     .then(r => r.json())
