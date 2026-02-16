@@ -158,7 +158,7 @@ def run_scanner():
     Cœur du système :
     1. Récupère les données Binance
     2. Vérifie les positions (SL/TP)
-    3. Analyse les 50 paires
+    3. Analyse les 200 paires LONG + SHORT
     4. Execute les ordres si score >= seuil
     """
     shared_data['scan_count'] += 1
@@ -168,7 +168,7 @@ def run_scanner():
 
     try:
         # ── ÉTAPE 1 : Données Marché ──────────────────────────
-        add_bot_log("Récupération données Binance (50 paires)...", 'INFO')
+        add_bot_log("Récupération données Binance (200 paires)...", 'INFO')
         data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
 
         if not data:
@@ -393,9 +393,12 @@ def run_scanner():
                 # Utiliser le score dynamique au lieu du fixe
                 effective_min_score = dynamic_min_score if DYNAMIC_SCORE_ENABLED else MIN_SCORE_BUY
                 
-                # Règles strictes d'achat
+                # Direction du signal
+                signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
+                
+                # Règles strictes d'ouverture (LONG ou SHORT)
                 if (opp['score'] >= effective_min_score
-                        and opp['entry_signal'] == 'LONG'
+                        and signal_direction in ['LONG', 'SHORT']  # Accepter LONG ET SHORT
                         and opp['pair'] not in my_positions
                         and len(my_positions) < MAX_POSITIONS
                         and opp['stop_loss'] is not None
@@ -418,7 +421,7 @@ def run_scanner():
 
                     # ── FILTRE RISK/REWARD ─────────────
                     rr_valid, rr_ratio, rr_reason = trade_filters.check_risk_reward(
-                        opp['price'], opp['stop_loss'], opp['take_profit_1'], 'LONG'
+                        opp['price'], opp['stop_loss'], opp['take_profit_1'], signal_direction
                     )
                     if not rr_valid:
                         add_bot_log(f"❌ {opp['pair']} {rr_reason}", 'WARN')
@@ -434,7 +437,7 @@ def run_scanner():
                     if MTF_ENABLED:
                         mtf_result = validate_signal_multi_timeframe(
                             opp['pair'], 
-                            opp['entry_signal'], 
+                            signal_direction, 
                             MTF_TIMEFRAMES
                         )
                         if not mtf_result['is_valid']:
@@ -450,22 +453,36 @@ def run_scanner():
                             )
 
                     if balance >= TRADE_AMOUNT:
-                        success = trader.place_buy_order(
-                            symbol=opp['pair'],
-                            amount_usdt=TRADE_AMOUNT,
-                            current_price=opp['price'],
-                            stop_loss_price=opp['stop_loss'],
-                            take_profit_price=opp['take_profit_1'],
-                            entry_trend=opp['trend'],
-                            take_profit_2=opp.get('take_profit_2')  # TP2 pour scaling out
-                        )
+                        # ── EXÉCUTION LONG OU SHORT ─────────────
+                        if signal_direction == 'LONG':
+                            success = trader.place_buy_order(
+                                symbol=opp['pair'],
+                                amount_usdt=TRADE_AMOUNT,
+                                current_price=opp['price'],
+                                stop_loss_price=opp['stop_loss'],
+                                take_profit_price=opp['take_profit_1'],
+                                entry_trend=opp['trend'],
+                                take_profit_2=opp.get('take_profit_2')
+                            )
+                            trade_emoji = "🟢 LONG"
+                        else:  # SHORT
+                            success = trader.place_short_order(
+                                symbol=opp['pair'],
+                                amount_usdt=TRADE_AMOUNT,
+                                current_price=opp['price'],
+                                stop_loss_price=opp['stop_loss'],
+                                take_profit_price=opp['take_profit_1'],
+                                entry_trend=opp['trend']
+                            )
+                            trade_emoji = "🔴 SHORT"
+                        
                         if success:
                             # Enregistrer le trade pour le cooldown
                             trader.record_trade_time(opp['pair'])
                             balance -= TRADE_AMOUNT
                             my_positions = trader.get_open_positions()
                             add_bot_log(
-                                f"🛒 ACHAT {opp['pair']} | ${opp['price']:.4f} | "
+                                f"{trade_emoji} {opp['pair']} | ${opp['price']:.4f} | "
                                 f"SL:${opp['stop_loss']:.4f} | TP:${opp['take_profit_1']:.4f} | "
                                 f"Score:{opp['score']} | R/R:{opp['rr_ratio']}",
                                 'TRADE'
@@ -505,18 +522,32 @@ def dashboard():
     for symbol, pos_data in open_positions.items():
         entry = pos_data['entry_price']
         current = shared_data['last_prices'].get(symbol, entry)
-        pnl_value = (current - entry) * pos_data['quantity']
-        pnl_percent = ((current - entry) / entry) * 100
+        direction = pos_data.get('direction', 'LONG')
+        
+        # Calcul PnL selon direction
+        if direction == 'LONG':
+            pnl_value = (current - entry) * pos_data['quantity']
+            pnl_percent = ((current - entry) / entry) * 100
+        else:  # SHORT
+            pnl_value = (entry - current) * pos_data['quantity']
+            pnl_percent = ((entry - current) / entry) * 100
+        
         total_unrealized_pnl += pnl_value
         
         # Calcul du % parcouru vers TP
         sl = pos_data.get('stop_loss', entry)
         tp = pos_data.get('take_profit', entry)
-        range_total = tp - sl if (tp - sl) != 0 else 1
-        progress = max(0, min(100, ((current - sl) / range_total) * 100))
+        
+        if direction == 'LONG':
+            range_total = tp - sl if (tp - sl) != 0 else 1
+            progress = max(0, min(100, ((current - sl) / range_total) * 100))
+        else:  # SHORT (inversé)
+            range_total = sl - tp if (sl - tp) != 0 else 1
+            progress = max(0, min(100, ((sl - current) / range_total) * 100))
         
         positions_view.append({
             'symbol':      symbol,
+            'direction':   direction,
             'entry':       entry,
             'current':     current,
             'amount':      pos_data['amount_usdt'],

@@ -9,9 +9,9 @@ import requests
 import time
 from typing import Optional, Dict, Tuple, List
 
-# --- LISTE DES 100 PRINCIPALES PAIRES USDT (Liquidité élevée pour scalping) ---
+# --- LISTE DES 200 PRINCIPALES PAIRES USDT (Maximum Coverage) ---
 TOP_USDT_PAIRS = [
-    # Top 20 - Ultra Liquid
+    # Top 20 - Ultra Liquid (>$1B daily volume)
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
     'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'TRXUSDT',
     'MATICUSDT', 'LINKUSDT', 'SHIBUSDT', 'LTCUSDT', 'BCHUSDT',
@@ -39,7 +39,37 @@ TOP_USDT_PAIRS = [
     'ENSUSDT', 'APEUSDT', 'CAKEUSDT', 'DASHUSDT', 'WAVESUSDT',
     'ZECUSDT', 'XMRUSDT', 'IOTAUSDT', 'ZILUSDT', 'BATUSDT',
     'SKLUSDT', 'IOTXUSDT', 'CELRUSDT', 'ANKRUSDT', 'ONEUSDT',
-    'RVNUSDT', 'STMXUSDT', 'CKBUSDT', 'CELOUSDT', 'HOTUSDT'
+    'RVNUSDT', 'STMXUSDT', 'CKBUSDT', 'CELOUSDT', 'HOTUSDT',
+    
+    # 101-120 - DeFi & Gaming
+    'SUSHIUSDT', 'YFIUSDT', 'BALUSDT', 'RENUSDT', 'KNCUSDT',
+    'BANDUSDT', 'STORJUSDT', 'OMGUSDT', 'ZRXUSDT', 'ENJUSDT',
+    'MANAUSDT', 'AUDIOUSDT', 'MASKUSDT', 'LPTUSDT', 'RSRUSDT',
+    'NMRUSDT', 'ANTUSDT', 'CTSIUSDT', 'RLCUSDT', 'REQUSDT',
+    
+    # 121-140 - Layer 1 & Layer 2
+    'KSMUSDT', 'MOVRUSDT', 'ARUSDT', 'ROSEUUSDT', 'CELOUSUSDT',
+    'HARMONYUSDT', 'SYSCOINUSDT', 'IOTXUSDT', 'ONTUSDT', 'QTUMUSDT',
+    'ICXUSDT', 'LSKUSDT', 'ARDRUSDT', 'STRATUSDT', 'RVNUSDT',
+    'DGBUSDT', 'SCUSDT', 'ZENUSDT', 'BTGUSDT', 'BTSUSDT',
+    
+    # 141-160 - Memecoins & New Trends
+    'WOOUSDT', 'TUSDT', 'HIGHUSDT', 'HOOKUSDT', 'MAGICUSDT',
+    'IDUSDT', 'RDNTUSDT', 'AMBUSDT', 'PHBUSDT', 'LEVERUSDT',
+    'MDTUSDT', 'XVSUSDT', 'ALPACAUSDT', 'TRUUSDT', 'CVXUSDT',
+    'FXSUSDT', 'QUICKUSDT', 'RADUSDT', 'RAREUSDT', 'SUPERUSDT',
+    
+    # 161-180 - Infrastructure & Oracle
+    'APIUSDT', 'ACHUSDT', 'SSVUSDT', 'PROMUSDT', 'QIUSDT',
+    'PERPUSDT', 'COMBOUSDT', 'MAVUSDT', 'XVSUSDT', 'POLYXUSDT',
+    'ARKMUSDT', 'NTROUSDT', 'MBLUSDT', 'OAXUSDT', 'KEYUSDT',
+    'WANUSDT', 'DOCKUSDT', 'VITEUSDT', 'FUNUSDT', 'OGNUSDT',
+    
+    # 181-200 - Emerging & New Listings
+    'ASTUSDT', 'ATAUSDT', 'BAKEUSDT', 'BETAUSDT', 'BUSDUSDT',
+    'COCOSUSDT', 'CTKUSDT', 'DATAUSDT', 'DENTUSDT', 'DEXEUSDT',
+    'DFUSDT', 'DUSKUSDT', 'ELFUSDT', 'FIROUSDT', 'FORUSDT',
+    'FORTHUSDT', 'GHSTUSDT', 'GLMRUSDT', 'GTCUSDT', 'HARDUSDT'
 ]
 
 def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
