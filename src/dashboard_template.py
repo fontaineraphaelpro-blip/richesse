@@ -15,14 +15,15 @@ def get_enhanced_dashboard():
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
+html { overflow-x: hidden; }
 :root {
     --bg: #0a0e17; --bg2: #111827; --bg3: #1a2332; --border: #1f2937;
     --text: #f3f4f6; --text2: #9ca3af; --text3: #6b7280;
     --green: #10b981; --red: #ef4444; --blue: #3b82f6; --yellow: #f59e0b;
     --purple: #8b5cf6; --cyan: #06b6d4;
 }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.app { max-width: 1600px; margin: 0 auto; padding: 20px; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; width: 100%; }
+.app { max-width: 1600px; margin: 0 auto; padding: 20px; width: 100%; overflow-x: hidden; }
 
 /* Tabs Navigation */
 .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg2); padding: 6px; border-radius: 12px; border: 1px solid var(--border); }
@@ -88,6 +89,9 @@ td { padding: 12px 16px; border-bottom: 1px solid rgba(31,41,55,0.5); }
 tr:hover td { background: rgba(59,130,246,0.03); }
 .empty { text-align: center; padding: 40px; color: var(--text3); }
 
+/* Table scroll wrapper */
+.table-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+
 /* Progress */
 .progress { width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--yellow), var(--green)); border-radius: 3px; }
@@ -149,36 +153,39 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 /* ==================== RESPONSIVE MOBILE ==================== */
 @media (max-width: 768px) {
-    .app { padding: 10px; }
+    .app { padding: 10px; overflow-x: hidden; }
+    html, body { overflow-x: hidden; width: 100%; }
     
     /* Header mobile */
     .header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 12px 16px; }
-    .header h1 { font-size: 1.2em; }
-    .header .status { width: 100%; justify-content: space-between; }
+    .header h1 { font-size: 1.2em; word-break: break-word; }
+    .header .status { width: 100%; justify-content: space-between; flex-wrap: wrap; }
     
     /* Tabs mobile - scrollable */
-    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+    .tabs::-webkit-scrollbar { display: none; }
     .tab { padding: 10px 16px; font-size: 0.8em; white-space: nowrap; flex-shrink: 0; }
     
     /* Stats mobile */
     .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .stat { padding: 14px; }
-    .stat-value { font-size: 1.4em; }
+    .stat-value { font-size: 1.4em; word-break: break-all; }
     .stat-icon { display: none; }
     .stat-label { font-size: 0.65em; }
     
     /* Cards mobile */
+    .card { overflow: hidden; }
     .card-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
-    .card-header h2 { font-size: 0.9em; }
+    .card-header h2 { font-size: 0.9em; word-break: break-word; }
     
     /* Charts mobile */
     .chart-container { padding: 12px; height: 250px; }
     .chart-row, .chart-row-equal { grid-template-columns: 1fr; gap: 16px; }
     
     /* Tables mobile - scroll horizontal */
-    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { min-width: 600px; font-size: 0.8em; }
-    th, td { padding: 10px 12px; }
+    .table-wrapper, .card > div[style*="overflow"] { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+    table { min-width: 500px; font-size: 0.75em; table-layout: auto; }
+    th, td { padding: 8px 10px; white-space: nowrap; }
     
     /* Filters mobile */
     .filters { flex-direction: column; gap: 10px; padding: 12px 14px; }
@@ -316,7 +323,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         <span class="badge b-blue">PAPER TRADING</span>
     </div>
     {% if positions %}
-    <div style="overflow-x:auto;">
+    <div class="table-scroll">
         <table>
             <thead><tr>
                 <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Taille</th>
@@ -363,7 +370,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             <span style="font-size:0.8em;color:var(--text3)">Score &#8805; {{ min_score }} = Auto-achat</span>
         </div>
         {% if opportunities %}
-        <div style="overflow-x:auto;">
+        <div class="table-scroll">
             <table>
                 <thead><tr><th>Paire</th><th>Prix</th><th>Signal</th><th>Score</th><th>R/R</th><th>Volume 24h</th></tr></thead>
                 <tbody>
@@ -624,7 +631,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     <div class="card-header">
         <h2>&#127942; Top 10 Paires les Plus Rentables</h2>
     </div>
-    <div style="overflow-x:auto;">
+    <div class="table-scroll">
         <table>
             <thead><tr><th>Paire</th><th>Trades</th><th>Win Rate</th><th>PnL Total</th><th>PnL Moyen</th><th>Meilleur</th><th>Pire</th></tr></thead>
             <tbody>
@@ -694,7 +701,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     </div>
     
     {% if history %}
-    <div style="overflow-x:auto;">
+    <div class="table-scroll">
         <table id="history-table">
             <thead><tr>
                 <th onclick="sortTable(0)">Date</th>
