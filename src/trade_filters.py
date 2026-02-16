@@ -32,7 +32,7 @@ class TradeFilters:
         self.score_neutral_market = 70
         
         # Configuration Risk/Reward
-        self.min_risk_reward = 2.0  # R/R minimum de 2:1
+        self.min_risk_reward = 1.5  # R/R minimum de 1.5:1 (assouplir pour permettre plus de trades)
 
     # ─────────────────────────────────────────────────────────────
     # FILTRE VOLUME

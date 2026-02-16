@@ -81,7 +81,7 @@ SCORE_BEARISH_MARKET = 80    # Score min si marchÃ© baissier
 SCORE_NEUTRAL_MARKET = 70    # Score min si marchÃ© neutre
 
 # Risk/Reward Minimum
-MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
+MIN_RISK_REWARD = 1.5        # Rejeter si R/R < 1.5:1 (assouplir pour permettre plus de trades)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True           # Activer l'analyse des news
