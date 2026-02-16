@@ -280,9 +280,25 @@ class PaperTrader:
         
         return is_exceeded, drawdown_pct, total_capital
 
-    def emergency_close_all(self, real_prices: dict, reason: str = "DRAWDOWN MAX"):
-        """Ferme toutes les positions ouvertes en urgence."""
-        positions_to_close = list(self.wallet['positions'].keys())
+    def emergency_close_all(self, real_prices: dict, reason: str = "DRAWDOWN MAX", close_direction: str = "ALL"):
+        """
+        Ferme les positions ouvertes en urgence.
+        
+        Args:
+            real_prices: Prix actuels
+            reason: Raison de la fermeture
+            close_direction: "ALL" = tout, "LONG" = seulement LONG, "SHORT" = seulement SHORT
+        """
+        positions_to_close = []
+        
+        for symbol, pos in self.wallet['positions'].items():
+            direction = pos.get('direction', 'LONG')
+            
+            if close_direction == "ALL":
+                positions_to_close.append(symbol)
+            elif close_direction == direction:
+                positions_to_close.append(symbol)
+            # Si CRASH (close_direction != "ALL"), garder les positions opposées
         
         for symbol in positions_to_close:
             current_price = real_prices.get(symbol)

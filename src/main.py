@@ -195,12 +195,12 @@ def run_scanner():
             
             if crash_analysis.get('crash_detected'):
                 crash_type = crash_analysis.get('crash_type', 'UNKNOWN')
-                add_bot_log(f"🚨 CRASH DÉTECTÉ: {crash_type}! Fermeture d'urgence...", 'ERROR')
+                add_bot_log(f"🚨 CRASH DÉTECTÉ: {crash_type}! Fermeture LONG uniquement...", 'ERROR')
                 
-                # Fermer TOUTES les positions immédiatement
+                # Fermer seulement les LONG (les SHORT profitent du crash)
                 trader = PaperTrader()
-                closed_count = trader.emergency_close_all(real_prices, f"Crash {crash_type}")
-                add_bot_log(f"💥 {closed_count} position(s) fermée(s) d'urgence", 'ERROR')
+                closed_count = trader.emergency_close_all(real_prices, f"Crash {crash_type}", close_direction="LONG")
+                add_bot_log(f"💥 {closed_count} LONG fermé(s) - SHORT conservés (en profit)", 'ERROR')
                 
                 # Ajouter au dashboard
                 shared_data['crash_status'] = crash_analysis
