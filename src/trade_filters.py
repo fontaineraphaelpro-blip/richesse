@@ -15,24 +15,24 @@ class TradeFilters:
     """Gère tous les filtres de qualité des trades."""
     
     def __init__(self):
-        # Configuration Volume
+        # Configuration Volume STRICT
         self.volume_filter_enabled = True
-        self.min_volume_ratio = 1.2  # Volume doit être 1.2x la moyenne
+        self.min_volume_ratio = 1.5  # Volume doit être 1.5x la moyenne (augmente de 1.2)
         
-        # Configuration Heures de Trading (UTC)
+        # Configuration Heures de Trading (UTC) - HEURES OPTIMALES
         self.trading_hours_enabled = True
-        self.trading_start_hour = 7   # 7h UTC
-        self.trading_end_hour = 22    # 22h UTC
+        self.trading_start_hour = 8   # 8h UTC (meilleure liquidité)
+        self.trading_end_hour = 20    # 20h UTC (éviter fin de session)
         self.avoid_weekends = True
         
-        # Configuration Score Dynamique (AUGMENTES pour qualite)
+        # Configuration Score Dynamique ULTRA-STRICT
         self.dynamic_score_enabled = True
-        self.score_bullish_market = 70   # AUGMENTE de 65
-        self.score_bearish_market = 85   # AUGMENTE de 80
-        self.score_neutral_market = 75   # AUGMENTE de 70
+        self.score_bullish_market = 80   # STRICT
+        self.score_bearish_market = 90   # TRES STRICT
+        self.score_neutral_market = 85   # STRICT
         
-        # Configuration Risk/Reward (STRICT)
-        self.min_risk_reward = 2.0  # R/R minimum de 2:1 (AUGMENTE pour qualite)
+        # Configuration Risk/Reward ULTRA-STRICT
+        self.min_risk_reward = 3.0  # R/R minimum de 3:1 (qualité maximale)
 
     # ─────────────────────────────────────────────────────────────
     # FILTRE VOLUME

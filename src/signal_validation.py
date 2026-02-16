@@ -111,9 +111,9 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
     # Calcul final
     coherence_percent = (coherence_score / max_score * 100) if max_score > 0 else 0
     
-    # Validation STRICTE : 65% de cohérence minimum (augmenté de 50%)
-    # Un signal doit avoir une FORTE cohérence pour être validé
-    is_valid = coherence_percent >= 65
+    # Validation ULTRA-STRICTE : 80% de cohérence minimum
+    # Un signal doit avoir une cohérence PARFAITE pour être validé
+    is_valid = coherence_percent >= 80
 
     return {
         'is_valid': is_valid,

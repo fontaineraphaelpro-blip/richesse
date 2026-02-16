@@ -61,6 +61,21 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
             'score': 0, 'signal': "⚪ ATTENTE", 'details': "", 'trend': trend,
             'entry_signal': 'NEUTRAL', 'confidence': 0
         }
+    
+    # FILTRE ADX OBLIGATOIRE - Tendance forte requise
+    adx = indicators.get('adx')
+    if adx is None or adx < 20:
+        return {
+            'score': 0, 'signal': "⚪ ADX FAIBLE", 'details': f"ADX {adx:.1f} < 20 requis",
+            'trend': trend, 'entry_signal': 'NEUTRAL', 'confidence': 0
+        }
+    
+    # FILTRE CONFIANCE MINIMALE - 70% obligatoire
+    if confidence < 70:
+        return {
+            'score': 0, 'signal': "⚪ CONFIANCE FAIBLE", 'details': f"Confiance {confidence}% < 70%",
+            'trend': trend, 'entry_signal': 'NEUTRAL', 'confidence': 0
+        }
 
     # Validation de cohérence
     validation = validate_signal_coherence(indicators, entry_signal)
