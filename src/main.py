@@ -23,6 +23,7 @@ from news_analyzer import news_analyzer, get_market_sentiment, get_fear_greed
 from market_intelligence import market_intel, get_market_intelligence, should_trade_with_intel
 from ml_predictor import ml_predictor, get_ml_prediction, log_trade_result
 from onchain_analyzer import onchain_analyzer, get_onchain_analysis, get_onchain_signal_adjustment
+from position_sizing import position_sizer, calculate_position_size, update_position_stats, get_position_recommendations
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -90,6 +91,10 @@ ML_SCORE_ADJUST = True        # Ajuster le score selon ML
 # Configuration On-Chain
 ONCHAIN_ENABLED = True        # Activer l'analyse on-chain
 ONCHAIN_SCORE_ADJUST = True   # Ajuster le score selon on-chain
+
+# Configuration Position Sizing (Kelly)
+KELLY_SIZING_ENABLED = True   # Utiliser Kelly pour le sizing
+FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly désactivé
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
@@ -680,11 +685,28 @@ def run_scanner():
                             add_bot_log(f"🔗 {opp['pair']} On-chain: {onchain_reason}", 'INFO')
 
                     if balance >= TRADE_AMOUNT:
+                        # ── CALCUL POSITION SIZING (KELLY) ─────────────
+                        if KELLY_SIZING_ENABLED:
+                            trade_amount, sizing_breakdown = calculate_position_size(
+                                capital=balance,
+                                indicators=opp_indicators,
+                                score=adjusted_score,
+                                ml_probability=ml_prob if ML_ENABLED else 50,
+                                stop_loss_pct=abs((opp['price'] - opp['stop_loss']) / opp['price'] * 100)
+                            )
+                            add_bot_log(f"📊 Kelly: ${trade_amount:.0f} ({sizing_breakdown.get('final_position', 'N/A')})", 'INFO')
+                        else:
+                            trade_amount = FIXED_TRADE_AMOUNT
+                        
+                        # Vérifier qu'on a assez de balance
+                        if balance < trade_amount:
+                            trade_amount = balance * 0.9  # Utiliser 90% du reste
+                        
                         # ── EXÉCUTION LONG OU SHORT ─────────────
                         if signal_direction == 'LONG':
                             success = trader.place_buy_order(
                                 symbol=opp['pair'],
-                                amount_usdt=TRADE_AMOUNT,
+                                amount_usdt=trade_amount,
                                 current_price=opp['price'],
                                 stop_loss_price=opp['stop_loss'],
                                 take_profit_price=opp['take_profit_1'],
@@ -695,7 +717,7 @@ def run_scanner():
                         else:  # SHORT
                             success = trader.place_short_order(
                                 symbol=opp['pair'],
-                                amount_usdt=TRADE_AMOUNT,
+                                amount_usdt=trade_amount,
                                 current_price=opp['price'],
                                 stop_loss_price=opp['stop_loss'],
                                 take_profit_price=opp['take_profit_1'],
@@ -706,12 +728,12 @@ def run_scanner():
                         if success:
                             # Enregistrer le trade pour le cooldown
                             trader.record_trade_time(opp['pair'])
-                            balance -= TRADE_AMOUNT
+                            balance -= trade_amount
                             my_positions = trader.get_open_positions()
                             add_bot_log(
                                 f"{trade_emoji} {opp['pair']} | ${opp['price']:.4f} | "
-                                f"SL:${opp['stop_loss']:.4f} | TP:${opp['take_profit_1']:.4f} | "
-                                f"Score:{opp['score']} | R/R:{opp['rr_ratio']}",
+                                f"Size:${trade_amount:.0f} | SL:${opp['stop_loss']:.4f} | TP:${opp['take_profit_1']:.4f} | "
+                                f"Score:{adjusted_score}",
                                 'TRADE'
                             )
                     else:
@@ -999,6 +1021,68 @@ def api_onchain_nupl():
         btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
         nupl = onchain_analyzer.estimate_nupl(btc_price)
         return jsonify(nupl)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/position_sizing')
+def api_position_sizing():
+    """Retourne les statistiques et recommandations de position sizing."""
+    try:
+        balance = trader.get_usdt_balance()
+        stats = position_sizer.get_stats()
+        recommendations = get_position_recommendations(balance, MAX_POSITIONS)
+        return jsonify({
+            'stats': stats,
+            'recommendations': recommendations,
+            'current_balance': balance
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/position_sizing/calculate')
+def api_calculate_position():
+    """Calcule la taille de position optimale pour un trade."""
+    try:
+        symbol = request.args.get('symbol', 'BTCUSDT')
+        score = int(request.args.get('score', 70))
+        ml_prob = float(request.args.get('ml_prob', 50))
+        
+        balance = trader.get_usdt_balance()
+        indicators = all_indicators.get(symbol, {})
+        
+        position_size, breakdown = calculate_position_size(
+            capital=balance,
+            indicators=indicators,
+            score=score,
+            ml_probability=ml_prob
+        )
+        
+        return jsonify({
+            'symbol': symbol,
+            'position_size': position_size,
+            'breakdown': breakdown,
+            'balance': balance
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/intelligence_summary')
+def api_intelligence_summary():
+    """Retourne un résumé de toute l'intelligence disponible."""
+    try:
+        btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
+        
+        return jsonify({
+            'sentiment': shared_data.get('market_sentiment', {}),
+            'intelligence': shared_data.get('market_intelligence', {}),
+            'onchain': get_onchain_analysis(btc_price),
+            'ml_stats': ml_predictor.get_model_stats(),
+            'position_sizing': position_sizer.get_stats(),
+            'kelly_recommendations': get_position_recommendations(trader.get_usdt_balance(), MAX_POSITIONS)
+        })
     except Exception as e:
         return jsonify({'error': str(e)})
 
@@ -1364,6 +1448,26 @@ tbody tr:hover td { background: rgba(0,212,255,0.03); }
     background: rgba(0,0,0,0.2);
     border-radius: 4px;
 }
+.mini-stat {
+    background: rgba(0,0,0,0.25);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+.mini-stat .ind-label {
+    font-size: 0.65em;
+    color: var(--text3);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.mini-stat .ind-val {
+    font-size: 1em;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text);
+}
 .ind-label { font-size: 0.65em; color: var(--text3); font-family: var(--font-mono); letter-spacing: 1px; text-transform: uppercase; }
 .ind-val { font-size: 0.85em; font-family: var(--font-mono); font-weight: 600; }
 
@@ -1543,6 +1647,80 @@ tbody tr:hover td { background: rgba(0,212,255,0.03); }
     </div>
 </div>
 {% endif %}
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- INTELLIGENCE DASHBOARD (ML + On-Chain + Kelly)              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="bottom-grid" style="margin-bottom:14px;">
+    <!-- ML & ON-CHAIN -->
+    <div class="card">
+        <div class="card-header">
+            <h2>🧠 Intelligence Avancée</h2>
+            <span class="badge b-blue" id="intel-status">CHARGEMENT...</span>
+        </div>
+        <div class="card-body" style="padding:12px 16px;">
+            <div class="stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">🤖 ML Accuracy</div>
+                    <div class="ind-val" id="ml-accuracy">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📊 ML Trades</div>
+                    <div class="ind-val" id="ml-trades">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">🔗 On-Chain</div>
+                    <div class="ind-val" id="onchain-signal">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📈 NUPL</div>
+                    <div class="ind-val" id="nupl-value">--</div>
+                </div>
+            </div>
+            <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">💰 TVL DeFi</div>
+                    <div class="ind-val" id="tvl-value">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">🔄 Ex. Flow</div>
+                    <div class="ind-val" id="exchange-flow">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📉 MVRV</div>
+                    <div class="ind-val" id="mvrv-value">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- KELLY POSITION SIZING -->
+    <div class="card">
+        <div class="card-header">
+            <h2>💎 Position Sizing (Kelly)</h2>
+        </div>
+        <div class="card-body" style="padding:12px 16px;">
+            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">📊 Kelly Fraction</div>
+                    <div class="ind-val" id="kelly-fraction">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">🎯 Win Rate</div>
+                    <div class="ind-val" id="kelly-winrate">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">💵 Position Rec.</div>
+                    <div class="ind-val" id="kelly-position">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📈 R/R Ratio</div>
+                    <div class="ind-val" id="kelly-rr">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- MAIN GRID: POSITIONS + BOT LOG                             -->
@@ -1962,6 +2140,78 @@ function showToast(msg, isError = false) {
 
 // ── Auto-refresh désactivé ─────────────────────────────────────
 // Refresh disabled - scan continues in background
+
+// ── Intelligence Dashboard Update ─────────────────────────────
+function updateIntelligence() {
+    fetch('/api/intelligence_summary')
+        .then(r => r.json())
+        .then(data => {
+            // ML Stats
+            if (data.ml_stats) {
+                document.getElementById('ml-accuracy').textContent = data.ml_stats.accuracy ? data.ml_stats.accuracy.toFixed(1) + '%' : '--';
+                document.getElementById('ml-trades').textContent = data.ml_stats.completed_trades || 0;
+            }
+            
+            // On-Chain
+            if (data.onchain) {
+                const signal = data.onchain.global_signal || 'neutral';
+                const score = data.onchain.global_score || 0;
+                document.getElementById('onchain-signal').textContent = signal.toUpperCase() + ' (' + score + ')';
+                document.getElementById('onchain-signal').style.color = 
+                    signal === 'bullish' ? 'var(--green)' : (signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
+                
+                if (data.onchain.metrics) {
+                    const nupl = data.onchain.metrics.nupl;
+                    if (nupl) {
+                        document.getElementById('nupl-value').textContent = nupl.phase || '--';
+                        document.getElementById('nupl-value').style.color = 
+                            nupl.signal === 'bullish' || nupl.signal === 'strong_bullish' ? 'var(--green)' : 
+                            (nupl.signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
+                    }
+                    
+                    const mvrv = data.onchain.metrics.mvrv;
+                    if (mvrv) {
+                        document.getElementById('mvrv-value').textContent = mvrv.mvrv_estimated ? mvrv.mvrv_estimated.toFixed(2) : '--';
+                    }
+                    
+                    const tvl = data.onchain.metrics.tvl;
+                    if (tvl) {
+                        document.getElementById('tvl-value').textContent = tvl.total_tvl_formatted || '--';
+                    }
+                    
+                    const flow = data.onchain.metrics.exchange_flow;
+                    if (flow) {
+                        document.getElementById('exchange-flow').textContent = flow.signal || '--';
+                        document.getElementById('exchange-flow').style.color = 
+                            flow.signal === 'bullish' ? 'var(--green)' : (flow.signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
+                    }
+                }
+            }
+            
+            // Kelly Positioning
+            if (data.position_sizing) {
+                document.getElementById('kelly-fraction').textContent = data.position_sizing.calculated_kelly || '--';
+                document.getElementById('kelly-winrate').textContent = data.position_sizing.win_rate || '--';
+                document.getElementById('kelly-rr').textContent = data.position_sizing.risk_reward || '--';
+            }
+            
+            if (data.kelly_recommendations) {
+                document.getElementById('kelly-position').textContent = data.kelly_recommendations.avg_position_size || '--';
+            }
+            
+            document.getElementById('intel-status').textContent = 'ACTIF';
+            document.getElementById('intel-status').classList.remove('b-wait');
+            document.getElementById('intel-status').classList.add('b-long');
+        })
+        .catch(e => {
+            document.getElementById('intel-status').textContent = 'ERREUR';
+            document.getElementById('intel-status').classList.add('b-short');
+        });
+}
+
+// Update intelligence on page load and every 60 seconds
+updateIntelligence();
+setInterval(updateIntelligence, 60000);
 
 </script>
 </body>
