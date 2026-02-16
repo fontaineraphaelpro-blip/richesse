@@ -58,27 +58,44 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
             else:
                 warnings.append("MACD Achat")
 
-    # 3. RSI (25 pts)
+    # 3. RSI (25 pts) - LOGIQUE AMÉLIORÉE pour éviter les contradictions
     max_score += 25
     if rsi is not None:
         if entry_signal == 'LONG':
-            if 40 <= rsi <= 70:
-                coherence_score += 25
-                strengths.append("RSI Zone Achat")
-            elif rsi > 70:
-                warnings.append("RSI Surachat (Risqué)")
-                coherence_score += 10 # Possible momentum fort
-            else:
-                warnings.append("RSI trop faible pour Achat")
+            # LONG valide si RSI en zone neutre-basse (pas extreme)
+            # Un RSI < 30 avec signal LONG signifie souvent un faux rebond
+            if 30 <= rsi <= 50:
+                coherence_score += 25  # Zone idéale pour LONG (pas survend ni surachet)
+                strengths.append("RSI Zone Optimale LONG")
+            elif 50 < rsi <= 60:
+                coherence_score += 20
+                strengths.append("RSI Momentum LONG")
+            elif 20 <= rsi < 30:
+                coherence_score += 15  # Oversold, risqué mais possible
+                warnings.append("RSI Oversold - rebond risqué")
+            elif rsi > 60:
+                warnings.append("RSI trop haut pour LONG sécurisé")
+                coherence_score += 5
+            else:  # RSI < 20 extreme
+                warnings.append("RSI EXTREME - attendre stabilisation")
+                coherence_score += 0  # Pas de points
         elif entry_signal == 'SHORT':
-            if 30 <= rsi <= 60:
-                coherence_score += 25
-                strengths.append("RSI Zone Vente")
-            elif rsi < 30:
-                warnings.append("RSI Survente (Risqué)")
-                coherence_score += 10
-            else:
-                warnings.append("RSI trop haut pour Vente")
+            # SHORT valide si RSI en zone neutre-haute (pas extreme)
+            if 50 <= rsi <= 70:
+                coherence_score += 25  # Zone idéale pour SHORT
+                strengths.append("RSI Zone Optimale SHORT")
+            elif 40 <= rsi < 50:
+                coherence_score += 20
+                strengths.append("RSI Pré-correction")
+            elif 70 < rsi <= 80:
+                coherence_score += 15  # Overbought, risqué mais possible
+                warnings.append("RSI Overbought - correction risquée")
+            elif rsi < 40:
+                warnings.append("RSI trop bas pour SHORT sécurisé")
+                coherence_score += 5
+            else:  # RSI > 80 extreme
+                warnings.append("RSI EXTREME - attendre retournement")
+                coherence_score += 0  # Pas de points
 
     # 4. ADX (25 pts)
     max_score += 25
@@ -94,9 +111,9 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
     # Calcul final
     coherence_percent = (coherence_score / max_score * 100) if max_score > 0 else 0
     
-    # Validation assouplie : 50% de cohérence suffit pour afficher le signal
-    # On laisse l'utilisateur juger
-    is_valid = coherence_percent >= 50
+    # Validation STRICTE : 65% de cohérence minimum (augmenté de 50%)
+    # Un signal doit avoir une FORTE cohérence pour être validé
+    is_valid = coherence_percent >= 65
 
     return {
         'is_valid': is_valid,

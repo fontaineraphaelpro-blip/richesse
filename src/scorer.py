@@ -80,14 +80,32 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     
     # Bonus Contextuels (0-30 pts)
     
-    # 1. RSI favorable
+    # 1. RSI favorable - LOGIQUE AMELIOREE (zones optimales)
     if rsi14:
-        if entry_signal == 'LONG' and 40 <= rsi14 <= 60:
-            score += 10
-            details.append("RSI Achat OK")
-        elif entry_signal == 'SHORT' and 40 <= rsi14 <= 60:
-            score += 10
-            details.append("RSI Vente OK")
+        if entry_signal == 'LONG':
+            # LONG: bonus si RSI en zone OPTIMALE (30-50), pas extreme
+            if 30 <= rsi14 <= 50:
+                score += 15  # Zone ideale pour LONG
+                details.append("RSI Zone Optimale LONG")
+            elif 50 < rsi14 <= 60:
+                score += 10
+                details.append("RSI Momentum LONG")
+            elif rsi14 < 30:
+                score += 5   # Oversold risque mais possible
+                details.append("RSI Oversold (risque)")
+            # RSI > 60 = pas de bonus pour LONG
+        elif entry_signal == 'SHORT':
+            # SHORT: bonus si RSI en zone OPTIMALE (50-70), pas extreme
+            if 50 <= rsi14 <= 70:
+                score += 15  # Zone ideale pour SHORT
+                details.append("RSI Zone Optimale SHORT")
+            elif 40 <= rsi14 < 50:
+                score += 10
+                details.append("RSI Pre-correction")
+            elif rsi14 > 70:
+                score += 5   # Overbought risque mais possible
+                details.append("RSI Overbought (risque)")
+            # RSI < 40 = pas de bonus pour SHORT
             
     # 2. Alignement Tendance
     if (entry_signal == 'LONG' and trend == 'Bullish') or \

@@ -71,19 +71,23 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 confidence += 20
 
     # --- 4. Analyse du Momentum (RSI) ---
-    # Scalping : On cherche les rebonds ou les continuités, mais on évite les extrêmes absolus
+    # Stratégie améliorée: utiliser les zones extremes ET les zones neutres
     if rsi14 is not None:
-        # Logique LONG : On veut un RSI qui a de la marge pour monter (pas > 70)
-        if 40 <= rsi14 <= 65: 
-            if ema_trend == 'BULLISH':
-                bullish_confirmations += 1
-                confidence += 15
+        # LONG: RSI en survente (rebond) OU en zone favorable avec tendance haussière
+        if rsi14 < 35:  # Zone oversold - signal de rebond potentiel
+            bullish_confirmations += 2
+            confidence += 20
+        elif 35 <= rsi14 <= 60 and ema_trend == 'BULLISH':
+            bullish_confirmations += 1
+            confidence += 10
         
-        # Logique SHORT : On veut un RSI qui a de la marge pour descendre (pas < 30)
-        if 35 <= rsi14 <= 60: 
-            if ema_trend == 'BEARISH':
-                bearish_confirmations += 1
-                confidence += 15
+        # SHORT: RSI en surachat (correction) OU en zone favorable avec tendance baissière  
+        if rsi14 > 65:  # Zone overbought - signal de correction potentielle
+            bearish_confirmations += 2
+            confidence += 20
+        elif 40 <= rsi14 <= 65 and ema_trend == 'BEARISH':
+            bearish_confirmations += 1
+            confidence += 10
                 
         # Divergences (Si calculées)
         div_type = indicators.get('rsi_divergence_type')
@@ -130,9 +134,13 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 bearish_confirmations += 1
 
     # --- 8. Patterns (Bonus) ---
+    candlestick_bullish = indicators.get('candlestick_bullish_signals', 0)
     if candlestick_bearish > 0:
         bearish_confirmations += 1
-        confidence += 5
+        confidence += 10
+    if candlestick_bullish > 0:
+        bullish_confirmations += 1
+        confidence += 10
     
     # --- 9. DÉCISION FINALE (Seuils Assouplis pour Réalité Marché) ---
     
@@ -144,17 +152,38 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     if adx is not None and adx < 15:
         confidence -= 20 # Pénalité forte
 
-    # CRITÈRES D'ENTRÉE :
-    # 1. Minimum 4 confirmations (Indicateurs qui vont dans le même sens)
-    # 2. Confiance > 50%
+    # CRITÈRES D'ENTRÉE (STRICTS) :
+    # 1. Minimum 4 confirmations obligatoires
+    # 2. Confiance >= 55% (augmentée pour qualité)
+    # 3. La direction DOIT être cohérente avec la tendance EMA
+    # 4. Écart minimum entre bullish et bearish confirmations (éviter conflits)
     
-    if bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH':
-        entry_signal = 'SHORT'
-        entry_price = current_price
-        
-    elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH':
-        entry_signal = 'LONG'
-        entry_price = current_price
+    # Calcul de l'écart entre signaux (éviter les signaux ambigus)
+    signal_strength_diff = abs(bullish_confirmations - bearish_confirmations)
+    
+    if bullish_confirmations > bearish_confirmations:
+        # Plus de signaux bullish - mais exiger un écart clair
+        if bullish_confirmations >= 5 and confidence >= 60 and signal_strength_diff >= 3:
+            # Signal FORT : 5+ confirmations, haute confiance, écart clair
+            entry_signal = 'LONG'
+            entry_price = current_price
+        elif bullish_confirmations >= 4 and confidence >= 55 and ema_trend == 'BULLISH' and signal_strength_diff >= 2:
+            # Signal VALIDE : tendance alignée, écart suffisant
+            entry_signal = 'LONG'
+            entry_price = current_price
+        # SUPPRIMÉ: les entrées avec seulement 2-3 confirmations (trop risqué)
+            
+    elif bearish_confirmations > bullish_confirmations:
+        # Plus de signaux bearish - mais exiger un écart clair
+        if bearish_confirmations >= 5 and confidence >= 60 and signal_strength_diff >= 3:
+            # Signal FORT : 5+ confirmations, haute confiance, écart clair
+            entry_signal = 'SHORT'
+            entry_price = current_price
+        elif bearish_confirmations >= 4 and confidence >= 55 and ema_trend == 'BEARISH' and signal_strength_diff >= 2:
+            # Signal VALIDE : tendance alignée, écart suffisant
+            entry_signal = 'SHORT'
+            entry_price = current_price
+        # SUPPRIMÉ: les entrées avec seulement 2-3 confirmations (trop risqué)
 
     # --- 10. Gestion du Risque (Stop Loss & Take Profit) ---
     stop_loss = None
@@ -164,9 +193,10 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     
     if entry_signal != 'NEUTRAL' and atr and entry_price:
         # Stop Loss basé sur ATR (Volatilité)
-        # SL à 2x ATR, TP à 4x ATR = R/R de 2:1 minimum
-        atr_sl_multiplier = 2.0
-        atr_tp_multiplier = 4.0
+        # SL à 1.2x ATR, TP à 2.5x ATR = R/R de 2:1 avec SL réaliste
+        # SL plus serré = moins de perte si mauvais signal
+        atr_sl_multiplier = 1.2
+        atr_tp_multiplier = 2.5
         
         atr_value = atr
         

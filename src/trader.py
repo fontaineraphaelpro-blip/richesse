@@ -689,3 +689,77 @@ class PaperTrader:
         self.wallet = {'USDT': initial_balance, 'positions': {}}
         self.save_wallet()
         print(f"🔄 Portefeuille réinitialisé à ${initial_balance:.2f}")
+
+    def reverse_position(
+        self,
+        symbol: str,
+        current_price: float,
+        new_direction: str,
+        amount_usdt: float,
+        stop_loss_price: float,
+        take_profit_price: float,
+        entry_trend: str = 'UNKNOWN',
+        take_profit_2: float = None,
+    ) -> bool:
+        """
+        Inverse une position existante: ferme la position actuelle et ouvre dans la direction opposée.
+        
+        Args:
+            symbol: Symbole de la paire
+            current_price: Prix actuel du marché
+            new_direction: 'LONG' ou 'SHORT' - la nouvelle direction à prendre
+            amount_usdt: Montant pour la nouvelle position
+            stop_loss_price: Stop Loss de la nouvelle position
+            take_profit_price: Take Profit de la nouvelle position
+            entry_trend: Tendance d'entrée
+            take_profit_2: TP2 optionnel
+        
+        Returns:
+            True si l'inversion a réussi, False sinon
+        """
+        if symbol not in self.wallet['positions']:
+            print(f"⚠️ Pas de position existante sur {symbol} à inverser")
+            return False
+        
+        current_pos = self.wallet['positions'][symbol]
+        current_direction = current_pos.get('direction', 'LONG')
+        
+        # Vérifier qu'on inverse vraiment (pas la même direction)
+        if current_direction == new_direction:
+            print(f"⚠️ {symbol} déjà en {new_direction}, pas d'inversion nécessaire")
+            return False
+        
+        # Fermer la position actuelle
+        self.close_position(symbol, current_price, f"INVERSION → {new_direction} 🔄")
+        
+        # Ouvrir la nouvelle position dans la direction opposée
+        if new_direction == 'LONG':
+            success = self.place_buy_order(
+                symbol=symbol,
+                amount_usdt=amount_usdt,
+                current_price=current_price,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+                entry_trend=entry_trend,
+                take_profit_2=take_profit_2
+            )
+        else:  # SHORT
+            success = self.place_short_order(
+                symbol=symbol,
+                amount_usdt=amount_usdt,
+                current_price=current_price,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+                entry_trend=entry_trend
+            )
+        
+        if success:
+            print(f"🔄 INVERSION {symbol}: {current_direction} → {new_direction} @ ${current_price:.6f}")
+        
+        return success
+
+    def get_position_direction(self, symbol: str) -> str:
+        """Retourne la direction d'une position ('LONG', 'SHORT', ou None si pas de position)"""
+        if symbol in self.wallet['positions']:
+            return self.wallet['positions'][symbol].get('direction', 'LONG')
+        return None

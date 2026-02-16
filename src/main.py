@@ -29,6 +29,8 @@ from position_sizing import position_sizer, calculate_position_size, update_posi
 from macro_events import macro_analyzer, get_macro_analysis, check_macro_events, get_upcoming_economic_events
 from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment, get_sentiment_modifier
 from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_journal_stats, should_trade as journal_should_trade, get_trade_modifier
+from fundamental_analysis import fundamental_analyzer, get_fundamental_score, should_trade_fundamentally, get_fundamental_modifier
+from advanced_technical_analysis import advanced_ta, get_advanced_technical_analysis, get_technical_score_adjustment
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
@@ -36,15 +38,15 @@ from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_j
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
-MIN_SCORE_BUY    = 70      # Score min pour auto-buy
+MIN_SCORE_BUY    = 75      # Score min pour auto-buy (AUGMENTE de 70 a 75)
 SCAN_INTERVAL    = 300     # Secondes entre scans (5 min)
-MAX_POSITIONS    = 5       # Positions simultanÃ©es max
+MAX_POSITIONS    = 5       # Positions simultanees max
 RISK_PERCENT     = 2.0     # % du capital par trade (risk management)
 
 # Configuration Multi-Timeframe
 MTF_TIMEFRAMES   = ['15m', '1h', '4h']  # Timeframes pour confirmation
-MTF_ENABLED      = True                  # Activer/dÃ©sactiver multi-TF
-MTF_MIN_ALIGN    = 66                    # Alignement minimum requis (%)
+MTF_ENABLED      = True                  # Activer/desactiver multi-TF
+MTF_MIN_ALIGN    = 70                    # Alignement minimum requis (AUGMENTE de 66 a 70%)
 
 # Configuration Drawdown & Break-Even
 MAX_DRAWDOWN_PCT = 10.0    # ArrÃªter si perte > 10% du capital initial
@@ -74,14 +76,14 @@ TRADING_START_HOUR = 7       # 7h UTC (8h Paris, 2h New York)
 TRADING_END_HOUR = 22        # 22h UTC (23h Paris, 17h New York)
 AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
 
-# Score Dynamique selon MarchÃ©
+# Score Dynamique selon Marche (PARAMETRES STRICTS)
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 65    # Score min si marchÃ© haussier
-SCORE_BEARISH_MARKET = 80    # Score min si marchÃ© baissier
-SCORE_NEUTRAL_MARKET = 70    # Score min si marchÃ© neutre
+SCORE_BULLISH_MARKET = 70    # Score min si marche haussier (AUGMENTE de 65)
+SCORE_BEARISH_MARKET = 85    # Score min si marche baissier (AUGMENTE de 80)
+SCORE_NEUTRAL_MARKET = 75    # Score min si marche neutre (AUGMENTE de 70)
 
 # Risk/Reward Minimum
-MIN_RISK_REWARD = 1.5        # Rejeter si R/R < 1.5:1 (assouplir pour permettre plus de trades)
+MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1 (AUGMENTE de 1.5 - qualite obligatoire)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True           # Activer l'analyse des news
@@ -113,7 +115,19 @@ SOCIAL_SCORE_MODIFIER = True     # Modifier score selon sentiment
 
 # Trade Journal AI
 TRADE_JOURNAL_ENABLED = True     # Enregistrer tous les trades
-JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passÃ©es
+JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passees
+
+# ANALYSE FONDAMENTALE (NOUVEAU)
+FUNDAMENTAL_ENABLED = True       # Activer l'analyse fondamentale
+FUNDAMENTAL_SCORE_ADJUST = True  # Ajuster score selon fondamentaux
+FUNDAMENTAL_MIN_SCORE = 40       # Score fondamental minimum pour trader
+FUNDAMENTAL_BLOCK_AVOID = True   # Bloquer les trades sur tokens "AVOID"
+
+# ANALYSE TECHNIQUE AVANCEE (NOUVEAU)
+ADVANCED_TA_ENABLED = True       # Activer l'analyse technique avancee
+ADVANCED_TA_SCORE_ADJUST = True  # Ajuster score selon analyse avancee
+ADVANCED_TA_MIN_SCORE = 55       # Score technique minimum (0-100)
+ADVANCED_TA_WEIGHT = 0.3         # Poids de l'analyse avancee dans le score final
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # DÃ©sactivÃ© par dÃ©faut (risquÃ©)
@@ -458,6 +472,49 @@ def run_scanner():
             add_bot_log(f"VÃ©rification de {len(open_pos)} position(s) ouverte(s) WITH PROTECTION...", 'INFO')
             trader.check_positions_with_protection(real_prices, all_indicators)
             
+            # -- DETECTION SIGNAL CONTRAIRE & INVERSION --
+            # Si une position ouverte recoit un signal contraire fort, on inverse
+            for symbol, pos_data in list(open_pos.items()):
+                current_direction = pos_data.get('direction', 'LONG')
+                
+                # Trouver l'opportunite pour cette paire
+                opp_for_pos = next((opp for opp in all_results if opp['pair'] == symbol), None)
+                
+                if opp_for_pos and opp_for_pos['entry_signal'] != 'NEUTRAL':
+                    new_signal = opp_for_pos['entry_signal']
+                    signal_score = opp_for_pos['score']
+                    
+                    # Verifier si c'est un signal contraire avec un score eleve (>=65)
+                    is_opposite = (
+                        (current_direction == 'LONG' and new_signal == 'SHORT') or
+                        (current_direction == 'SHORT' and new_signal == 'LONG')
+                    )
+                    
+                    if is_opposite and signal_score >= 65:
+                        current_price = real_prices.get(symbol)
+                        if current_price and opp_for_pos['stop_loss'] and opp_for_pos['take_profit_1']:
+                            add_bot_log(
+                                f"SIGNAL CONTRAIRE detecte: {symbol} {current_direction} -> {new_signal} (Score:{signal_score})",
+                                'TRADE'
+                            )
+                            
+                            # Inverser la position
+                            success = trader.reverse_position(
+                                symbol=symbol,
+                                current_price=current_price,
+                                new_direction=new_signal,
+                                amount_usdt=pos_data['amount_usdt'],  # Reutiliser le meme montant
+                                stop_loss_price=opp_for_pos['stop_loss'],
+                                take_profit_price=opp_for_pos['take_profit_1'],
+                                entry_trend=opp_for_pos['trend'],
+                                take_profit_2=opp_for_pos.get('take_profit_2')
+                            )
+                            
+                            if success:
+                                add_bot_log(f"INVERSION REUSSIE: {symbol} maintenant en {new_signal}", 'TRADE')
+                                # Mettre a jour les positions pour la suite du scan
+                                open_pos = trader.get_open_positions()
+            
             # â”€â”€ BREAK-EVEN AUTOMATIQUE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             breakeven_count = trader.check_and_apply_breakeven(real_prices)
             if breakeven_count > 0:
@@ -667,6 +724,72 @@ def run_scanner():
                         add_bot_log(f"âŒ {opp['pair']} rejetÃ©: {open_reason}", 'WARN')
                         continue
                     
+                    # -- ANALYSE FONDAMENTALE (Tokenomics, TVL, Dev, Adoption) --
+                    fundamental_modifier = 0
+                    if FUNDAMENTAL_ENABLED:
+                        try:
+                            fund_can_trade, fund_modifier, fund_reason = should_trade_fundamentally(
+                                opp['pair'], 
+                                signal_direction
+                            )
+                            
+                            if FUNDAMENTAL_BLOCK_AVOID and not fund_can_trade:
+                                add_bot_log(f"X {opp['pair']} FONDAMENTAUX: {fund_reason}", 'WARN')
+                                continue
+                            
+                            fund_analysis = get_fundamental_score(opp['pair'])
+                            fund_score = fund_analysis.get('score', 50)
+                            fund_rec = fund_analysis.get('recommendation', 'NEUTRAL')
+                            
+                            if fund_score < FUNDAMENTAL_MIN_SCORE:
+                                add_bot_log(f"X {opp['pair']} Fondamentaux faibles: {fund_score}/100", 'WARN')
+                                continue
+                            
+                            if FUNDAMENTAL_SCORE_ADJUST:
+                                fundamental_modifier = fund_modifier
+                                adjusted_score += fundamental_modifier
+                            
+                            add_bot_log(f"FUND {opp['pair']}: {fund_score}/100 ({fund_rec})", 'INFO')
+                            
+                        except Exception as e:
+                            pass  # Continuer si erreur API
+                    
+
+                    # -- ANALYSE TECHNIQUE AVANCEE --
+                    advanced_ta_modifier = 0
+                    if ADVANCED_TA_ENABLED:
+                        try:
+                            pair_df = data.get(opp['pair'])
+                            if pair_df is not None and len(pair_df) >= 100:
+                                ta_analysis = get_advanced_technical_analysis(pair_df, opp_indicators)
+                                ta_score = ta_analysis.get('score', 50)
+                                ta_direction = ta_analysis.get('direction', 'NEUTRAL')
+                                ta_confidence = ta_analysis.get('confidence', 0)
+                                
+                                if ta_score < ADVANCED_TA_MIN_SCORE and signal_direction == 'LONG':
+                                    add_bot_log(f"X {opp['pair']} TA Score faible: {ta_score:.1f}", 'WARN')
+                                    continue
+                                elif ta_score > (100 - ADVANCED_TA_MIN_SCORE) and signal_direction == 'SHORT':
+                                    add_bot_log(f"X {opp['pair']} TA Score haut pour SHORT: {ta_score:.1f}", 'WARN')
+                                    continue
+                                
+                                direction_aligned = (
+                                    (signal_direction == 'LONG' and ta_direction == 'BULLISH') or
+                                    (signal_direction == 'SHORT' and ta_direction == 'BEARISH')
+                                )
+                                
+                                if not direction_aligned and ta_confidence > 40:
+                                    add_bot_log(f"X {opp['pair']} TA contraire: {ta_direction}", 'WARN')
+                                    continue
+                                
+                                if ADVANCED_TA_SCORE_ADJUST:
+                                    advanced_ta_modifier = get_technical_score_adjustment(ta_analysis, signal_direction)
+                                    adjusted_score += advanced_ta_modifier
+                                
+                                add_bot_log(f"TA {opp['pair']}: {ta_score:.1f}/100 {ta_direction}", 'INFO')
+                        except Exception as e:
+                            pass
+
                     # â”€â”€ VALIDATION MULTI-TIMEFRAME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     mtf_alignment = 0
                     if MTF_ENABLED:
@@ -1551,10 +1674,17 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 <script>
 function closePos(symbol) {
     if (confirm('Fermer la position ' + symbol + ' ?')) {
-        fetch('/close/' + symbol).then(r => r.json()).then(d => {
-            if(d.success) location.reload();
-            else alert('Erreur: ' + (d.error || 'Echec'));
-        });
+        fetch('/api/close/' + symbol, {method: 'POST'})
+            .then(r => r.json())
+            .then(d => {
+                if(d.success) {
+                    alert('Position ' + symbol + ' fermée avec succès!');
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + (d.error || 'Echec de la fermeture'));
+                }
+            })
+            .catch(err => alert('Erreur réseau: ' + err));
     }
 }
 

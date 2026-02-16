@@ -25,14 +25,14 @@ class TradeFilters:
         self.trading_end_hour = 22    # 22h UTC
         self.avoid_weekends = True
         
-        # Configuration Score Dynamique
+        # Configuration Score Dynamique (AUGMENTES pour qualite)
         self.dynamic_score_enabled = True
-        self.score_bullish_market = 65
-        self.score_bearish_market = 80
-        self.score_neutral_market = 70
+        self.score_bullish_market = 70   # AUGMENTE de 65
+        self.score_bearish_market = 85   # AUGMENTE de 80
+        self.score_neutral_market = 75   # AUGMENTE de 70
         
-        # Configuration Risk/Reward
-        self.min_risk_reward = 1.5  # R/R minimum de 1.5:1 (assouplir pour permettre plus de trades)
+        # Configuration Risk/Reward (STRICT)
+        self.min_risk_reward = 2.0  # R/R minimum de 2:1 (AUGMENTE pour qualite)
 
     # ─────────────────────────────────────────────────────────────
     # FILTRE VOLUME

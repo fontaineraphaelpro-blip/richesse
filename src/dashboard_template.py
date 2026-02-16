@@ -844,10 +844,17 @@ function showTab(tabId) {
 // Close position
 function closePos(symbol) {
     if (confirm('Fermer la position ' + symbol + ' ?')) {
-        fetch('/close/' + symbol).then(r => r.json()).then(d => {
-            if(d.success) location.reload();
-            else alert('Erreur: ' + (d.error || 'Echec'));
-        });
+        fetch('/api/close/' + symbol, {method: 'POST'})
+            .then(r => r.json())
+            .then(d => {
+                if(d.success) {
+                    alert('Position ' + symbol + ' fermée avec succès!');
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + (d.error || 'Echec de la fermeture'));
+                }
+            })
+            .catch(err => alert('Erreur réseau: ' + err));
     }
 }
 
