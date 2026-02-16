@@ -1278,7 +1278,7 @@ def get_html_template():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>âš¡ Crypto Trading Bot</title>
+<title>&#9889; Crypto Trading Bot</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -1365,35 +1365,35 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 <!-- HEADER -->
 <div class="header">
     <div>
-        <h1>âš¡ Crypto Trading Bot</h1>
-        <span style="font-size:0.8em;color:var(--text3)">Swing Trading â€¢ {{ timeframe|upper }} â€¢ Auto-buy â‰¥ {{ min_score }}</span>
+        <h1>&#9889; Crypto Trading Bot</h1>
+        <span style="font-size:0.8em;color:var(--text3)">Swing Trading &#8226; {{ timeframe|upper }} &#8226; Auto-buy &#8805; {{ min_score }}</span>
     </div>
     <div class="status">
         <div class="dot {% if is_scanning %}scanning{% endif %}"></div>
         {% if is_scanning %}Scanning...{% else %}Active{% endif %}
-        <span style="margin-left:16px;color:var(--text3)">Scan #{{ scan_count }} â€¢ {{ last_update }}</span>
+        <span style="margin-left:16px;color:var(--text3)">Scan #{{ scan_count }} &#8226; {{ last_update }}</span>
     </div>
 </div>
 
 <!-- STATS PRINCIPAUX -->
 <div class="stats">
     <div class="stat">
-        <div class="stat-label">ðŸ’° Capital</div>
+        <div class="stat-label">&#128176; Capital</div>
         <div class="stat-value blue">${{ "%.2f"|format(total_capital) }}</div>
         <div class="stat-sub">Disponible: ${{ "%.2f"|format(balance) }}</div>
     </div>
     <div class="stat">
-        <div class="stat-label">ðŸ“Š PnL Latent</div>
+        <div class="stat-label">&#128200; PnL Latent</div>
         <div class="stat-value {% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(total_unrealized_pnl) }}$</div>
         <div class="stat-sub">{{ positions|length }} position(s) ouverte(s)</div>
     </div>
     <div class="stat">
-        <div class="stat-label">âœ… PnL RÃ©alisÃ©</div>
+        <div class="stat-label">&#10004; PnL Realise</div>
         <div class="stat-value {% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(perf.total_pnl) }}$</div>
         <div class="stat-sub">{{ perf.winning_trades }}/{{ perf.total_trades }} trades gagnants</div>
     </div>
     <div class="stat">
-        <div class="stat-label">ðŸŽ¯ Win Rate</div>
+        <div class="stat-label">&#127919; Win Rate</div>
         <div class="stat-value">{{ perf.win_rate }}%</div>
         <div class="stat-sub">{{ perf.total_trades }} trades au total</div>
     </div>
@@ -1402,14 +1402,14 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 <!-- POSITIONS ACTIVES -->
 <div class="card">
     <div class="card-header">
-        <h2>ðŸ’¼ Positions Actives ({{ positions|length }})</h2>
+        <h2>&#128188; Positions Actives ({{ positions|length }})</h2>
         <span class="badge b-blue">PAPER TRADING</span>
     </div>
     {% if positions %}
     <div style="overflow-x:auto;">
         <table>
             <thead><tr>
-                <th>Paire</th><th>Type</th><th>EntrÃ©e</th><th>Actuel</th><th>Investi</th>
+                <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Investi</th>
                 <th>PnL</th><th>SL / TP</th><th>Progression</th><th>Action</th>
             </tr></thead>
             <tbody>
@@ -1445,11 +1445,11 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 </div>
 
 <div class="grid-2">
-    <!-- OPPORTUNITÃ‰S -->
+    <!-- OPPORTUNITES -->
     <div class="card">
         <div class="card-header">
-            <h2>ðŸŽ¯ Meilleures OpportunitÃ©s ({{ opportunities|length }})</h2>
-            <span style="font-size:0.8em;color:var(--text3)">Score â‰¥ {{ min_score }} = Auto-achat</span>
+            <h2>&#127919; Meilleures Opportunites ({{ opportunities|length }})</h2>
+            <span style="font-size:0.8em;color:var(--text3)">Score &#8805; {{ min_score }} = Auto-achat</span>
         </div>
         {% if opportunities %}
         <div style="overflow-x:auto;">
@@ -1469,14 +1469,14 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </table>
         </div>
         {% else %}
-        <div class="empty">Aucune opportunitÃ© dÃ©tectÃ©e</div>
+        <div class="empty">Aucune opportunite detectee</div>
         {% endif %}
     </div>
 
     <!-- HISTORIQUE -->
     <div class="card">
         <div class="card-header">
-            <h2>ðŸ“œ Derniers Trades</h2>
+            <h2>&#128220; Derniers Trades</h2>
             <span class="{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:600">Total: {{ "%+.2f"|format(perf.total_pnl) }}$</span>
         </div>
         {% if history %}
@@ -1495,7 +1495,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </table>
         </div>
         {% else %}
-        <div class="empty">Aucun trade fermÃ©</div>
+        <div class="empty">Aucun trade ferme</div>
         {% endif %}
     </div>
 </div>
@@ -1503,7 +1503,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 <!-- BOT LOG -->
 <div class="card">
     <div class="card-header">
-        <h2>ðŸ¤– Journal du Bot</h2>
+        <h2>&#129302; Journal du Bot</h2>
     </div>
     <div class="log">
         {% if bot_log %}
@@ -1515,7 +1515,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         </div>
         {% endfor %}
         {% else %}
-        <div class="empty">En attente d'activitÃ©...</div>
+        <div class="empty">En attente d'activite...</div>
         {% endif %}
     </div>
     <!-- Quick Indicators -->
@@ -1530,7 +1530,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <!-- FOOTER -->
 <div style="text-align:center;padding:20px;color:var(--text3);font-size:0.8em;">
-    Crypto Trading Bot v2.0 â€¢ Tous modules actifs (ML, On-Chain, Kelly, Macro, Social)
+    Crypto Trading Bot v2.0 &#8226; Tous modules actifs (ML, On-Chain, Kelly, Macro, Social)
 </div>
 
 </div>
@@ -1540,7 +1540,7 @@ function closePos(symbol) {
     if (confirm('Fermer la position ' + symbol + ' ?')) {
         fetch('/close/' + symbol).then(r => r.json()).then(d => {
             if(d.success) location.reload();
-            else alert('Erreur: ' + (d.error || 'Ã‰chec'));
+            else alert('Erreur: ' + (d.error || 'Echec'));
         });
     }
 }
@@ -1565,7 +1565,6 @@ fetch('/api/social/fear_greed')
 """
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # BOUCLE PRINCIPALE (THREAD BACKGROUND)
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
