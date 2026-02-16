@@ -1,6 +1,6 @@
 """
 Module pour récupérer les VRAIES données de marché (OHLCV) depuis Binance.
-Inclut la liste des 50 principales paires pour le scalping.
+Inclut la liste des 200 principales paires pour le trading.
 Gère le basculement automatique vers Binance US en cas de blocage (Erreur 451).
 """
 

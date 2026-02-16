@@ -700,7 +700,7 @@ def dashboard():
         total_unrealized_pnl=total_unrealized_pnl,
         history=history,
         opportunities=shared_data['opportunities'],
-        all_scanned=shared_data['all_scanned'][:50],
+        all_scanned=shared_data['all_scanned'][:200],
         is_scanning=shared_data['is_scanning'],
         last_update=shared_data['last_update'],
         scan_count=shared_data['scan_count'],

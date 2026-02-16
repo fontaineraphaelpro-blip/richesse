@@ -4,7 +4,7 @@ Scanner automatique de cryptomonnaies qui détecte les meilleures opportunités 
 
 ## 🎯 Fonctionnalités
 
-- Scanner automatique de 50 principales paires USDT
+- Scanner automatique de 200 principales paires USDT
 - Génération de données OHLCV réalistes (libres de droit, sans API)
 - Calcul d'indicateurs techniques (SMA20, SMA50, RSI14)
 - Détection de support
