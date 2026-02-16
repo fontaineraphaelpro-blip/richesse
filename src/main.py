@@ -24,6 +24,7 @@ from market_intelligence import market_intel, get_market_intelligence, should_tr
 from ml_predictor import ml_predictor, get_ml_prediction, log_trade_result
 from onchain_analyzer import onchain_analyzer, get_onchain_analysis, get_onchain_signal_adjustment
 from position_sizing import position_sizer, calculate_position_size, update_position_stats, get_position_recommendations
+from macro_events import macro_analyzer, get_macro_analysis, check_macro_events, get_upcoming_economic_events
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -95,6 +96,12 @@ ONCHAIN_SCORE_ADJUST = True   # Ajuster le score selon on-chain
 # Configuration Position Sizing (Kelly)
 KELLY_SIZING_ENABLED = True   # Utiliser Kelly pour le sizing
 FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly désactivé
+
+# Configuration Macro Events (Calendrier économique)
+MACRO_EVENTS_ENABLED = True   # Activer le calendrier économique
+PAUSE_ON_FOMC = True          # Pause trading autour du FOMC
+PAUSE_ON_CPI = True           # Pause trading autour du CPI
+REGULATION_ALERTS = True      # Alertes régulations crypto
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
@@ -500,6 +507,23 @@ def run_scanner():
         # Obtenir le score minimum dynamique selon le marché
         dynamic_min_score, score_reason = trade_filters.get_dynamic_min_score(shared_data['market_stats'])
         
+        # Vérifier les événements macroéconomiques
+        macro_can_trade = True
+        macro_modifier = 0
+        if MACRO_EVENTS_ENABLED:
+            try:
+                macro_can_trade, macro_modifier, macro_reason = check_macro_events()
+                if not macro_can_trade:
+                    add_bot_log(f"📅 {macro_reason}", 'WARN')
+                elif macro_modifier != 0:
+                    add_bot_log(f"📅 Macro: {macro_reason} (score {macro_modifier:+d})", 'INFO')
+                
+                # Stocker l'analyse macro
+                shared_data['macro_analysis'] = get_macro_analysis()
+            except Exception as e:
+                add_bot_log(f"⚠️ Erreur macro events: {e}", 'WARN')
+                macro_can_trade = True
+        
         # Vérifier si drawdown max atteint - pas de nouveau trading
         if is_drawdown_exceeded:
             add_bot_log(f"🚨 TRADING SUSPENDU - Drawdown max dépassé", 'ERROR')
@@ -509,6 +533,9 @@ def run_scanner():
         # Vérifier les heures de trading
         elif TRADING_HOURS_ENABLED and not hours_valid:
             add_bot_log(f"⏰ {hours_reason}", 'INFO')
+        # Vérifier les événements macro (FOMC, CPI, etc.)
+        elif not macro_can_trade:
+            add_bot_log(f"📅 TRADING SUSPENDU - Événement macro en cours", 'WARN')
         else:
             add_bot_log(f"Auto-trade | Solde: ${balance:.2f} | {len(my_positions)} pos | {score_reason}", 'INFO')
 
@@ -519,8 +546,8 @@ def run_scanner():
                 # Direction du signal
                 signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
                 
-                # Ajuster le score selon le sentiment marché
-                adjusted_score = opp['score'] + sentiment_modifier
+                # Ajuster le score selon le sentiment marché ET les événements macro
+                adjusted_score = opp['score'] + sentiment_modifier + macro_modifier
                 
                 # ═══════════════════════════════════════════════════════════════
                 # STRATÉGIE HYBRIDE PROUVÉE (Trend Following + Sentiment)
@@ -1081,8 +1108,66 @@ def api_intelligence_summary():
             'onchain': get_onchain_analysis(btc_price),
             'ml_stats': ml_predictor.get_model_stats(),
             'position_sizing': position_sizer.get_stats(),
-            'kelly_recommendations': get_position_recommendations(trader.get_usdt_balance(), MAX_POSITIONS)
+            'kelly_recommendations': get_position_recommendations(trader.get_usdt_balance(), MAX_POSITIONS),
+            'macro': shared_data.get('macro_analysis', {})
         })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/macro')
+def api_macro():
+    """Retourne l'analyse macroéconomique complète."""
+    try:
+        analysis = get_macro_analysis()
+        return jsonify(analysis)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/macro/events')
+def api_macro_events():
+    """Retourne les événements économiques à venir."""
+    try:
+        days = request.args.get('days', 7, type=int)
+        events = get_upcoming_economic_events(days)
+        return jsonify({
+            'events': events,
+            'count': len(events),
+            'days_ahead': days
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/macro/today')
+def api_macro_today():
+    """Retourne les événements du jour."""
+    try:
+        analysis = get_macro_analysis()
+        return jsonify({
+            'today_events': analysis.get('economic_events', {}).get('today', []),
+            'should_pause': analysis.get('should_pause_trading', False),
+            'pause_reason': analysis.get('pause_reason'),
+            'regulation_alerts': analysis.get('regulation', {})
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/macro/add_event', methods=['POST'])
+def api_add_macro_event():
+    """Ajoute un événement personnalisé au calendrier."""
+    try:
+        data = request.json
+        success = macro_analyzer.add_custom_event(
+            date=data.get('date'),
+            name=data.get('name'),
+            impact=data.get('impact', 'MEDIUM'),
+            event_type=data.get('type', 'CUSTOM'),
+            pause_hours=data.get('pause_hours', 1)
+        )
+        return jsonify({'success': success})
     except Exception as e:
         return jsonify({'error': str(e)})
 
@@ -1720,6 +1805,35 @@ tbody tr:hover td { background: rgba(0,212,255,0.03); }
             </div>
         </div>
     </div>
+    
+    <!-- MACRO EVENTS & CALENDAR -->
+    <div class="card">
+        <div class="card-header">
+            <h2>📅 Événements Macro</h2>
+            <span class="badge" id="macro-pause-badge" style="font-size:0.7em;display:none">⏸️ PAUSE</span>
+        </div>
+        <div class="card-body" style="padding:12px 16px;">
+            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">🔮 Prochain Event</div>
+                    <div class="ind-val" id="next-macro-event" style="font-size:0.75em">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">⏰ Dans</div>
+                    <div class="ind-val" id="next-event-time">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">⚡ Impact</div>
+                    <div class="ind-val" id="next-event-impact">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📰 Régulations</div>
+                    <div class="ind-val" id="regulation-alerts">0</div>
+                </div>
+            </div>
+            <div id="macro-events-list" style="margin-top:12px;max-height:100px;overflow-y:auto;font-size:0.75em;color:var(--text3);"></div>
+        </div>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -2197,6 +2311,55 @@ function updateIntelligence() {
             
             if (data.kelly_recommendations) {
                 document.getElementById('kelly-position').textContent = data.kelly_recommendations.avg_position_size || '--';
+            }
+            
+            // Macro Events
+            if (data.macro_events) {
+                const macro = data.macro_events;
+                
+                // Pause status badge
+                const pauseBadge = document.getElementById('macro-pause-badge');
+                if (macro.should_pause) {
+                    pauseBadge.style.display = 'inline-block';
+                    pauseBadge.classList.add('b-short');
+                } else {
+                    pauseBadge.style.display = 'none';
+                }
+                
+                // Next event
+                if (macro.upcoming_events && macro.upcoming_events.length > 0) {
+                    const next = macro.upcoming_events[0];
+                    document.getElementById('next-macro-event').textContent = next.name || '--';
+                    document.getElementById('next-event-time').textContent = next.days_until !== undefined ? 
+                        (next.days_until === 0 ? 'Aujourd\\'hui' : next.days_until + 'j') : '--';
+                    
+                    const impactEl = document.getElementById('next-event-impact');
+                    impactEl.textContent = next.impact || '--';
+                    impactEl.style.color = next.impact === 'CRITICAL' ? 'var(--red)' : 
+                        (next.impact === 'HIGH' ? '#f39c12' : 'var(--text2)');
+                }
+                
+                // Regulation alerts count
+                if (macro.regulation_news) {
+                    const regCount = macro.regulation_news.regulation_count || 0;
+                    const regEl = document.getElementById('regulation-alerts');
+                    regEl.textContent = regCount;
+                    regEl.style.color = regCount > 0 ? '#f39c12' : 'var(--text2)';
+                }
+                
+                // Events list
+                if (macro.upcoming_events && macro.upcoming_events.length > 0) {
+                    const listEl = document.getElementById('macro-events-list');
+                    let html = '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px;">';
+                    macro.upcoming_events.slice(0, 5).forEach(e => {
+                        const impactColor = e.impact === 'CRITICAL' ? 'var(--red)' : 
+                            (e.impact === 'HIGH' ? '#f39c12' : 'var(--text3)');
+                        html += '<div style="padding:2px 0;"><span style="color:' + impactColor + '">●</span> ' + 
+                            e.date + ' - ' + e.name + '</div>';
+                    });
+                    html += '</div>';
+                    listEl.innerHTML = html;
+                }
             }
             
             document.getElementById('intel-status').textContent = 'ACTIF';
