@@ -881,7 +881,7 @@ def dashboard():
         timeframe=TIMEFRAME,
         trade_amount=TRADE_AMOUNT,
         stats=stats,
-        chart_data=chart_data,
+        chart_data=json.dumps(chart_data),
         all_pairs=all_pairs,
         crash=crash,
     )
