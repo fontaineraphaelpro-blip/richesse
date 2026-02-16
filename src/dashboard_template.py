@@ -146,6 +146,100 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 /* Tooltips */
 [data-tooltip] { position: relative; cursor: help; }
 [data-tooltip]:hover::after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg3); color: var(--text); padding: 6px 12px; border-radius: 6px; font-size: 0.8em; white-space: nowrap; z-index: 100; }
+
+/* ==================== RESPONSIVE MOBILE ==================== */
+@media (max-width: 768px) {
+    .app { padding: 10px; }
+    
+    /* Header mobile */
+    .header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 12px 16px; }
+    .header h1 { font-size: 1.2em; }
+    .header .status { width: 100%; justify-content: space-between; }
+    
+    /* Tabs mobile - scrollable */
+    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: 10px 16px; font-size: 0.8em; white-space: nowrap; flex-shrink: 0; }
+    
+    /* Stats mobile */
+    .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat { padding: 14px; }
+    .stat-value { font-size: 1.4em; }
+    .stat-icon { display: none; }
+    .stat-label { font-size: 0.65em; }
+    
+    /* Cards mobile */
+    .card-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+    .card-header h2 { font-size: 0.9em; }
+    
+    /* Charts mobile */
+    .chart-container { padding: 12px; height: 250px; }
+    .chart-row, .chart-row-equal { grid-template-columns: 1fr; gap: 16px; }
+    
+    /* Tables mobile - scroll horizontal */
+    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 600px; font-size: 0.8em; }
+    th, td { padding: 10px 12px; }
+    
+    /* Filters mobile */
+    .filters { flex-direction: column; gap: 10px; padding: 12px 14px; }
+    .filter-group { width: 100%; justify-content: space-between; }
+    .filter-group select, .filter-group input { flex: 1; }
+    
+    /* Progress mobile */
+    .progress { width: 60px; }
+    
+    /* Log mobile */
+    .log { max-height: 200px; }
+    .log-line { padding: 6px 12px; font-size: 0.75em; }
+    .log-time { width: 50px; }
+    .log-level { width: 40px; font-size: 0.75em; }
+    
+    /* Stats detail mobile */
+    .stats-detail { grid-template-columns: 1fr; padding: 14px; gap: 10px; }
+    .detail-item { padding: 10px 0; font-size: 0.9em; }
+    
+    /* Indicators mobile */
+    .indicators { padding: 10px 14px; gap: 10px; font-size: 0.75em; }
+    
+    /* Grid mobile */
+    .grid-2, .grid-3 { grid-template-columns: 1fr; gap: 16px; }
+    
+    /* Badges mobile */
+    .badge { padding: 3px 8px; font-size: 0.7em; }
+    
+    /* Buttons mobile */
+    .btn { padding: 8px 12px; font-size: 0.75em; }
+}
+
+@media (max-width: 480px) {
+    .app { padding: 8px; }
+    
+    /* Stats extra small */
+    .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { padding: 12px; }
+    .stat-value { font-size: 1.2em; }
+    .stat-sub { font-size: 0.7em; }
+    
+    /* Header extra small */
+    .header h1 { font-size: 1em; }
+    .version { font-size: 0.6em; padding: 3px 8px; }
+    
+    /* Tabs extra small */
+    .tab { padding: 8px 12px; font-size: 0.75em; }
+    
+    /* Charts extra small */
+    .chart-container { height: 200px; padding: 10px; }
+    
+    /* Log extra small */
+    .log-line { flex-wrap: wrap; gap: 6px; }
+    .log-time { width: auto; }
+}
+
+/* Touch improvements */
+@media (hover: none) and (pointer: coarse) {
+    .tab, .btn, th { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+    .filter-group select, .filter-group input { min-height: 40px; }
+}
 </style>
 </head>
 <body>
