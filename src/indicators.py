@@ -252,7 +252,7 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         'bb_upper': bb['upper'].iloc[-1],
         'bb_lower': bb['lower'].iloc[-1],
         'bb_width': bb['width'].iloc[-1],
-        'bb_percent': (current_price - bb['lower'].iloc[-1]) / (bb['upper'].iloc[-1] - bb['lower'].iloc[-1]),
+        'bb_percent': (current_price - bb['lower'].iloc[-1]) / (bb['upper'].iloc[-1] - bb['lower'].iloc[-1]) if (bb['upper'].iloc[-1] - bb['lower'].iloc[-1]) != 0 else 0.5,
         
         # --- VOLUME ---
         'current_volume': volume.iloc[-1],
