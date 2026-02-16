@@ -6,17 +6,39 @@ Gère :
 - SL/TP automatiques
 - Journal détaillé des trades
 - Statistiques de performance
++ Protection contre les reversals soudains
 """
 
 import json
 import os
 from datetime import datetime
+from reversal_protection import ReversalProtector
 
 
 class PaperTrader:
     def __init__(self, initial_balance=1000):
         self.balance_file  = 'paper_wallet.json'
         self.trades_file   = 'paper_trades.json'
+        self.protector = ReversalProtector()  # Protection contre reversals
+        
+        # Configuration Break-Even & Drawdown
+        self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
+        self.max_drawdown_pct = 10.0       # Arrêter trading si perte > 10%
+        self.initial_capital = initial_balance  # Capital de référence
+        
+        # Configuration Trailing Stop Loss
+        self.trailing_stop_enabled = True
+        self.trailing_stop_activation_pct = 1.5  # Activer trailing à +1.5% de gain
+        self.trailing_stop_distance_pct = 1.0     # Distance du trailing (1% sous le plus haut)
+        
+        # Configuration Take Profit Partiel
+        self.partial_tp_enabled = True
+        self.partial_tp_ratio = 0.5  # Prendre 50% à TP1
+        
+        # Cooldown après trade
+        self.cooldown_enabled = True
+        self.cooldown_minutes = 30
+        self.recent_trades = {}  # {symbol: last_trade_timestamp}
 
         # Chargement ou création du portefeuille
         if os.path.exists(self.balance_file):
@@ -98,6 +120,291 @@ class PaperTrader:
         }
 
     # ─────────────────────────────────────────────────────────
+    # BREAK-EVEN & DRAWDOWN
+    # ─────────────────────────────────────────────────────────
+
+    def check_and_apply_breakeven(self, real_prices: dict):
+        """
+        Vérifie toutes les positions et applique le break-even automatique.
+        Si une position a un gain >= breakeven_trigger_pct, on déplace le SL au prix d'entrée.
+        """
+        modified_count = 0
+        
+        for symbol, pos in self.wallet['positions'].items():
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+            
+            entry_price = pos['entry_price']
+            direction = pos.get('direction', 'LONG')
+            current_sl = pos['stop_loss']
+            
+            # Calculer le gain actuel en %
+            if direction == 'LONG':
+                gain_pct = ((current_price - entry_price) / entry_price) * 100
+                # Break-even: SL doit être en dessous de entry pour LONG
+                sl_is_below_entry = current_sl < entry_price
+            else:  # SHORT
+                gain_pct = ((entry_price - current_price) / entry_price) * 100
+                # Break-even: SL doit être au-dessus de entry pour SHORT
+                sl_is_below_entry = current_sl > entry_price
+            
+            # Si gain >= trigger ET SL n'est pas encore à break-even
+            if gain_pct >= self.breakeven_trigger_pct and sl_is_below_entry:
+                # Déplacer SL au prix d'entrée (break-even)
+                self.wallet['positions'][symbol]['stop_loss'] = entry_price
+                self.wallet['positions'][symbol]['breakeven_active'] = True
+                modified_count += 1
+                print(f"🔒 BREAK-EVEN {symbol}: SL déplacé à ${entry_price:.4f} (gain: +{gain_pct:.1f}%)")
+        
+        if modified_count > 0:
+            self.save_wallet()
+        
+        return modified_count
+
+    def check_and_apply_trailing_stop(self, real_prices: dict):
+        """
+        Applique le Trailing Stop Loss sur toutes les positions.
+        
+        Le trailing stop suit le prix:
+        - S'active quand gain >= trailing_stop_activation_pct
+        - Maintient le SL à trailing_stop_distance_pct sous le plus haut atteint
+        - Ne descend JAMAIS (pour LONG) / ne monte JAMAIS (pour SHORT)
+        """
+        if not self.trailing_stop_enabled:
+            return 0
+        
+        modified_count = 0
+        
+        for symbol, pos in self.wallet['positions'].items():
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+            
+            entry_price = pos['entry_price']
+            direction = pos.get('direction', 'LONG')
+            current_sl = pos['stop_loss']
+            
+            # Récupérer ou initialiser le plus haut/bas atteint
+            if direction == 'LONG':
+                highest_price = pos.get('highest_price', entry_price)
+                # Mettre à jour le plus haut si le prix actuel est plus élevé
+                if current_price > highest_price:
+                    highest_price = current_price
+                    self.wallet['positions'][symbol]['highest_price'] = highest_price
+                
+                # Calculer le gain depuis l'entrée
+                gain_pct = ((current_price - entry_price) / entry_price) * 100
+                
+                # Activer le trailing si gain >= seuil d'activation
+                if gain_pct >= self.trailing_stop_activation_pct:
+                    # Calculer le nouveau SL trailing (distance % sous le plus haut)
+                    new_trailing_sl = highest_price * (1 - self.trailing_stop_distance_pct / 100)
+                    
+                    # Le SL ne doit JAMAIS descendre (pour LONG)
+                    if new_trailing_sl > current_sl:
+                        old_sl = current_sl
+                        self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
+                        self.wallet['positions'][symbol]['trailing_active'] = True
+                        modified_count += 1
+                        print(f"📈 TRAILING SL {symbol}: ${old_sl:.4f} → ${new_trailing_sl:.4f} "
+                              f"(plus haut: ${highest_price:.4f}, gain: +{gain_pct:.1f}%)")
+            
+            else:  # SHORT
+                lowest_price = pos.get('lowest_price', entry_price)
+                # Mettre à jour le plus bas si le prix actuel est plus bas
+                if current_price < lowest_price:
+                    lowest_price = current_price
+                    self.wallet['positions'][symbol]['lowest_price'] = lowest_price
+                
+                # Calculer le gain depuis l'entrée (pour short, gain = prix baisse)
+                gain_pct = ((entry_price - current_price) / entry_price) * 100
+                
+                # Activer le trailing si gain >= seuil d'activation
+                if gain_pct >= self.trailing_stop_activation_pct:
+                    # Calculer le nouveau SL trailing (distance % au-dessus du plus bas)
+                    new_trailing_sl = lowest_price * (1 + self.trailing_stop_distance_pct / 100)
+                    
+                    # Le SL ne doit JAMAIS monter (pour SHORT)
+                    if new_trailing_sl < current_sl:
+                        old_sl = current_sl
+                        self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
+                        self.wallet['positions'][symbol]['trailing_active'] = True
+                        modified_count += 1
+                        print(f"📉 TRAILING SL {symbol}: ${old_sl:.4f} → ${new_trailing_sl:.4f} "
+                              f"(plus bas: ${lowest_price:.4f}, gain: +{gain_pct:.1f}%)")
+        
+        if modified_count > 0:
+            self.save_wallet()
+        
+        return modified_count
+
+    def get_total_capital(self, real_prices: dict) -> float:
+        """Calcule le capital total = solde USDT + valeur des positions ouvertes."""
+        balance = self.get_usdt_balance()
+        positions_value = 0
+        
+        for symbol, pos in self.wallet['positions'].items():
+            current_price = real_prices.get(symbol, pos['entry_price'])
+            direction = pos.get('direction', 'LONG')
+            entry_price = pos['entry_price']
+            quantity = pos['quantity']
+            
+            if direction == 'LONG':
+                positions_value += quantity * current_price
+            else:  # SHORT
+                pnl = (entry_price - current_price) * quantity
+                positions_value += pos['amount_usdt'] + pnl
+        
+        return balance + positions_value
+
+    def check_drawdown(self, real_prices: dict) -> tuple:
+        """
+        Vérifie si le drawdown maximum est atteint.
+        
+        Returns:
+            (is_exceeded, current_drawdown_pct, total_capital)
+        """
+        total_capital = self.get_total_capital(real_prices)
+        
+        # Récupérer le capital initial depuis le wallet (ou utiliser la valeur par défaut)
+        initial = self.wallet.get('initial_capital', self.initial_capital)
+        
+        # Calculer le drawdown
+        if initial > 0:
+            drawdown_pct = ((initial - total_capital) / initial) * 100
+        else:
+            drawdown_pct = 0
+        
+        is_exceeded = drawdown_pct >= self.max_drawdown_pct
+        
+        return is_exceeded, drawdown_pct, total_capital
+
+    def emergency_close_all(self, real_prices: dict, reason: str = "DRAWDOWN MAX"):
+        """Ferme toutes les positions ouvertes en urgence."""
+        positions_to_close = list(self.wallet['positions'].keys())
+        
+        for symbol in positions_to_close:
+            current_price = real_prices.get(symbol)
+            if current_price:
+                self.close_position(symbol, current_price, f"🚨 {reason}")
+                print(f"🚨 FERMETURE URGENTE {symbol} - {reason}")
+        
+        return len(positions_to_close)
+
+    # ─────────────────────────────────────────────────────────
+    # TAKE PROFIT PARTIEL (SCALING OUT)
+    # ─────────────────────────────────────────────────────────
+
+    def check_and_apply_partial_tp(self, real_prices: dict):
+        """
+        Vérifie si des positions ont atteint TP1 et prend des profits partiels.
+        Prend partial_tp_ratio (50%) à TP1, laisse le reste courir vers TP2.
+        """
+        if not self.partial_tp_enabled:
+            return 0
+        
+        partial_count = 0
+        
+        for symbol, pos in list(self.wallet['positions'].items()):
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+            
+            # Vérifier si déjà partiellement fermé
+            if pos.get('partial_tp_taken', False):
+                continue
+            
+            direction = pos.get('direction', 'LONG')
+            take_profit = pos.get('take_profit', 0)
+            take_profit_2 = pos.get('take_profit_2')  # TP2 optionnel
+            
+            # Vérifier si TP1 est atteint
+            tp1_reached = False
+            if direction == 'LONG':
+                tp1_reached = current_price >= take_profit
+            else:  # SHORT
+                tp1_reached = current_price <= take_profit
+            
+            if tp1_reached:
+                # Prendre 50% des profits
+                quantity = pos['quantity']
+                partial_qty = quantity * self.partial_tp_ratio
+                remaining_qty = quantity - partial_qty
+                
+                entry_price = pos['entry_price']
+                
+                # Calculer PnL partiel
+                if direction == 'LONG':
+                    partial_pnl = (current_price - entry_price) * partial_qty
+                else:
+                    partial_pnl = (entry_price - current_price) * partial_qty
+                
+                partial_value = pos['amount_usdt'] * self.partial_tp_ratio + partial_pnl
+                
+                # Mettre à jour le portefeuille
+                self.wallet['USDT'] += partial_value
+                self.wallet['positions'][symbol]['quantity'] = remaining_qty
+                self.wallet['positions'][symbol]['amount_usdt'] = pos['amount_usdt'] * (1 - self.partial_tp_ratio)
+                self.wallet['positions'][symbol]['partial_tp_taken'] = True
+                
+                # Si TP2 existe, l'utiliser comme nouveau TP
+                if take_profit_2:
+                    self.wallet['positions'][symbol]['take_profit'] = take_profit_2
+                
+                # Déplacer SL au break-even après TP partiel
+                self.wallet['positions'][symbol]['stop_loss'] = entry_price
+                
+                partial_count += 1
+                print(f"💰 TP PARTIEL {symbol}: {self.partial_tp_ratio*100:.0f}% vendu à ${current_price:.4f} "
+                      f"| PnL: ${partial_pnl:.2f} | Reste: {remaining_qty:.6f}")
+                
+                self.log_trade({
+                    'type':        'TP PARTIEL',
+                    'symbol':      symbol,
+                    'direction':   direction,
+                    'price':       current_price,
+                    'quantity':    partial_qty,
+                    'pnl':         round(partial_pnl, 2),
+                    'time':        datetime.now().strftime('%d/%m %H:%M'),
+                })
+        
+        if partial_count > 0:
+            self.save_wallet()
+        
+        return partial_count
+
+    # ─────────────────────────────────────────────────────────
+    # COOLDOWN APRÈS TRADE
+    # ─────────────────────────────────────────────────────────
+
+    def record_trade_time(self, symbol: str):
+        """Enregistre le timestamp du dernier trade sur une paire."""
+        self.recent_trades[symbol] = datetime.now()
+
+    def is_in_cooldown(self, symbol: str) -> tuple:
+        """
+        Vérifie si une paire est en période de cooldown.
+        
+        Returns:
+            (is_in_cooldown, minutes_remaining)
+        """
+        if not self.cooldown_enabled:
+            return False, 0
+        
+        if symbol not in self.recent_trades:
+            return False, 0
+        
+        last_trade = self.recent_trades[symbol]
+        elapsed = (datetime.now() - last_trade).total_seconds() / 60
+        
+        if elapsed < self.cooldown_minutes:
+            remaining = self.cooldown_minutes - elapsed
+            return True, remaining
+        
+        return False, 0
+
+    # ─────────────────────────────────────────────────────────
     # ORDRES
     # ─────────────────────────────────────────────────────────
 
@@ -108,6 +415,8 @@ class PaperTrader:
         current_price: float,
         stop_loss_price: float,
         take_profit_price: float,
+        entry_trend: str = 'UNKNOWN',  # Tendance à l'ouverture
+        take_profit_2: float = None,   # TP2 pour scaling out
     ) -> bool:
         """Exécute un ordre d'ACHAT (position LONG)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -130,6 +439,8 @@ class PaperTrader:
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
+            'take_profit_2': take_profit_2,  # TP2 pour scaling out
+            'entry_trend': entry_trend,  # NOUVEAU: Mémoriser la tendance
         }
         self.save_wallet()
 
@@ -160,6 +471,7 @@ class PaperTrader:
         current_price: float,
         stop_loss_price: float,
         take_profit_price: float,
+        entry_trend: str = 'UNKNOWN',  # Tendance à l'ouverture
     ) -> bool:
         """Exécute un ordre de VENTE À DÉCOUVERT (position SHORT)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -180,6 +492,7 @@ class PaperTrader:
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
+            'entry_trend': entry_trend,  # NOUVEAU: Mémoriser la tendance
         }
         self.save_wallet()
 
@@ -256,6 +569,7 @@ class PaperTrader:
         """
         Vérifie toutes les positions ouvertes.
         Déclenche SL ou TP si le prix les atteint.
+        SIMPLE VERSION - sans protection reversal (appeler check_positions_with_protection_enabled pour protection).
         """
         positions_to_close = []
 
@@ -282,6 +596,77 @@ class PaperTrader:
 
         for symbol, price, reason in positions_to_close:
             self.close_position(symbol, price, reason)
+
+    def check_positions_with_protection(self, real_prices: dict, all_indicators: dict = None):
+        """
+        Vérifie toutes les positions avec PROTECTION contre reversals.
+        Empêche les fermetures SL pendant les whipsaws.
+        
+        Args:
+            real_prices: Dict de prix actuels
+            all_indicators: Dict avec indicateurs par symbole {symbol: indicators_dict}
+        """
+        # Vérifier circuit breaker
+        is_cb_active, cb_remaining = self.protector.is_circuit_breaker_active()
+        if is_cb_active:
+            print(f"⛔ CIRCUIT BREAKER ACTIF - Trading suspendu ({cb_remaining}s)")
+            return
+        
+        positions_to_close = []
+        protected_positions = []
+
+        for symbol, pos in list(self.wallet['positions'].items()):
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+
+            direction = pos.get('direction', 'LONG')
+            stop_loss = pos['stop_loss']
+            take_profit = pos['take_profit']
+            indicators = all_indicators.get(symbol, {}) if all_indicators else {}
+
+            # --- NOUVEAU : FERMETURE IMMÉDIATE SUR REVERSAL ---
+            action = self.protector.get_position_action(pos, indicators, current_price)
+            if action['action'] in ['EMERGENCY_CLOSE', 'PARTIAL_CLOSE']:
+                # Fermer immédiatement (ou partiellement si implémenté)
+                self.close_position(symbol, current_price, f"REVERSAL TENDANCE: {action['reason']}")
+                self.protector.record_sl_close(symbol)
+                continue
+
+            # Vérifier SL
+            is_at_sl = False
+            if direction == 'LONG':
+                is_at_sl = current_price <= stop_loss
+            else:  # SHORT
+                is_at_sl = current_price >= stop_loss
+
+            if is_at_sl:
+                should_protect, protect_reason = self.protector.should_protect_position(
+                    pos, indicators, current_price
+                )
+                if should_protect:
+                    protected_positions.append((symbol, protect_reason))
+                    continue
+                else:
+                    positions_to_close.append((symbol, current_price, f"STOP LOSS 🛑 {protect_reason}"))
+                    self.protector.record_sl_close(symbol)
+
+            # Vérifier TP (toujours valide)
+            is_at_tp = False
+            if direction == 'LONG':
+                is_at_tp = current_price >= take_profit
+            else:  # SHORT
+                is_at_tp = current_price <= take_profit
+
+            if is_at_tp:
+                positions_to_close.append((symbol, current_price, "TAKE PROFIT 🎯"))
+
+        # Fermer les positions à fermer
+        for symbol, price, reason in positions_to_close:
+            self.close_position(symbol, price, reason)
+        # Logger les positions protégées
+        for symbol, reason in protected_positions:
+            print(f"🛡️  {symbol} PROTÉGÉ: {reason}")
 
     def reset_wallet(self, initial_balance: float = 1000.0):
         """Remet le portefeuille à zéro (utile pour les tests)."""

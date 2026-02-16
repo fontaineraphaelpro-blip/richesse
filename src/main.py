@@ -12,11 +12,12 @@ from flask import Flask, render_template_string, jsonify, request
 
 # Import des modules internes
 from trader import PaperTrader
-from data_fetcher import fetch_multiple_pairs
+from data_fetcher import fetch_multiple_pairs, validate_signal_multi_timeframe
 from indicators import calculate_indicators
 from scorer import calculate_opportunity_score
 from support import find_swing_low
 from scalping_signals import find_resistance
+from trade_filters import trade_filters
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -25,9 +26,60 @@ TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
 MIN_SCORE_BUY    = 70      # Score min pour auto-buy
-SCAN_INTERVAL    = 700    # Secondes entre scans (30 min)
+SCAN_INTERVAL    = 300     # Secondes entre scans (5 min)
 MAX_POSITIONS    = 5       # Positions simultanées max
 RISK_PERCENT     = 2.0     # % du capital par trade (risk management)
+
+# Configuration Multi-Timeframe
+MTF_TIMEFRAMES   = ['15m', '1h', '4h']  # Timeframes pour confirmation
+MTF_ENABLED      = True                  # Activer/désactiver multi-TF
+MTF_MIN_ALIGN    = 66                    # Alignement minimum requis (%)
+
+# Configuration Drawdown & Break-Even
+MAX_DRAWDOWN_PCT = 10.0    # Arrêter si perte > 10% du capital initial
+BREAKEVEN_TRIGGER = 1.0    # Activer break-even à +1% de gain
+
+# Configuration Trailing Stop Loss
+TRAILING_ENABLED = True     # Activer/désactiver le trailing stop
+TRAILING_ACTIVATION = 1.5   # Activer trailing à +1.5% de gain
+TRAILING_DISTANCE = 1.0     # Distance du SL (1% sous le plus haut)
+
+# ─────────────────────────────────────────────────────────────
+# NOUVELLES CONFIGURATIONS RENTABILITÉ
+# ─────────────────────────────────────────────────────────────
+
+# Take Profit Partiel (Scaling Out)
+PARTIAL_TP_ENABLED = True    # Activer TP partiel
+PARTIAL_TP_RATIO = 0.5       # Prendre 50% à TP1
+# Le reste court vers TP2
+
+# Filtrage Volume
+VOLUME_FILTER_ENABLED = True
+MIN_VOLUME_RATIO = 1.2       # Volume doit être 1.2x la moyenne
+
+# Heures de Trading Optimales (UTC)
+TRADING_HOURS_ENABLED = True
+TRADING_START_HOUR = 7       # 7h UTC (8h Paris, 2h New York)
+TRADING_END_HOUR = 22        # 22h UTC (23h Paris, 17h New York)
+AVOID_WEEKENDS = True        # Éviter samedi/dimanche
+
+# Score Dynamique selon Marché
+DYNAMIC_SCORE_ENABLED = True
+SCORE_BULLISH_MARKET = 65    # Score min si marché haussier
+SCORE_BEARISH_MARKET = 80    # Score min si marché baissier
+SCORE_NEUTRAL_MARKET = 70    # Score min si marché neutre
+
+# Risk/Reward Minimum
+MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
+
+# Pyramiding (Renforcement de position)
+PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
+MAX_PYRAMIDING = 2           # Max 2 ajouts par position
+PYRAMIDING_GAIN_THRESHOLD = 2.0  # Ajouter si position gagne +2%
+
+# Cooldown après Trade
+COOLDOWN_ENABLED = True
+COOLDOWN_MINUTES = 30        # Attendre 30 min avant de re-trader la même paire
 
 # ─────────────────────────────────────────────────────────────
 # ÉTAT PARTAGÉ (Thread Scanner ↔ Serveur Web Flask)
@@ -119,20 +171,11 @@ def run_scanner():
         shared_data['last_prices'] = real_prices
         add_bot_log(f"{len(data)} paires chargées avec succès", 'INFO')
 
-        # ── ÉTAPE 2 : Gestion Positions (SL / TP) ─────────────
-        trader = PaperTrader()
-        open_pos = trader.get_open_positions()
-        
-        if open_pos:
-            add_bot_log(f"Vérification de {len(open_pos)} position(s) ouverte(s)...", 'INFO')
-            trader.check_positions(real_prices)
-
-        update_performance_stats(trader)
-
-        # ── ÉTAPE 3 : Analyse Technique ────────────────────────
+        # ── ÉTAPE 3 : Analyse Technique (faire AVANT la vérification des positions) ────────────────────────
         add_bot_log("Analyse technique en cours...", 'INFO')
         
         all_results = []
+        all_indicators = {}  # Stocker tous les indicateurs par symbole
         bullish_count = bearish_count = neutral_count = 0
         rsi_values = []
 
@@ -145,6 +188,9 @@ def run_scanner():
                 support = find_swing_low(df, lookback=30)
                 resistance = find_resistance(df, lookback=30)
                 score_data = calculate_opportunity_score(inds, None, df)
+                
+                # Stocker les indicateurs pour utilisation ultérieure
+                all_indicators[symbol] = inds
                 
                 rsi = inds.get('rsi14')
                 if rsi:
@@ -221,6 +267,58 @@ def run_scanner():
             'INFO'
         )
 
+        # ── ÉTAPE 2b : Gestion Positions (SL / TP) avec PROTECTION ─────────────
+        # Maintenant on a tous les indicateurs, on peut vérifier les positions avec protection
+        trader = PaperTrader()
+        open_pos = trader.get_open_positions()
+        
+        if open_pos:
+            add_bot_log(f"Vérification de {len(open_pos)} position(s) ouverte(s) WITH PROTECTION...", 'INFO')
+            trader.check_positions_with_protection(real_prices, all_indicators)
+            
+            # ── BREAK-EVEN AUTOMATIQUE ─────────────
+            breakeven_count = trader.check_and_apply_breakeven(real_prices)
+            if breakeven_count > 0:
+                add_bot_log(f"🔒 BREAK-EVEN appliqué sur {breakeven_count} position(s)", 'TRADE')
+            
+            # ── TRAILING STOP LOSS ─────────────
+            trailing_count = trader.check_and_apply_trailing_stop(real_prices)
+            if trailing_count > 0:
+                add_bot_log(f"📈 TRAILING SL ajusté sur {trailing_count} position(s)", 'TRADE')
+            
+            # ── TAKE PROFIT PARTIEL ─────────────
+            if PARTIAL_TP_ENABLED:
+                partial_count = trader.check_and_apply_partial_tp(real_prices)
+                if partial_count > 0:
+                    add_bot_log(f"💰 TP PARTIEL exécuté sur {partial_count} position(s)", 'TRADE')
+        
+        # Afficher le status du circuit breaker si actif
+        protection_status = trader.protector.get_protection_status()
+        if protection_status['circuit_breaker_active']:
+            add_bot_log(
+                f"⛔ CIRCUIT BREAKER ACTIF: {protection_status['recent_sl_count']} SL récents, "
+                f"{protection_status['circuit_breaker_remaining']}s restants",
+                'WARN'
+            )
+        
+        # ── VÉRIFICATION DRAWDOWN MAX ─────────────
+        is_drawdown_exceeded, drawdown_pct, total_capital = trader.check_drawdown(real_prices)
+        if is_drawdown_exceeded:
+            add_bot_log(
+                f"🚨 DRAWDOWN MAX ATTEINT: -{drawdown_pct:.1f}% | Capital: ${total_capital:.2f}",
+                'ERROR'
+            )
+            # Fermer toutes les positions en urgence
+            closed_count = trader.emergency_close_all(real_prices, "DRAWDOWN MAX")
+            add_bot_log(f"🚨 {closed_count} position(s) fermée(s) en urgence", 'ERROR')
+            shared_data['drawdown_alert'] = True
+        else:
+            shared_data['drawdown_alert'] = False
+            if drawdown_pct > 5:
+                add_bot_log(f"⚠️ Drawdown actuel: -{drawdown_pct:.1f}% (max: {MAX_DRAWDOWN_PCT}%)", 'WARN')
+
+        update_performance_stats(trader)
+
         # Sauvegarder les résultats
         shared_data['all_scanned'] = all_results
         opportunities = [r for r in all_results if r['entry_signal'] != 'NEUTRAL'][:20]
@@ -230,37 +328,111 @@ def run_scanner():
         balance = trader.get_usdt_balance()
         my_positions = trader.get_open_positions()
         
-        add_bot_log(f"Auto-trade | Solde: ${balance:.2f} | {len(my_positions)} position(s)", 'INFO')
+        # Vérifier circuit breaker
+        is_cb_active, cb_remaining = trader.protector.is_circuit_breaker_active()
+        
+        # Vérifier les heures de trading
+        hours_valid, hours_reason = trade_filters.check_trading_hours()
+        
+        # Obtenir le score minimum dynamique selon le marché
+        dynamic_min_score, score_reason = trade_filters.get_dynamic_min_score(shared_data['market_stats'])
+        
+        # Vérifier si drawdown max atteint - pas de nouveau trading
+        if is_drawdown_exceeded:
+            add_bot_log(f"🚨 TRADING SUSPENDU - Drawdown max dépassé", 'ERROR')
+        # Vérifier si circuit breaker est actif
+        elif is_cb_active:
+            add_bot_log(f"⛔ CIRCUIT BREAKER - Pas de nouveaux achats ({cb_remaining}s)", 'WARN')
+        # Vérifier les heures de trading
+        elif TRADING_HOURS_ENABLED and not hours_valid:
+            add_bot_log(f"⏰ {hours_reason}", 'INFO')
+        else:
+            add_bot_log(f"Auto-trade | Solde: ${balance:.2f} | {len(my_positions)} pos | {score_reason}", 'INFO')
 
-        for opp in opportunities:
-            # Règles strictes d'achat
-            if (opp['score'] >= MIN_SCORE_BUY
-                    and opp['entry_signal'] == 'LONG'
-                    and opp['pair'] not in my_positions
-                    and len(my_positions) < MAX_POSITIONS
-                    and opp['stop_loss'] is not None
-                    and opp['take_profit_1'] is not None):
+            for opp in opportunities:
+                # Utiliser le score dynamique au lieu du fixe
+                effective_min_score = dynamic_min_score if DYNAMIC_SCORE_ENABLED else MIN_SCORE_BUY
+                
+                # Règles strictes d'achat
+                if (opp['score'] >= effective_min_score
+                        and opp['entry_signal'] == 'LONG'
+                        and opp['pair'] not in my_positions
+                        and len(my_positions) < MAX_POSITIONS
+                        and opp['stop_loss'] is not None
+                        and opp['take_profit_1'] is not None):
 
-                if balance >= TRADE_AMOUNT:
-                    success = trader.place_buy_order(
-                        symbol=opp['pair'],
-                        amount_usdt=TRADE_AMOUNT,
-                        current_price=opp['price'],
-                        stop_loss_price=opp['stop_loss'],
-                        take_profit_price=opp['take_profit_1']
+                    # ── COOLDOWN CHECK ─────────────
+                    if COOLDOWN_ENABLED:
+                        in_cooldown, cooldown_remaining = trader.is_in_cooldown(opp['pair'])
+                        if in_cooldown:
+                            add_bot_log(f"⏳ {opp['pair']} en cooldown ({cooldown_remaining:.0f}min restantes)", 'INFO')
+                            continue
+
+                    # ── FILTRE VOLUME ─────────────
+                    opp_indicators = all_indicators.get(opp['pair'], {})
+                    if VOLUME_FILTER_ENABLED:
+                        vol_valid, vol_reason = trade_filters.check_volume_filter(opp_indicators)
+                        if not vol_valid:
+                            add_bot_log(f"❌ {opp['pair']} {vol_reason}", 'WARN')
+                            continue
+
+                    # ── FILTRE RISK/REWARD ─────────────
+                    rr_valid, rr_ratio, rr_reason = trade_filters.check_risk_reward(
+                        opp['price'], opp['stop_loss'], opp['take_profit_1'], 'LONG'
                     )
-                    if success:
-                        balance -= TRADE_AMOUNT
-                        my_positions = trader.get_open_positions()
-                        add_bot_log(
-                            f"🛒 ACHAT {opp['pair']} | ${opp['price']:.4f} | "
-                            f"SL:${opp['stop_loss']:.4f} | TP:${opp['take_profit_1']:.4f} | "
-                            f"Score:{opp['score']} | R/R:{opp['rr_ratio']}",
-                            'TRADE'
+                    if not rr_valid:
+                        add_bot_log(f"❌ {opp['pair']} {rr_reason}", 'WARN')
+                        continue
+
+                    # Vérifier les conditions de volatilité
+                    can_open, open_reason = trader.protector.can_open_position(opp_indicators)
+                    if not can_open:
+                        add_bot_log(f"❌ {opp['pair']} rejeté: {open_reason}", 'WARN')
+                        continue
+                    
+                    # ── VALIDATION MULTI-TIMEFRAME ─────────────
+                    if MTF_ENABLED:
+                        mtf_result = validate_signal_multi_timeframe(
+                            opp['pair'], 
+                            opp['entry_signal'], 
+                            MTF_TIMEFRAMES
                         )
-                else:
-                    add_bot_log(f"Solde insuffisant pour {opp['pair']} (nécessite ${TRADE_AMOUNT})", 'WARN')
-                    break
+                        if not mtf_result['is_valid']:
+                            add_bot_log(
+                                f"❌ {opp['pair']} MTF rejeté: {mtf_result['reason']}", 
+                                'WARN'
+                            )
+                            continue
+                        else:
+                            add_bot_log(
+                                f"✅ {opp['pair']} MTF confirmé: {mtf_result['alignment_score']}% aligné",
+                                'INFO'
+                            )
+
+                    if balance >= TRADE_AMOUNT:
+                        success = trader.place_buy_order(
+                            symbol=opp['pair'],
+                            amount_usdt=TRADE_AMOUNT,
+                            current_price=opp['price'],
+                            stop_loss_price=opp['stop_loss'],
+                            take_profit_price=opp['take_profit_1'],
+                            entry_trend=opp['trend'],
+                            take_profit_2=opp.get('take_profit_2')  # TP2 pour scaling out
+                        )
+                        if success:
+                            # Enregistrer le trade pour le cooldown
+                            trader.record_trade_time(opp['pair'])
+                            balance -= TRADE_AMOUNT
+                            my_positions = trader.get_open_positions()
+                            add_bot_log(
+                                f"🛒 ACHAT {opp['pair']} | ${opp['price']:.4f} | "
+                                f"SL:${opp['stop_loss']:.4f} | TP:${opp['take_profit_1']:.4f} | "
+                                f"Score:{opp['score']} | R/R:{opp['rr_ratio']}",
+                                'TRADE'
+                            )
+                    else:
+                        add_bot_log(f"Solde insuffisant pour {opp['pair']} (nécessite ${TRADE_AMOUNT})", 'WARN')
+                        break
 
         update_performance_stats(trader)
         add_bot_log(f"=== SCAN #{scan_num} TERMINÉ ===", 'INFO')

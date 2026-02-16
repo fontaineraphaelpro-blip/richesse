@@ -9,18 +9,37 @@ import requests
 import time
 from typing import Optional, Dict, Tuple, List
 
-# --- LISTE DES 50 PRINCIPALES PAIRES USDT (Liquidité élevée pour scalping) ---
+# --- LISTE DES 100 PRINCIPALES PAIRES USDT (Liquidité élevée pour scalping) ---
 TOP_USDT_PAIRS = [
+    # Top 20 - Ultra Liquid
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
-    'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT',
+    'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'TRXUSDT',
     'MATICUSDT', 'LINKUSDT', 'SHIBUSDT', 'LTCUSDT', 'BCHUSDT',
     'ATOMUSDT', 'UNIUSDT', 'XLMUSDT', 'ETCUSDT', 'FILUSDT',
+    
+    # 21-40 - High Liquid
     'ICPUSDT', 'HBARUSDT', 'APTUSDT', 'VETUSDT', 'NEARUSDT',
     'QNTUSDT', 'MKRUSDT', 'GRTUSDT', 'AAVEUSDT', 'ALGOUSDT',
     'AXSUSDT', 'SANDUSDT', 'EGLDUSDT', 'EOSUSDT', 'THETAUSDT',
     'FTMUSDT', 'SNXUSDT', 'NEOUSDT', 'FLOWUSDT', 'KAVAUSDT',
+    
+    # 41-60 - Medium-High Liquid
     'XTZUSDT', 'GALAUSDT', 'CHZUSDT', 'MINAUSDT', 'ARBUSDT',
-    'OPUSDT', 'INJUSDT', 'RNDRUSDT', 'SUIUSDT', 'SEIUSDT'
+    'OPUSDT', 'INJUSDT', 'RNDRUSDT', 'SUIUSDT', 'SEIUSDT',
+    'PEPEUSDT', 'WLDUSDT', 'FETUSDT', 'AGIXUSDT', 'OCEANUSDT',
+    'TIAUSDT', 'IMXUSDT', 'LDOUSDT', 'STXUSDT', 'RUNEUSDT',
+    
+    # 61-80 - Solid Volume
+    'ENAUSDT', 'ZROUSDT', 'JUPUSDT', 'PENDLEUSDT', 'ONDOUSDT',
+    'WIFUSDT', 'BONKUSDT', 'FLOKIUSDT', 'ORDIUSDT', 'SATSUSDT',
+    'CFXUSDT', 'KASUSDT', 'BEAMUSDT', 'DYDXUSDT', 'GMXUSDT',
+    'BLURUSDT', 'COMPUSDT', 'CRVUSDT', '1INCHUSDT', 'LRCUSDT',
+    
+    # 81-100 - Active Trading
+    'ENSUSDT', 'APEUSDT', 'CAKEUSDT', 'DASHUSDT', 'WAVESUSDT',
+    'ZECUSDT', 'XMRUSDT', 'IOTAUSDT', 'ZILUSDT', 'BATUSDT',
+    'SKLUSDT', 'IOTXUSDT', 'CELRUSDT', 'ANKRUSDT', 'ONEUSDT',
+    'RVNUSDT', 'STMXUSDT', 'CKBUSDT', 'CELOUSDT', 'HOTUSDT'
 ]
 
 def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Optional[pd.DataFrame]:
@@ -150,3 +169,201 @@ def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit
 def get_top_pairs() -> List[str]:
     """Retourne simplement la liste des paires configurées."""
     return TOP_USDT_PAIRS
+
+
+# ─────────────────────────────────────────────────────────────
+# MULTI-TIMEFRAME ANALYSIS
+# ─────────────────────────────────────────────────────────────
+
+def fetch_multi_timeframe(symbol: str, timeframes: List[str] = None, limit: int = 200) -> Dict[str, pd.DataFrame]:
+    """
+    Récupère les données pour plusieurs timeframes d'une même paire.
+    
+    Args:
+        symbol: La paire (ex: 'BTCUSDT')
+        timeframes: Liste des timeframes (ex: ['15m', '1h', '4h'])
+        limit: Nombre de bougies par timeframe
+    
+    Returns:
+        Dict avec les DataFrames par timeframe: {'15m': df, '1h': df, '4h': df}
+    """
+    if timeframes is None:
+        timeframes = ['15m', '1h', '4h']
+    
+    data = {}
+    
+    for tf in timeframes:
+        df = get_binance_klines(symbol, interval=tf, limit=limit)
+        if df is not None and not df.empty:
+            data[tf] = df
+        time.sleep(0.1)  # Éviter rate limit
+    
+    return data
+
+
+def analyze_multi_timeframe_trend(symbol: str, timeframes: List[str] = None) -> Dict:
+    """
+    Analyse la tendance sur plusieurs timeframes.
+    Retourne un consensus de tendance.
+    
+    Args:
+        symbol: La paire à analyser
+        timeframes: Liste des timeframes (défaut: ['15m', '1h', '4h'])
+    
+    Returns:
+        {
+            'symbol': str,
+            'trends': {tf: 'Bullish'|'Bearish'|'Neutral'},
+            'consensus': 'Bullish'|'Bearish'|'Neutral'|'Mixed',
+            'alignment_score': 0-100,
+            'recommendation': str
+        }
+    """
+    if timeframes is None:
+        timeframes = ['15m', '1h', '4h']
+    
+    data = fetch_multi_timeframe(symbol, timeframes)
+    
+    if not data:
+        return {
+            'symbol': symbol,
+            'trends': {},
+            'consensus': 'UNKNOWN',
+            'alignment_score': 0,
+            'recommendation': 'Pas de données'
+        }
+    
+    trends = {}
+    bullish_count = 0
+    bearish_count = 0
+    
+    for tf, df in data.items():
+        trend = _detect_trend_from_df(df)
+        trends[tf] = trend
+        
+        if trend == 'Bullish':
+            bullish_count += 1
+        elif trend == 'Bearish':
+            bearish_count += 1
+    
+    total = len(data)
+    
+    # Consensus
+    if bullish_count == total:
+        consensus = 'Bullish'
+        alignment_score = 100
+        recommendation = "✅ FORT: Toutes les timeframes sont haussières"
+    elif bearish_count == total:
+        consensus = 'Bearish'
+        alignment_score = 100
+        recommendation = "✅ FORT: Toutes les timeframes sont baissières"
+    elif bullish_count > bearish_count:
+        consensus = 'Bullish'
+        alignment_score = int((bullish_count / total) * 100)
+        recommendation = f"⚠️ MODÉRÉ: {bullish_count}/{total} timeframes haussières"
+    elif bearish_count > bullish_count:
+        consensus = 'Bearish'
+        alignment_score = int((bearish_count / total) * 100)
+        recommendation = f"⚠️ MODÉRÉ: {bearish_count}/{total} timeframes baissières"
+    else:
+        consensus = 'Mixed'
+        alignment_score = 0
+        recommendation = "❌ CONFLICTUEL: Timeframes en désaccord, attendre"
+    
+    return {
+        'symbol': symbol,
+        'trends': trends,
+        'consensus': consensus,
+        'alignment_score': alignment_score,
+        'recommendation': recommendation
+    }
+
+
+def _detect_trend_from_df(df: pd.DataFrame) -> str:
+    """
+    Détecte la tendance depuis un DataFrame OHLCV.
+    Utilise EMA9/EMA21 cross et position du prix.
+    """
+    if df is None or len(df) < 21:
+        return 'Neutral'
+    
+    close = df['close']
+    
+    # Calcul EMA9 et EMA21
+    ema9 = close.ewm(span=9, adjust=False).mean()
+    ema21 = close.ewm(span=21, adjust=False).mean()
+    
+    current_price = close.iloc[-1]
+    current_ema9 = ema9.iloc[-1]
+    current_ema21 = ema21.iloc[-1]
+    
+    # Tendance basée sur EMA cross et position du prix
+    bullish_signals = 0
+    bearish_signals = 0
+    
+    # EMA9 > EMA21 = Bullish
+    if current_ema9 > current_ema21:
+        bullish_signals += 1
+    elif current_ema9 < current_ema21:
+        bearish_signals += 1
+    
+    # Prix au-dessus des EMAs = Bullish
+    if current_price > current_ema9 and current_price > current_ema21:
+        bullish_signals += 1
+    elif current_price < current_ema9 and current_price < current_ema21:
+        bearish_signals += 1
+    
+    # Pente de l'EMA21 (tendance de fond)
+    if len(ema21) >= 5:
+        ema21_slope = ema21.iloc[-1] - ema21.iloc[-5]
+        if ema21_slope > 0:
+            bullish_signals += 1
+        elif ema21_slope < 0:
+            bearish_signals += 1
+    
+    if bullish_signals > bearish_signals:
+        return 'Bullish'
+    elif bearish_signals > bullish_signals:
+        return 'Bearish'
+    else:
+        return 'Neutral'
+
+
+def validate_signal_multi_timeframe(symbol: str, signal: str, timeframes: List[str] = None) -> Dict:
+    """
+    Valide un signal de trading avec l'analyse multi-timeframe.
+    
+    Args:
+        symbol: La paire
+        signal: 'LONG' ou 'SHORT'
+        timeframes: Timeframes à analyser
+    
+    Returns:
+        {
+            'is_valid': bool,
+            'alignment_score': int,
+            'reason': str,
+            'details': dict
+        }
+    """
+    mtf = analyze_multi_timeframe_trend(symbol, timeframes)
+    
+    expected_consensus = 'Bullish' if signal == 'LONG' else 'Bearish'
+    
+    is_valid = mtf['consensus'] == expected_consensus and mtf['alignment_score'] >= 66
+    
+    if mtf['consensus'] == 'Mixed':
+        reason = f"❌ Signal {signal} rejeté: Timeframes en conflit"
+    elif mtf['consensus'] != expected_consensus:
+        reason = f"❌ Signal {signal} rejeté: Tendance globale {mtf['consensus']}"
+    elif mtf['alignment_score'] < 66:
+        reason = f"⚠️ Signal {signal} faible: Alignement {mtf['alignment_score']}%"
+    else:
+        reason = f"✅ Signal {signal} confirmé: {mtf['recommendation']}"
+    
+    return {
+        'is_valid': is_valid,
+        'alignment_score': mtf['alignment_score'],
+        'reason': reason,
+        'details': mtf
+    }
