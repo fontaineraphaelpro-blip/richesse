@@ -506,20 +506,74 @@ def run_scanner():
                 # Ajuster le score selon le sentiment marché
                 adjusted_score = opp['score'] + sentiment_modifier
                 
-                # Vérifier compatibilité direction/sentiment
+                # ═══════════════════════════════════════════════════════════════
+                # STRATÉGIE HYBRIDE PROUVÉE (Trend Following + Sentiment)
+                # Études montrent: Suivre la tendance + confirmation > Contrarian pur
+                # ═══════════════════════════════════════════════════════════════
+                
+                opp_indicators = all_indicators.get(opp['pair'], {})
+                rsi = opp_indicators.get('rsi14', 50)
+                macd = opp_indicators.get('macd', 0)
+                macd_signal = opp_indicators.get('macd_signal', 0)
+                
                 if NEWS_ENABLED and 'market_sentiment' in shared_data:
                     ms = shared_data['market_sentiment']
                     fg_value = ms.get('fear_greed', 50)
                     
-                    # Éviter LONG en Extreme Greed (risque de correction)
-                    if signal_direction == 'LONG' and fg_value >= 80:
-                        add_bot_log(f"⚠️ {opp['pair']} LONG évité (Extreme Greed {fg_value})", 'WARN')
-                        continue
+                    # ── EXTREME GREED (≥80): Risque de correction ──
+                    if fg_value >= 80:
+                        if signal_direction == 'LONG':
+                            # LONG en Extreme Greed = Très risqué
+                            # Mais si RSI < 70 et MACD bullish, peut-être ok avec pénalité
+                            if rsi > 70:
+                                add_bot_log(f"⚠️ {opp['pair']} LONG bloqué (Greed {fg_value} + RSI {rsi:.0f})", 'WARN')
+                                continue
+                            else:
+                                adjusted_score -= 15  # Pénalité forte
+                                add_bot_log(f"⚠️ {opp['pair']} LONG pénalisé -15 (Extreme Greed)", 'INFO')
+                        elif signal_direction == 'SHORT':
+                            # SHORT en Extreme Greed = BONUS (correction probable)
+                            adjusted_score += 10
+                            add_bot_log(f"💡 {opp['pair']} SHORT bonus +10 (Extreme Greed = correction)", 'INFO')
                     
-                    # Éviter SHORT en Extreme Fear (rebond probable)
-                    if signal_direction == 'SHORT' and fg_value <= 20:
-                        add_bot_log(f"⚠️ {opp['pair']} SHORT évité (Extreme Fear {fg_value})", 'WARN')
-                        continue
+                    # ── EXTREME FEAR (≤20): Marché en panique ──
+                    elif fg_value <= 20:
+                        if signal_direction == 'SHORT':
+                            # SHORT en Extreme Fear:
+                            # - Si technique BEARISH (RSI > 30, MACD négatif) = OK, suivre tendance
+                            # - Si technique BULLISH (RSI < 30 survendu, MACD divergence) = Éviter
+                            if rsi < 30:
+                                # RSI survendu = rebond probable
+                                add_bot_log(f"⚠️ {opp['pair']} SHORT bloqué (Fear {fg_value} + RSI survendu {rsi:.0f})", 'WARN')
+                                continue
+                            elif macd > macd_signal:
+                                # MACD croise à la hausse = retournement
+                                adjusted_score -= 10
+                                add_bot_log(f"⚠️ {opp['pair']} SHORT pénalisé -10 (MACD haussier en Fear)", 'INFO')
+                            else:
+                                # Technique encore baissière = SHORT OK
+                                add_bot_log(f"✅ {opp['pair']} SHORT confirmé (Fear + technique bearish)", 'INFO')
+                        elif signal_direction == 'LONG':
+                            # LONG en Extreme Fear = BONUS (contrarian prouvé)
+                            if rsi < 35:  # Oversold
+                                adjusted_score += 15  # Gros bonus
+                                add_bot_log(f"💰 {opp['pair']} LONG bonus +15 (Extreme Fear + RSI {rsi:.0f})", 'INFO')
+                            else:
+                                adjusted_score += 5
+                    
+                    # ── FEAR (21-40): Prudent mais opportunités ──
+                    elif fg_value <= 40:
+                        if signal_direction == 'SHORT' and rsi < 35:
+                            adjusted_score -= 5  # Légère pénalité si RSI déjà bas
+                        elif signal_direction == 'LONG' and rsi < 40:
+                            adjusted_score += 5  # Léger bonus pour achat en fear
+                    
+                    # ── GREED (60-79): Prudent sur les LONG ──
+                    elif fg_value >= 60:
+                        if signal_direction == 'LONG' and rsi > 65:
+                            adjusted_score -= 5  # Légère pénalité
+                        elif signal_direction == 'SHORT':
+                            adjusted_score += 3  # Léger bonus
                 
                 # Règles strictes d'ouverture (LONG ou SHORT)
                 if (adjusted_score >= effective_min_score

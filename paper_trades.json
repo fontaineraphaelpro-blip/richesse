@@ -1,12 +1,1 @@
-[
-    {
-        "type": "VENTE",
-        "symbol": "ETHUSDT",
-        "price": 2500.0,
-        "amount": 150.0,
-        "quantity": 0.06,
-        "time": "12/02 10:15",
-        "pnl": 45.50,
-        "pnl_percent": 2.5
-    }
-]
+[]
