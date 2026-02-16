@@ -1,6 +1,6 @@
-"""
+﻿"""
 Script principal: Crypto Swing Trader Bot & Dashboard ULTIME.
-Version: ULTIMATE v2.0 — Scanner complet + Bot Swing + Paper Trading + Dashboard Pro
+Version: ULTIMATE v2.0 â€” Scanner complet + Bot Swing + Paper Trading + Dashboard Pro
 """
 
 import time
@@ -28,55 +28,55 @@ from macro_events import macro_analyzer, get_macro_analysis, check_macro_events,
 from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment, get_sentiment_modifier
 from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_journal_stats, should_trade as journal_should_trade, get_trade_modifier
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
 MIN_SCORE_BUY    = 70      # Score min pour auto-buy
 SCAN_INTERVAL    = 300     # Secondes entre scans (5 min)
-MAX_POSITIONS    = 5       # Positions simultanées max
+MAX_POSITIONS    = 5       # Positions simultanÃ©es max
 RISK_PERCENT     = 2.0     # % du capital par trade (risk management)
 
 # Configuration Multi-Timeframe
 MTF_TIMEFRAMES   = ['15m', '1h', '4h']  # Timeframes pour confirmation
-MTF_ENABLED      = True                  # Activer/désactiver multi-TF
+MTF_ENABLED      = True                  # Activer/dÃ©sactiver multi-TF
 MTF_MIN_ALIGN    = 66                    # Alignement minimum requis (%)
 
 # Configuration Drawdown & Break-Even
-MAX_DRAWDOWN_PCT = 10.0    # Arrêter si perte > 10% du capital initial
-BREAKEVEN_TRIGGER = 1.0    # Activer break-even à +1% de gain
+MAX_DRAWDOWN_PCT = 10.0    # ArrÃªter si perte > 10% du capital initial
+BREAKEVEN_TRIGGER = 1.0    # Activer break-even Ã  +1% de gain
 
 # Configuration Trailing Stop Loss
-TRAILING_ENABLED = True     # Activer/désactiver le trailing stop
-TRAILING_ACTIVATION = 1.5   # Activer trailing à +1.5% de gain
+TRAILING_ENABLED = True     # Activer/dÃ©sactiver le trailing stop
+TRAILING_ACTIVATION = 1.5   # Activer trailing Ã  +1.5% de gain
 TRAILING_DISTANCE = 1.0     # Distance du SL (1% sous le plus haut)
 
-# ─────────────────────────────────────────────────────────────
-# NOUVELLES CONFIGURATIONS RENTABILITÉ
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# NOUVELLES CONFIGURATIONS RENTABILITÃ‰
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Take Profit Partiel (Scaling Out)
 PARTIAL_TP_ENABLED = True    # Activer TP partiel
-PARTIAL_TP_RATIO = 0.5       # Prendre 50% à TP1
+PARTIAL_TP_RATIO = 0.5       # Prendre 50% Ã  TP1
 # Le reste court vers TP2
 
 # Filtrage Volume
 VOLUME_FILTER_ENABLED = True
-MIN_VOLUME_RATIO = 1.2       # Volume doit être 1.2x la moyenne
+MIN_VOLUME_RATIO = 1.2       # Volume doit Ãªtre 1.2x la moyenne
 
 # Heures de Trading Optimales (UTC)
 TRADING_HOURS_ENABLED = True
 TRADING_START_HOUR = 7       # 7h UTC (8h Paris, 2h New York)
 TRADING_END_HOUR = 22        # 22h UTC (23h Paris, 17h New York)
-AVOID_WEEKENDS = True        # Éviter samedi/dimanche
+AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
 
-# Score Dynamique selon Marché
+# Score Dynamique selon MarchÃ©
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 65    # Score min si marché haussier
-SCORE_BEARISH_MARKET = 80    # Score min si marché baissier
-SCORE_NEUTRAL_MARKET = 70    # Score min si marché neutre
+SCORE_BULLISH_MARKET = 65    # Score min si marchÃ© haussier
+SCORE_BEARISH_MARKET = 80    # Score min si marchÃ© baissier
+SCORE_NEUTRAL_MARKET = 70    # Score min si marchÃ© neutre
 
 # Risk/Reward Minimum
 MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
@@ -84,11 +84,11 @@ MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
 # Configuration News & Sentiment
 NEWS_ENABLED = True           # Activer l'analyse des news
 SENTIMENT_SCORE_ADJUST = True # Ajuster le score selon sentiment
-PAUSE_ON_EVENTS = True        # Pause trading lors d'événements majeurs (FOMC, CPI)
+PAUSE_ON_EVENTS = True        # Pause trading lors d'Ã©vÃ©nements majeurs (FOMC, CPI)
 
 # Configuration Machine Learning
-ML_ENABLED = True             # Activer les prédictions ML
-ML_MIN_PROBABILITY = 60       # Probabilité minimum pour trader
+ML_ENABLED = True             # Activer les prÃ©dictions ML
+ML_MIN_PROBABILITY = 60       # ProbabilitÃ© minimum pour trader
 ML_SCORE_ADJUST = True        # Ajuster le score selon ML
 
 # Configuration On-Chain
@@ -97,13 +97,13 @@ ONCHAIN_SCORE_ADJUST = True   # Ajuster le score selon on-chain
 
 # Configuration Position Sizing (Kelly)
 KELLY_SIZING_ENABLED = True   # Utiliser Kelly pour le sizing
-FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly désactivé
+FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly dÃ©sactivÃ©
 
-# Configuration Macro Events (Calendrier économique)
-MACRO_EVENTS_ENABLED = True   # Activer le calendrier économique
+# Configuration Macro Events (Calendrier Ã©conomique)
+MACRO_EVENTS_ENABLED = True   # Activer le calendrier Ã©conomique
 PAUSE_ON_FOMC = True          # Pause trading autour du FOMC
 PAUSE_ON_CPI = True           # Pause trading autour du CPI
-REGULATION_ALERTS = True      # Alertes régulations crypto
+REGULATION_ALERTS = True      # Alertes rÃ©gulations crypto
 
 # Social Sentiment
 SOCIAL_SENTIMENT_ENABLED = True  # Utiliser Fear & Greed Index
@@ -111,28 +111,28 @@ SOCIAL_SCORE_MODIFIER = True     # Modifier score selon sentiment
 
 # Trade Journal AI
 TRADE_JOURNAL_ENABLED = True     # Enregistrer tous les trades
-JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passées
+JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passÃ©es
 
 # Pyramiding (Renforcement de position)
-PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
+PYRAMIDING_ENABLED = False   # DÃ©sactivÃ© par dÃ©faut (risquÃ©)
 MAX_PYRAMIDING = 2           # Max 2 ajouts par position
 PYRAMIDING_GAIN_THRESHOLD = 2.0  # Ajouter si position gagne +2%
 
-# Cooldown après Trade
+# Cooldown aprÃ¨s Trade
 COOLDOWN_ENABLED = True
-COOLDOWN_MINUTES = 30        # Attendre 30 min avant de re-trader la même paire
+COOLDOWN_MINUTES = 30        # Attendre 30 min avant de re-trader la mÃªme paire
 
-# ─────────────────────────────────────────────────────────────
-# ÉTAT PARTAGÉ (Thread Scanner ↔ Serveur Web Flask)
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã‰TAT PARTAGÃ‰ (Thread Scanner â†” Serveur Web Flask)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 shared_data = {
-    'opportunities': [],        # Top opportunités du dernier scan
-    'all_scanned': [],          # Toutes les paires analysées
+    'opportunities': [],        # Top opportunitÃ©s du dernier scan
+    'all_scanned': [],          # Toutes les paires analysÃ©es
     'last_prices': {},          # Prix actuels
     'is_scanning': False,
     'last_update': 'Jamais',
     'scan_count': 0,
-    'bot_log': [],              # Journal d'activité du bot (20 derniers events)
+    'bot_log': [],              # Journal d'activitÃ© du bot (20 derniers events)
     'market_stats': {
         'total_bullish': 0,
         'total_bearish': 0,
@@ -152,7 +152,7 @@ shared_data = {
         'trading_allowed': True,
         'reason': None
     },
-    'market_sentiment': {       # Sentiment marché (News & Fear/Greed)
+    'market_sentiment': {       # Sentiment marchÃ© (News & Fear/Greed)
         'fear_greed': 50,
         'fear_greed_class': 'Neutral',
         'news_bullish': 0,
@@ -160,7 +160,7 @@ shared_data = {
         'action': 'NORMAL',
         'updated': None
     },
-    'market_intelligence': {    # Intelligence complète (Funding, L/S, Volume...)
+    'market_intelligence': {    # Intelligence complÃ¨te (Funding, L/S, Volume...)
         'bias': 'NEUTRAL',
         'confidence': 0,
         'funding': 0,
@@ -173,9 +173,9 @@ shared_data = {
 
 app = Flask(__name__)
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # FONCTIONS UTILITAIRES
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def add_bot_log(msg: str, level: str = 'INFO'):
     """Ajoute une ligne au journal du bot (visible dans le dashboard)."""
@@ -206,39 +206,39 @@ def update_performance_stats(trader: PaperTrader):
     }
 
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # SCANNER PRINCIPAL
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_scanner():
     """
-    Cœur du système :
-    1. Récupère les données Binance
-    2. Vérifie les positions (SL/TP)
+    CÅ“ur du systÃ¨me :
+    1. RÃ©cupÃ¨re les donnÃ©es Binance
+    2. VÃ©rifie les positions (SL/TP)
     3. Analyse les 200 paires LONG + SHORT
     4. Execute les ordres si score >= seuil
     """
     shared_data['scan_count'] += 1
     scan_num = shared_data['scan_count']
     
-    add_bot_log(f"=== SCAN #{scan_num} DÉMARRÉ ===", 'INFO')
+    add_bot_log(f"=== SCAN #{scan_num} DÃ‰MARRÃ‰ ===", 'INFO')
 
     try:
-        # ── ÉTAPE 1 : Données Marché ──────────────────────────
-        add_bot_log("Récupération données Binance (200 paires)...", 'INFO')
+        # â”€â”€ Ã‰TAPE 1 : DonnÃ©es MarchÃ© â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        add_bot_log("RÃ©cupÃ©ration donnÃ©es Binance (200 paires)...", 'INFO')
         data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
 
         if not data:
-            add_bot_log("CRITIQUE: Aucune donnée reçue de Binance", 'ERROR')
+            add_bot_log("CRITIQUE: Aucune donnÃ©e reÃ§ue de Binance", 'ERROR')
             return []
 
         shared_data['last_prices'] = real_prices
-        add_bot_log(f"{len(data)} paires chargées avec succès", 'INFO')
+        add_bot_log(f"{len(data)} paires chargÃ©es avec succÃ¨s", 'INFO')
 
-        # ── ÉTAPE 2 : DÉTECTION CRASH ────────────────────────────
+        # â”€â”€ Ã‰TAPE 2 : DÃ‰TECTION CRASH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         btc_price = real_prices.get('BTCUSDT', 0)
         if btc_price > 0:
-            # Calculer les variations de prix pour détection multi-asset
+            # Calculer les variations de prix pour dÃ©tection multi-asset
             price_changes = {}
             for symbol, df in data.items():
                 if len(df) >= 2:
@@ -247,28 +247,28 @@ def run_scanner():
                     change = ((current - prev) / prev) * 100
                     price_changes[symbol] = change
             
-            # Vérifier crash
+            # VÃ©rifier crash
             crash_analysis = check_for_crash(btc_price, price_changes)
             
             if crash_analysis.get('crash_detected'):
                 crash_type = crash_analysis.get('crash_type', 'UNKNOWN')
-                add_bot_log(f"🚨 CRASH DÉTECTÉ: {crash_type}! Fermeture LONG uniquement...", 'ERROR')
+                add_bot_log(f"ðŸš¨ CRASH DÃ‰TECTÃ‰: {crash_type}! Fermeture LONG uniquement...", 'ERROR')
                 
                 # Fermer seulement les LONG (les SHORT profitent du crash)
                 trader = PaperTrader()
                 closed_count = trader.emergency_close_all(real_prices, f"Crash {crash_type}", close_direction="LONG")
-                add_bot_log(f"💥 {closed_count} LONG fermé(s) - SHORT conservés (en profit)", 'ERROR')
+                add_bot_log(f"ðŸ’¥ {closed_count} LONG fermÃ©(s) - SHORT conservÃ©s (en profit)", 'ERROR')
                 
                 # Ajouter au dashboard
                 shared_data['crash_status'] = crash_analysis
-                return []  # Arrêter le scan
+                return []  # ArrÃªter le scan
             
             if not crash_analysis.get('trading_allowed'):
-                reason = crash_analysis.get('reason', 'Trading pausé')
-                add_bot_log(f"⏸️ {reason}", 'WARN')
+                reason = crash_analysis.get('reason', 'Trading pausÃ©')
+                add_bot_log(f"â¸ï¸ {reason}", 'WARN')
                 return []  # Pas de trading pendant la pause
         
-        # ── ÉTAPE 2b : ANALYSE SENTIMENT & NEWS ────────────────────────────
+        # â”€â”€ Ã‰TAPE 2b : ANALYSE SENTIMENT & NEWS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         sentiment_modifier = 0
         if NEWS_ENABLED:
             try:
@@ -281,15 +281,15 @@ def run_scanner():
                 trading_action = market_sentiment.get('trading_action', 'NORMAL')
                 
                 add_bot_log(
-                    f"📊 Sentiment: Fear&Greed={fg_value} ({fg_class}) | "
-                    f"News: {news_sent.get('bullish', 0)}↑ {news_sent.get('bearish', 0)}↓",
+                    f"ðŸ“Š Sentiment: Fear&Greed={fg_value} ({fg_class}) | "
+                    f"News: {news_sent.get('bullish', 0)}â†‘ {news_sent.get('bearish', 0)}â†“",
                     'INFO'
                 )
                 
-                # Pause si événement économique majeur
+                # Pause si Ã©vÃ©nement Ã©conomique majeur
                 if PAUSE_ON_EVENTS and trading_action == 'PAUSE':
-                    reason = market_sentiment.get('reason', 'Événement majeur')
-                    add_bot_log(f"⏸️ NEWS PAUSE: {reason}", 'WARN')
+                    reason = market_sentiment.get('reason', 'Ã‰vÃ©nement majeur')
+                    add_bot_log(f"â¸ï¸ NEWS PAUSE: {reason}", 'WARN')
                     return []
                 
                 # Enregistrer le sentiment pour le dashboard
@@ -307,9 +307,9 @@ def run_scanner():
                     sentiment_modifier = market_sentiment.get('combined_score_modifier', 0)
                     
             except Exception as e:
-                add_bot_log(f"⚠️ Erreur analyse sentiment: {str(e)[:50]}", 'WARN')
+                add_bot_log(f"âš ï¸ Erreur analyse sentiment: {str(e)[:50]}", 'WARN')
         
-        # ── ÉTAPE 2c : INTELLIGENCE MARCHÉ COMPLÈTE ────────────────────────────
+        # â”€â”€ Ã‰TAPE 2c : INTELLIGENCE MARCHÃ‰ COMPLÃˆTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         intel_modifier = 0
         try:
             market_intelligence = get_market_intelligence()
@@ -324,7 +324,7 @@ def run_scanner():
             breadth = intel_data.get('top_movers', {}).get('market_breadth', 50)
             
             add_bot_log(
-                f"🧠 Intelligence: {bias} ({confidence:.0f}%) | "
+                f"ðŸ§  Intelligence: {bias} ({confidence:.0f}%) | "
                 f"Funding:{funding:.3f}% | L/S:{ls_ratio:.2f} | Breadth:{breadth:.0f}%",
                 'INFO'
             )
@@ -344,14 +344,14 @@ def run_scanner():
                 'updated': datetime.now().strftime('%H:%M')
             }
             
-            # Modificateur de score basé sur l'intelligence
+            # Modificateur de score basÃ© sur l'intelligence
             intel_modifier = market_intelligence.get('score_modifier', 0)
             sentiment_modifier += intel_modifier  # Combiner avec news
             
         except Exception as e:
-            add_bot_log(f"⚠️ Erreur intelligence marché: {str(e)[:50]}", 'WARN')
+            add_bot_log(f"âš ï¸ Erreur intelligence marchÃ©: {str(e)[:50]}", 'WARN')
         
-        # ── ÉTAPE 3 : Analyse Technique (faire AVANT la vérification des positions) ────────────────────────
+        # â”€â”€ Ã‰TAPE 3 : Analyse Technique (faire AVANT la vÃ©rification des positions) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         add_bot_log("Analyse technique en cours...", 'INFO')
         
         all_results = []
@@ -369,7 +369,7 @@ def run_scanner():
                 resistance = find_resistance(df, lookback=30)
                 score_data = calculate_opportunity_score(inds, None, df)
                 
-                # Stocker les indicateurs pour utilisation ultérieure
+                # Stocker les indicateurs pour utilisation ultÃ©rieure
                 all_indicators[symbol] = inds
                 
                 rsi = inds.get('rsi14')
@@ -401,7 +401,7 @@ def run_scanner():
                     'rr_ratio':      score_data.get('risk_reward_ratio'),
                     'support':       support,
                     'resistance':    resistance,
-                    # Indicateurs affichés dans le dashboard
+                    # Indicateurs affichÃ©s dans le dashboard
                     'rsi':           round(rsi, 1) if rsi else None,
                     'macd':          round(inds.get('macd', 0), 4) if inds.get('macd') else None,
                     'macd_hist':     round(inds.get('macd_hist', 0), 4) if inds.get('macd_hist') else None,
@@ -428,124 +428,124 @@ def run_scanner():
                 add_bot_log(f"Erreur analyse {symbol}: {str(e)[:50]}", 'WARN')
                 continue
 
-        # Trier par score décroissant
+        # Trier par score dÃ©croissant
         all_results.sort(key=lambda x: x['score'], reverse=True)
         
-        # Stats marché globales
+        # Stats marchÃ© globales
         avg_rsi = round(sum(rsi_values) / len(rsi_values), 1) if rsi_values else 0
         shared_data['market_stats'] = {
             'total_bullish': bullish_count,
             'total_bearish': bearish_count,
             'total_neutral': neutral_count,
             'avg_rsi': avg_rsi,
-            'sentiment': 'HAUSSIER 📈' if bullish_count > bearish_count else ('BAISSIER 📉' if bearish_count > bullish_count else 'NEUTRE ⚖️'),
+            'sentiment': 'HAUSSIER ðŸ“ˆ' if bullish_count > bearish_count else ('BAISSIER ðŸ“‰' if bearish_count > bullish_count else 'NEUTRE âš–ï¸'),
         }
 
         add_bot_log(
-            f"Scan terminé: {bullish_count}↑ {bearish_count}↓ | RSI moyen: {avg_rsi} | "
+            f"Scan terminÃ©: {bullish_count}â†‘ {bearish_count}â†“ | RSI moyen: {avg_rsi} | "
             f"{len([r for r in all_results if r['entry_signal'] != 'NEUTRAL'])} signaux actifs",
             'INFO'
         )
 
-        # ── ÉTAPE 2b : Gestion Positions (SL / TP) avec PROTECTION ─────────────
-        # Maintenant on a tous les indicateurs, on peut vérifier les positions avec protection
+        # â”€â”€ Ã‰TAPE 2b : Gestion Positions (SL / TP) avec PROTECTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # Maintenant on a tous les indicateurs, on peut vÃ©rifier les positions avec protection
         trader = PaperTrader()
         open_pos = trader.get_open_positions()
         
         if open_pos:
-            add_bot_log(f"Vérification de {len(open_pos)} position(s) ouverte(s) WITH PROTECTION...", 'INFO')
+            add_bot_log(f"VÃ©rification de {len(open_pos)} position(s) ouverte(s) WITH PROTECTION...", 'INFO')
             trader.check_positions_with_protection(real_prices, all_indicators)
             
-            # ── BREAK-EVEN AUTOMATIQUE ─────────────
+            # â”€â”€ BREAK-EVEN AUTOMATIQUE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             breakeven_count = trader.check_and_apply_breakeven(real_prices)
             if breakeven_count > 0:
-                add_bot_log(f"🔒 BREAK-EVEN appliqué sur {breakeven_count} position(s)", 'TRADE')
+                add_bot_log(f"ðŸ”’ BREAK-EVEN appliquÃ© sur {breakeven_count} position(s)", 'TRADE')
             
-            # ── TRAILING STOP LOSS ─────────────
+            # â”€â”€ TRAILING STOP LOSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             trailing_count = trader.check_and_apply_trailing_stop(real_prices)
             if trailing_count > 0:
-                add_bot_log(f"📈 TRAILING SL ajusté sur {trailing_count} position(s)", 'TRADE')
+                add_bot_log(f"ðŸ“ˆ TRAILING SL ajustÃ© sur {trailing_count} position(s)", 'TRADE')
             
-            # ── TAKE PROFIT PARTIEL ─────────────
+            # â”€â”€ TAKE PROFIT PARTIEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if PARTIAL_TP_ENABLED:
                 partial_count = trader.check_and_apply_partial_tp(real_prices)
                 if partial_count > 0:
-                    add_bot_log(f"💰 TP PARTIEL exécuté sur {partial_count} position(s)", 'TRADE')
+                    add_bot_log(f"ðŸ’° TP PARTIEL exÃ©cutÃ© sur {partial_count} position(s)", 'TRADE')
         
         # Afficher le status du circuit breaker si actif
         protection_status = trader.protector.get_protection_status()
         if protection_status['circuit_breaker_active']:
             add_bot_log(
-                f"⛔ CIRCUIT BREAKER ACTIF: {protection_status['recent_sl_count']} SL récents, "
+                f"â›” CIRCUIT BREAKER ACTIF: {protection_status['recent_sl_count']} SL rÃ©cents, "
                 f"{protection_status['circuit_breaker_remaining']}s restants",
                 'WARN'
             )
         
-        # ── VÉRIFICATION DRAWDOWN MAX ─────────────
+        # â”€â”€ VÃ‰RIFICATION DRAWDOWN MAX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         is_drawdown_exceeded, drawdown_pct, total_capital = trader.check_drawdown(real_prices)
         if is_drawdown_exceeded:
             add_bot_log(
-                f"🚨 DRAWDOWN MAX ATTEINT: -{drawdown_pct:.1f}% | Capital: ${total_capital:.2f}",
+                f"ðŸš¨ DRAWDOWN MAX ATTEINT: -{drawdown_pct:.1f}% | Capital: ${total_capital:.2f}",
                 'ERROR'
             )
             # Fermer toutes les positions en urgence
             closed_count = trader.emergency_close_all(real_prices, "DRAWDOWN MAX")
-            add_bot_log(f"🚨 {closed_count} position(s) fermée(s) en urgence", 'ERROR')
+            add_bot_log(f"ðŸš¨ {closed_count} position(s) fermÃ©e(s) en urgence", 'ERROR')
             shared_data['drawdown_alert'] = True
         else:
             shared_data['drawdown_alert'] = False
             if drawdown_pct > 5:
-                add_bot_log(f"⚠️ Drawdown actuel: -{drawdown_pct:.1f}% (max: {MAX_DRAWDOWN_PCT}%)", 'WARN')
+                add_bot_log(f"âš ï¸ Drawdown actuel: -{drawdown_pct:.1f}% (max: {MAX_DRAWDOWN_PCT}%)", 'WARN')
 
         update_performance_stats(trader)
 
-        # Sauvegarder les résultats
+        # Sauvegarder les rÃ©sultats
         shared_data['all_scanned'] = all_results
         opportunities = [r for r in all_results if r['entry_signal'] != 'NEUTRAL'][:20]
         shared_data['opportunities'] = opportunities
 
-        # ── ÉTAPE 4 : Auto-Trading ─────────────────────────────
+        # â”€â”€ Ã‰TAPE 4 : Auto-Trading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         balance = trader.get_usdt_balance()
         my_positions = trader.get_open_positions()
         
-        # Vérifier circuit breaker
+        # VÃ©rifier circuit breaker
         is_cb_active, cb_remaining = trader.protector.is_circuit_breaker_active()
         
-        # Vérifier les heures de trading
+        # VÃ©rifier les heures de trading
         hours_valid, hours_reason = trade_filters.check_trading_hours()
         
-        # Obtenir le score minimum dynamique selon le marché
+        # Obtenir le score minimum dynamique selon le marchÃ©
         dynamic_min_score, score_reason = trade_filters.get_dynamic_min_score(shared_data['market_stats'])
         
-        # Vérifier les événements macroéconomiques
+        # VÃ©rifier les Ã©vÃ©nements macroÃ©conomiques
         macro_can_trade = True
         macro_modifier = 0
         if MACRO_EVENTS_ENABLED:
             try:
                 macro_can_trade, macro_modifier, macro_reason = check_macro_events()
                 if not macro_can_trade:
-                    add_bot_log(f"📅 {macro_reason}", 'WARN')
+                    add_bot_log(f"ðŸ“… {macro_reason}", 'WARN')
                 elif macro_modifier != 0:
-                    add_bot_log(f"📅 Macro: {macro_reason} (score {macro_modifier:+d})", 'INFO')
+                    add_bot_log(f"ðŸ“… Macro: {macro_reason} (score {macro_modifier:+d})", 'INFO')
                 
                 # Stocker l'analyse macro
                 shared_data['macro_analysis'] = get_macro_analysis()
             except Exception as e:
-                add_bot_log(f"⚠️ Erreur macro events: {e}", 'WARN')
+                add_bot_log(f"âš ï¸ Erreur macro events: {e}", 'WARN')
                 macro_can_trade = True
         
-        # Vérifier si drawdown max atteint - pas de nouveau trading
+        # VÃ©rifier si drawdown max atteint - pas de nouveau trading
         if is_drawdown_exceeded:
-            add_bot_log(f"🚨 TRADING SUSPENDU - Drawdown max dépassé", 'ERROR')
-        # Vérifier si circuit breaker est actif
+            add_bot_log(f"ðŸš¨ TRADING SUSPENDU - Drawdown max dÃ©passÃ©", 'ERROR')
+        # VÃ©rifier si circuit breaker est actif
         elif is_cb_active:
-            add_bot_log(f"⛔ CIRCUIT BREAKER - Pas de nouveaux achats ({cb_remaining}s)", 'WARN')
-        # Vérifier les heures de trading
+            add_bot_log(f"â›” CIRCUIT BREAKER - Pas de nouveaux achats ({cb_remaining}s)", 'WARN')
+        # VÃ©rifier les heures de trading
         elif TRADING_HOURS_ENABLED and not hours_valid:
-            add_bot_log(f"⏰ {hours_reason}", 'INFO')
-        # Vérifier les événements macro (FOMC, CPI, etc.)
+            add_bot_log(f"â° {hours_reason}", 'INFO')
+        # VÃ©rifier les Ã©vÃ©nements macro (FOMC, CPI, etc.)
         elif not macro_can_trade:
-            add_bot_log(f"📅 TRADING SUSPENDU - Événement macro en cours", 'WARN')
+            add_bot_log(f"ðŸ“… TRADING SUSPENDU - Ã‰vÃ©nement macro en cours", 'WARN')
         else:
             add_bot_log(f"Auto-trade | Solde: ${balance:.2f} | {len(my_positions)} pos | {score_reason}", 'INFO')
 
@@ -556,13 +556,13 @@ def run_scanner():
                 # Direction du signal
                 signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
                 
-                # Ajuster le score selon le sentiment marché ET les événements macro
+                # Ajuster le score selon le sentiment marchÃ© ET les Ã©vÃ©nements macro
                 adjusted_score = opp['score'] + sentiment_modifier + macro_modifier
                 
-                # ═══════════════════════════════════════════════════════════════
-                # STRATÉGIE HYBRIDE PROUVÉE (Trend Following + Sentiment)
-                # Études montrent: Suivre la tendance + confirmation > Contrarian pur
-                # ═══════════════════════════════════════════════════════════════
+                # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                # STRATÃ‰GIE HYBRIDE PROUVÃ‰E (Trend Following + Sentiment)
+                # Ã‰tudes montrent: Suivre la tendance + confirmation > Contrarian pur
+                # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                 
                 opp_indicators = all_indicators.get(opp['pair'], {})
                 rsi = opp_indicators.get('rsi14', 50)
@@ -573,62 +573,62 @@ def run_scanner():
                     ms = shared_data['market_sentiment']
                     fg_value = ms.get('fear_greed', 50)
                     
-                    # ── EXTREME GREED (≥80): Risque de correction ──
+                    # â”€â”€ EXTREME GREED (â‰¥80): Risque de correction â”€â”€
                     if fg_value >= 80:
                         if signal_direction == 'LONG':
-                            # LONG en Extreme Greed = Très risqué
-                            # Mais si RSI < 70 et MACD bullish, peut-être ok avec pénalité
+                            # LONG en Extreme Greed = TrÃ¨s risquÃ©
+                            # Mais si RSI < 70 et MACD bullish, peut-Ãªtre ok avec pÃ©nalitÃ©
                             if rsi > 70:
-                                add_bot_log(f"⚠️ {opp['pair']} LONG bloqué (Greed {fg_value} + RSI {rsi:.0f})", 'WARN')
+                                add_bot_log(f"âš ï¸ {opp['pair']} LONG bloquÃ© (Greed {fg_value} + RSI {rsi:.0f})", 'WARN')
                                 continue
                             else:
-                                adjusted_score -= 15  # Pénalité forte
-                                add_bot_log(f"⚠️ {opp['pair']} LONG pénalisé -15 (Extreme Greed)", 'INFO')
+                                adjusted_score -= 15  # PÃ©nalitÃ© forte
+                                add_bot_log(f"âš ï¸ {opp['pair']} LONG pÃ©nalisÃ© -15 (Extreme Greed)", 'INFO')
                         elif signal_direction == 'SHORT':
                             # SHORT en Extreme Greed = BONUS (correction probable)
                             adjusted_score += 10
-                            add_bot_log(f"💡 {opp['pair']} SHORT bonus +10 (Extreme Greed = correction)", 'INFO')
+                            add_bot_log(f"ðŸ’¡ {opp['pair']} SHORT bonus +10 (Extreme Greed = correction)", 'INFO')
                     
-                    # ── EXTREME FEAR (≤20): Marché en panique ──
+                    # â”€â”€ EXTREME FEAR (â‰¤20): MarchÃ© en panique â”€â”€
                     elif fg_value <= 20:
                         if signal_direction == 'SHORT':
                             # SHORT en Extreme Fear:
-                            # - Si technique BEARISH (RSI > 30, MACD négatif) = OK, suivre tendance
-                            # - Si technique BULLISH (RSI < 30 survendu, MACD divergence) = Éviter
+                            # - Si technique BEARISH (RSI > 30, MACD nÃ©gatif) = OK, suivre tendance
+                            # - Si technique BULLISH (RSI < 30 survendu, MACD divergence) = Ã‰viter
                             if rsi < 30:
                                 # RSI survendu = rebond probable
-                                add_bot_log(f"⚠️ {opp['pair']} SHORT bloqué (Fear {fg_value} + RSI survendu {rsi:.0f})", 'WARN')
+                                add_bot_log(f"âš ï¸ {opp['pair']} SHORT bloquÃ© (Fear {fg_value} + RSI survendu {rsi:.0f})", 'WARN')
                                 continue
                             elif macd > macd_signal:
-                                # MACD croise à la hausse = retournement
+                                # MACD croise Ã  la hausse = retournement
                                 adjusted_score -= 10
-                                add_bot_log(f"⚠️ {opp['pair']} SHORT pénalisé -10 (MACD haussier en Fear)", 'INFO')
+                                add_bot_log(f"âš ï¸ {opp['pair']} SHORT pÃ©nalisÃ© -10 (MACD haussier en Fear)", 'INFO')
                             else:
-                                # Technique encore baissière = SHORT OK
-                                add_bot_log(f"✅ {opp['pair']} SHORT confirmé (Fear + technique bearish)", 'INFO')
+                                # Technique encore baissiÃ¨re = SHORT OK
+                                add_bot_log(f"âœ… {opp['pair']} SHORT confirmÃ© (Fear + technique bearish)", 'INFO')
                         elif signal_direction == 'LONG':
-                            # LONG en Extreme Fear = BONUS (contrarian prouvé)
+                            # LONG en Extreme Fear = BONUS (contrarian prouvÃ©)
                             if rsi < 35:  # Oversold
                                 adjusted_score += 15  # Gros bonus
-                                add_bot_log(f"💰 {opp['pair']} LONG bonus +15 (Extreme Fear + RSI {rsi:.0f})", 'INFO')
+                                add_bot_log(f"ðŸ’° {opp['pair']} LONG bonus +15 (Extreme Fear + RSI {rsi:.0f})", 'INFO')
                             else:
                                 adjusted_score += 5
                     
-                    # ── FEAR (21-40): Prudent mais opportunités ──
+                    # â”€â”€ FEAR (21-40): Prudent mais opportunitÃ©s â”€â”€
                     elif fg_value <= 40:
                         if signal_direction == 'SHORT' and rsi < 35:
-                            adjusted_score -= 5  # Légère pénalité si RSI déjà bas
+                            adjusted_score -= 5  # LÃ©gÃ¨re pÃ©nalitÃ© si RSI dÃ©jÃ  bas
                         elif signal_direction == 'LONG' and rsi < 40:
-                            adjusted_score += 5  # Léger bonus pour achat en fear
+                            adjusted_score += 5  # LÃ©ger bonus pour achat en fear
                     
-                    # ── GREED (60-79): Prudent sur les LONG ──
+                    # â”€â”€ GREED (60-79): Prudent sur les LONG â”€â”€
                     elif fg_value >= 60:
                         if signal_direction == 'LONG' and rsi > 65:
-                            adjusted_score -= 5  # Légère pénalité
+                            adjusted_score -= 5  # LÃ©gÃ¨re pÃ©nalitÃ©
                         elif signal_direction == 'SHORT':
-                            adjusted_score += 3  # Léger bonus
+                            adjusted_score += 3  # LÃ©ger bonus
                 
-                # Règles strictes d'ouverture (LONG ou SHORT)
+                # RÃ¨gles strictes d'ouverture (LONG ou SHORT)
                 if (adjusted_score >= effective_min_score
                         and signal_direction in ['LONG', 'SHORT']  # Accepter LONG ET SHORT
                         and opp['pair'] not in my_positions
@@ -636,36 +636,36 @@ def run_scanner():
                         and opp['stop_loss'] is not None
                         and opp['take_profit_1'] is not None):
 
-                    # ── COOLDOWN CHECK ─────────────
+                    # â”€â”€ COOLDOWN CHECK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if COOLDOWN_ENABLED:
                         in_cooldown, cooldown_remaining = trader.is_in_cooldown(opp['pair'])
                         if in_cooldown:
-                            add_bot_log(f"⏳ {opp['pair']} en cooldown ({cooldown_remaining:.0f}min restantes)", 'INFO')
+                            add_bot_log(f"â³ {opp['pair']} en cooldown ({cooldown_remaining:.0f}min restantes)", 'INFO')
                             continue
 
-                    # ── FILTRE VOLUME ─────────────
+                    # â”€â”€ FILTRE VOLUME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     opp_indicators = all_indicators.get(opp['pair'], {})
                     if VOLUME_FILTER_ENABLED:
                         vol_valid, vol_reason = trade_filters.check_volume_filter(opp_indicators)
                         if not vol_valid:
-                            add_bot_log(f"❌ {opp['pair']} {vol_reason}", 'WARN')
+                            add_bot_log(f"âŒ {opp['pair']} {vol_reason}", 'WARN')
                             continue
 
-                    # ── FILTRE RISK/REWARD ─────────────
+                    # â”€â”€ FILTRE RISK/REWARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     rr_valid, rr_ratio, rr_reason = trade_filters.check_risk_reward(
                         opp['price'], opp['stop_loss'], opp['take_profit_1'], signal_direction
                     )
                     if not rr_valid:
-                        add_bot_log(f"❌ {opp['pair']} {rr_reason}", 'WARN')
+                        add_bot_log(f"âŒ {opp['pair']} {rr_reason}", 'WARN')
                         continue
 
-                    # Vérifier les conditions de volatilité
+                    # VÃ©rifier les conditions de volatilitÃ©
                     can_open, open_reason = trader.protector.can_open_position(opp_indicators)
                     if not can_open:
-                        add_bot_log(f"❌ {opp['pair']} rejeté: {open_reason}", 'WARN')
+                        add_bot_log(f"âŒ {opp['pair']} rejetÃ©: {open_reason}", 'WARN')
                         continue
                     
-                    # ── VALIDATION MULTI-TIMEFRAME ─────────────
+                    # â”€â”€ VALIDATION MULTI-TIMEFRAME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     mtf_alignment = 0
                     if MTF_ENABLED:
                         mtf_result = validate_signal_multi_timeframe(
@@ -676,17 +676,17 @@ def run_scanner():
                         mtf_alignment = mtf_result.get('alignment_score', 0)
                         if not mtf_result['is_valid']:
                             add_bot_log(
-                                f"❌ {opp['pair']} MTF rejeté: {mtf_result['reason']}", 
+                                f"âŒ {opp['pair']} MTF rejetÃ©: {mtf_result['reason']}", 
                                 'WARN'
                             )
                             continue
                         else:
                             add_bot_log(
-                                f"✅ {opp['pair']} MTF confirmé: {mtf_alignment}% aligné",
+                                f"âœ… {opp['pair']} MTF confirmÃ©: {mtf_alignment}% alignÃ©",
                                 'INFO'
                             )
                     
-                    # ── PRÉDICTION ML ─────────────
+                    # â”€â”€ PRÃ‰DICTION ML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if ML_ENABLED:
                         sentiment_data = shared_data.get('market_sentiment', {})
                         ml_prediction = get_ml_prediction(
@@ -700,29 +700,29 @@ def run_scanner():
                         
                         if ml_prob < ML_MIN_PROBABILITY:
                             add_bot_log(
-                                f"🤖 {opp['pair']} ML rejeté: {ml_prob:.0f}% ({ml_confidence})", 
+                                f"ðŸ¤– {opp['pair']} ML rejetÃ©: {ml_prob:.0f}% ({ml_confidence})", 
                                 'WARN'
                             )
                             continue
                         else:
                             add_bot_log(
-                                f"🤖 {opp['pair']} ML: {ml_prob:.0f}% ({ml_confidence})",
+                                f"ðŸ¤– {opp['pair']} ML: {ml_prob:.0f}% ({ml_confidence})",
                                 'INFO'
                             )
                             if ML_SCORE_ADJUST:
-                                ml_bonus = int((ml_prob - 60) / 4)  # +0 à +10
+                                ml_bonus = int((ml_prob - 60) / 4)  # +0 Ã  +10
                                 adjusted_score += ml_bonus
                     
-                    # ── ANALYSE ON-CHAIN ─────────────
+                    # â”€â”€ ANALYSE ON-CHAIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if ONCHAIN_ENABLED:
                         btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
                         onchain_adj, onchain_reason = get_onchain_signal_adjustment(signal_direction, btc_price)
                         if ONCHAIN_SCORE_ADJUST and onchain_adj != 0:
                             adjusted_score += onchain_adj
-                            add_bot_log(f"🔗 {opp['pair']} On-chain: {onchain_reason}", 'INFO')
+                            add_bot_log(f"ðŸ”— {opp['pair']} On-chain: {onchain_reason}", 'INFO')
 
                     if balance >= TRADE_AMOUNT:
-                        # ── CALCUL POSITION SIZING (KELLY) ─────────────
+                        # â”€â”€ CALCUL POSITION SIZING (KELLY) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         if KELLY_SIZING_ENABLED:
                             trade_amount, sizing_breakdown = calculate_position_size(
                                 capital=balance,
@@ -731,15 +731,15 @@ def run_scanner():
                                 ml_probability=ml_prob if ML_ENABLED else 50,
                                 stop_loss_pct=abs((opp['price'] - opp['stop_loss']) / opp['price'] * 100)
                             )
-                            add_bot_log(f"📊 Kelly: ${trade_amount:.0f} ({sizing_breakdown.get('final_position', 'N/A')})", 'INFO')
+                            add_bot_log(f"ðŸ“Š Kelly: ${trade_amount:.0f} ({sizing_breakdown.get('final_position', 'N/A')})", 'INFO')
                         else:
                             trade_amount = FIXED_TRADE_AMOUNT
                         
-                        # Vérifier qu'on a assez de balance
+                        # VÃ©rifier qu'on a assez de balance
                         if balance < trade_amount:
                             trade_amount = balance * 0.9  # Utiliser 90% du reste
                         
-                        # ── EXÉCUTION LONG OU SHORT ─────────────
+                        # â”€â”€ EXÃ‰CUTION LONG OU SHORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         if signal_direction == 'LONG':
                             success = trader.place_buy_order(
                                 symbol=opp['pair'],
@@ -750,7 +750,7 @@ def run_scanner():
                                 entry_trend=opp['trend'],
                                 take_profit_2=opp.get('take_profit_2')
                             )
-                            trade_emoji = "🟢 LONG"
+                            trade_emoji = "ðŸŸ¢ LONG"
                         else:  # SHORT
                             success = trader.place_short_order(
                                 symbol=opp['pair'],
@@ -760,7 +760,7 @@ def run_scanner():
                                 take_profit_price=opp['take_profit_1'],
                                 entry_trend=opp['trend']
                             )
-                            trade_emoji = "🔴 SHORT"
+                            trade_emoji = "ðŸ”´ SHORT"
                         
                         if success:
                             # Enregistrer le trade pour le cooldown
@@ -774,11 +774,11 @@ def run_scanner():
                                 'TRADE'
                             )
                     else:
-                        add_bot_log(f"Solde insuffisant pour {opp['pair']} (nécessite ${TRADE_AMOUNT})", 'WARN')
+                        add_bot_log(f"Solde insuffisant pour {opp['pair']} (nÃ©cessite ${TRADE_AMOUNT})", 'WARN')
                         break
 
         update_performance_stats(trader)
-        add_bot_log(f"=== SCAN #{scan_num} TERMINÉ ===", 'INFO')
+        add_bot_log(f"=== SCAN #{scan_num} TERMINÃ‰ ===", 'INFO')
         return opportunities
 
     except Exception as e:
@@ -788,13 +788,13 @@ def run_scanner():
         return []
 
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # ROUTES FLASK
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/')
 def dashboard():
-    """Dashboard principal — rendu côté serveur."""
+    """Dashboard principal â€” rendu cÃ´tÃ© serveur."""
     trader = PaperTrader()
     balance = trader.get_usdt_balance()
     all_trades = trader.get_trades_history()
@@ -827,7 +827,7 @@ def dashboard():
         if direction == 'LONG':
             range_total = tp - sl if (tp - sl) != 0 else 1
             progress = max(0, min(100, ((current - sl) / range_total) * 100))
-        else:  # SHORT (inversé)
+        else:  # SHORT (inversÃ©)
             range_total = sl - tp if (sl - tp) != 0 else 1
             progress = max(0, min(100, ((sl - current) / range_total) * 100))
         
@@ -924,9 +924,9 @@ def close_position_route(symbol):
     current_price = shared_data['last_prices'].get(symbol)
     if not current_price:
         return jsonify({'success': False, 'error': 'Prix non disponible'})
-    success = trader.close_position(symbol, current_price, "MANUEL 👤")
+    success = trader.close_position(symbol, current_price, "MANUEL ðŸ‘¤")
     if success:
-        add_bot_log(f"💰 VENTE MANUELLE {symbol} @ ${current_price:.4f}", 'TRADE')
+        add_bot_log(f"ðŸ’° VENTE MANUELLE {symbol} @ ${current_price:.4f}", 'TRADE')
     return jsonify({'success': success})
 
 
@@ -937,7 +937,7 @@ def health():
 
 @app.route('/api/crash_status')
 def crash_status():
-    """Retourne le statut du système anti-crash."""
+    """Retourne le statut du systÃ¨me anti-crash."""
     status = get_crash_status()
     status['stats'] = crash_protector.get_crash_stats()
     return jsonify(status)
@@ -945,15 +945,15 @@ def crash_status():
 
 @app.route('/api/resume_trading', methods=['POST'])
 def resume_trading():
-    """Force la reprise du trading après un crash (bypass manuel)."""
+    """Force la reprise du trading aprÃ¨s un crash (bypass manuel)."""
     crash_protector.force_resume_trading()
-    add_bot_log("⚠️ REPRISE MANUELLE du trading après crash", 'WARN')
+    add_bot_log("âš ï¸ REPRISE MANUELLE du trading aprÃ¨s crash", 'WARN')
     return jsonify({'success': True, 'message': 'Trading resumed'})
 
 
 @app.route('/api/sentiment')
 def api_sentiment():
-    """Retourne l'analyse de sentiment marché."""
+    """Retourne l'analyse de sentiment marchÃ©."""
     try:
         sentiment = get_market_sentiment()
         sentiment['cached'] = shared_data.get('market_sentiment', {})
@@ -964,7 +964,7 @@ def api_sentiment():
 
 @app.route('/api/intelligence')
 def api_intelligence():
-    """Retourne l'intelligence de marché complète."""
+    """Retourne l'intelligence de marchÃ© complÃ¨te."""
     try:
         intel = get_market_intelligence()
         intel['cached'] = shared_data.get('market_intelligence', {})
@@ -975,7 +975,7 @@ def api_intelligence():
 
 @app.route('/api/quick_intel')
 def api_quick_intel():
-    """Version rapide de l'intelligence (moins de données)."""
+    """Version rapide de l'intelligence (moins de donnÃ©es)."""
     try:
         return jsonify({
             'funding': market_intel.get_funding_rates(),
@@ -990,7 +990,7 @@ def api_quick_intel():
 
 @app.route('/api/ml_prediction/<symbol>')
 def api_ml_prediction(symbol):
-    """Retourne la prédiction ML pour une paire."""
+    """Retourne la prÃ©diction ML pour une paire."""
     try:
         direction = request.args.get('direction', 'LONG')
         indicators = all_indicators.get(symbol, {})
@@ -1012,7 +1012,7 @@ def api_ml_prediction(symbol):
 
 @app.route('/api/ml_stats')
 def api_ml_stats():
-    """Retourne les statistiques du modèle ML."""
+    """Retourne les statistiques du modÃ¨le ML."""
     try:
         stats = ml_predictor.get_model_stats()
         return jsonify(stats)
@@ -1022,7 +1022,7 @@ def api_ml_stats():
 
 @app.route('/api/ml_update', methods=['POST'])
 def api_ml_update():
-    """Force une mise à jour du modèle ML avec les données d'entraînement."""
+    """Force une mise Ã  jour du modÃ¨le ML avec les donnÃ©es d'entraÃ®nement."""
     try:
         ml_predictor.update_weights_from_history()
         return jsonify({'success': True, 'message': 'ML model updated'})
@@ -1032,7 +1032,7 @@ def api_ml_update():
 
 @app.route('/api/onchain')
 def api_onchain():
-    """Retourne l'analyse on-chain complète."""
+    """Retourne l'analyse on-chain complÃ¨te."""
     try:
         btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
         analysis = get_onchain_analysis(btc_price)
@@ -1043,7 +1043,7 @@ def api_onchain():
 
 @app.route('/api/onchain/tvl')
 def api_onchain_tvl():
-    """Retourne les données TVL DeFi."""
+    """Retourne les donnÃ©es TVL DeFi."""
     try:
         tvl = onchain_analyzer.get_defi_tvl()
         return jsonify(tvl)
@@ -1108,7 +1108,7 @@ def api_calculate_position():
 
 @app.route('/api/intelligence_summary')
 def api_intelligence_summary():
-    """Retourne un résumé de toute l'intelligence disponible."""
+    """Retourne un rÃ©sumÃ© de toute l'intelligence disponible."""
     try:
         btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
         
@@ -1129,7 +1129,7 @@ def api_intelligence_summary():
 
 @app.route('/api/macro')
 def api_macro():
-    """Retourne l'analyse macroéconomique complète."""
+    """Retourne l'analyse macroÃ©conomique complÃ¨te."""
     try:
         analysis = get_macro_analysis()
         return jsonify(analysis)
@@ -1139,7 +1139,7 @@ def api_macro():
 
 @app.route('/api/macro/events')
 def api_macro_events():
-    """Retourne les événements économiques à venir."""
+    """Retourne les Ã©vÃ©nements Ã©conomiques Ã  venir."""
     try:
         days = request.args.get('days', 7, type=int)
         events = get_upcoming_economic_events(days)
@@ -1154,7 +1154,7 @@ def api_macro_events():
 
 @app.route('/api/macro/today')
 def api_macro_today():
-    """Retourne les événements du jour."""
+    """Retourne les Ã©vÃ©nements du jour."""
     try:
         analysis = get_macro_analysis()
         return jsonify({
@@ -1169,7 +1169,7 @@ def api_macro_today():
 
 @app.route('/api/macro/add_event', methods=['POST'])
 def api_add_macro_event():
-    """Ajoute un événement personnalisé au calendrier."""
+    """Ajoute un Ã©vÃ©nement personnalisÃ© au calendrier."""
     try:
         data = request.json
         success = macro_analyzer.add_custom_event(
@@ -1184,13 +1184,13 @@ def api_add_macro_event():
         return jsonify({'error': str(e)})
 
 
-# ═══════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # API SOCIAL SENTIMENT
-# ═══════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/api/social')
 def api_social_sentiment():
-    """Retourne l'analyse du sentiment social complète."""
+    """Retourne l'analyse du sentiment social complÃ¨te."""
     try:
         symbol = request.args.get('symbol', 'BTC')
         return jsonify(get_social_sentiment(symbol))
@@ -1217,13 +1217,13 @@ def api_trending():
         return jsonify({'error': str(e)})
 
 
-# ═══════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # API TRADE JOURNAL AI
-# ═══════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/api/journal')
 def api_trade_journal():
-    """Retourne l'analyse complète du journal de trading."""
+    """Retourne l'analyse complÃ¨te du journal de trading."""
     try:
         return jsonify(get_trade_journal().get_complete_analysis())
     except Exception as e:
@@ -1251,7 +1251,7 @@ def api_journal_errors():
 
 @app.route('/api/journal/successes')
 def api_journal_successes():
-    """Retourne l'analyse des succès."""
+    """Retourne l'analyse des succÃ¨s."""
     try:
         return jsonify(get_trade_journal().analyze_successes())
     except Exception as e:
@@ -1267,9 +1267,9 @@ def api_journal_daily():
         return jsonify({'error': str(e)})
 
 
-# ─────────────────────────────────────────────────────────────
-# TEMPLATE HTML ULTIME
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# TEMPLATE HTML SIMPLIFIÃ‰
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def get_html_template():
     return r"""
@@ -1278,1315 +1278,300 @@ def get_html_template():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>⚡ CRYPTO SCANNER ULTIME</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<title>âš¡ Crypto Trading Bot</title>
 <style>
+* { margin:0; padding:0; box-sizing:border-box; }
 :root {
-    --bg:         #080c14;
-    --bg2:        #0d1420;
-    --bg3:        #111827;
-    --border:     #1e2d45;
-    --border2:    #243348;
-    --text:       #e2e8f0;
-    --text2:      #94a3b8;
-    --text3:      #4b6080;
-    --accent:     #00d4ff;
-    --accent2:    #0099bb;
-    --green:      #00e89b;
-    --green2:     #00b877;
-    --red:        #ff4560;
-    --red2:       #cc2040;
-    --yellow:     #ffd700;
-    --orange:     #ff8c00;
-    --purple:     #a855f7;
-    --font-mono:  'JetBrains Mono', monospace;
-    --font-main:  'Space Grotesk', sans-serif;
-    --glow-g:     0 0 20px rgba(0,232,155,0.15);
-    --glow-r:     0 0 20px rgba(255,69,96,0.15);
-    --glow-a:     0 0 20px rgba(0,212,255,0.15);
+    --bg: #0a0e17; --bg2: #111827; --border: #1f2937;
+    --text: #f3f4f6; --text2: #9ca3af; --text3: #6b7280;
+    --green: #10b981; --red: #ef4444; --blue: #3b82f6; --yellow: #f59e0b;
 }
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.app { max-width: 1400px; margin: 0 auto; padding: 20px; }
 
-body {
-    font-family: var(--font-main);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-}
+/* Header */
+.header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: var(--bg2); border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border); }
+.header h1 { font-size: 1.5em; color: var(--blue); }
+.header .status { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: var(--text2); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
+.dot.scanning { background: var(--yellow); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
 
-/* ── GRID BG ── */
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-}
+/* Stats Grid */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.stat { background: var(--bg2); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+.stat-label { font-size: 0.75em; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.stat-value { font-size: 1.8em; font-weight: 700; }
+.stat-sub { font-size: 0.8em; color: var(--text3); margin-top: 4px; }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.blue { color: var(--blue); }
 
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+/* Cards */
+.card { background: var(--bg2); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; overflow: hidden; }
+.card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
+.card-header h2 { font-size: 1em; font-weight: 600; color: var(--text2); }
+.badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75em; font-weight: 600; }
+.b-green { background: rgba(16,185,129,0.1); color: var(--green); }
+.b-red { background: rgba(239,68,68,0.1); color: var(--red); }
+.b-blue { background: rgba(59,130,246,0.1); color: var(--blue); }
+.b-yellow { background: rgba(245,158,11,0.1); color: var(--yellow); }
 
-/* ── LAYOUT ── */
-.app { position: relative; z-index: 1; padding: 16px; max-width: 1800px; margin: 0 auto; }
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+th { padding: 12px 16px; text-align: left; font-size: 0.7em; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
+td { padding: 12px 16px; border-bottom: 1px solid rgba(31,41,55,0.5); }
+tr:hover td { background: rgba(59,130,246,0.03); }
+.empty { text-align: center; padding: 40px; color: var(--text3); }
 
-/* ── HEADER ── */
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 24px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 16px;
-    position: relative;
-    overflow: hidden;
-}
-.header::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent), var(--green), var(--purple), var(--accent));
-    background-size: 200%;
-    animation: shimmer 3s linear infinite;
-}
-@keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
+/* Progress */
+.progress { width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--yellow), var(--green)); border-radius: 3px; }
 
-.header-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.header-logo {
-    width: 40px; height: 40px;
-    background: linear-gradient(135deg, var(--accent), var(--purple));
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
-}
-.header-text h1 {
-    font-size: 1.3em;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--accent);
-    font-family: var(--font-mono);
-}
-.header-text span {
-    font-size: 0.75em;
-    color: var(--text2);
-    font-family: var(--font-mono);
-    letter-spacing: 1px;
-}
-.header-right {
-    display: flex; align-items: center; gap: 20px;
-}
-.status-dot {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 0.8em; font-family: var(--font-mono);
-    color: var(--text2);
-}
-.dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-}
-.dot.scanning {
-    background: var(--yellow);
-    box-shadow: 0 0 8px var(--yellow);
-    animation: pulse 0.8s ease-in-out infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+/* Buttons */
+.btn { padding: 6px 14px; border-radius: 6px; font-size: 0.8em; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+.btn-close { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.btn-close:hover { background: rgba(239,68,68,0.2); }
 
-.header-meta {
-    font-size: 0.75em; font-family: var(--font-mono);
-    color: var(--text3); text-align: right;
-}
-.header-meta span { display: block; }
+/* Log */
+.log { max-height: 300px; overflow-y: auto; }
+.log-line { display: flex; gap: 12px; padding: 8px 16px; border-bottom: 1px solid rgba(31,41,55,0.3); font-size: 0.8em; }
+.log-time { color: var(--text3); width: 60px; flex-shrink: 0; }
+.log-level { width: 50px; flex-shrink: 0; font-weight: 600; text-align: center; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+.l-INFO { background: rgba(59,130,246,0.1); color: var(--blue); }
+.l-TRADE { background: rgba(16,185,129,0.1); color: var(--green); }
+.l-WARN { background: rgba(245,158,11,0.1); color: var(--yellow); }
+.l-ERROR { background: rgba(239,68,68,0.1); color: var(--red); }
+.log-msg { color: var(--text2); flex: 1; }
 
-/* ── CARDS ── */
-.card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-}
-.card-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(0,0,0,0.2);
-}
-.card-header h2 {
-    font-size: 0.85em; font-weight: 600;
-    letter-spacing: 2px; text-transform: uppercase;
-    color: var(--text2); font-family: var(--font-mono);
-    display: flex; align-items: center; gap: 8px;
-}
-.card-body { padding: 0; }
+/* Grid layouts */
+.grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+@media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
 
-/* ── STAT GRID ── */
-.stat-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
-}
-@media (max-width: 1200px) { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 700px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+/* Quick indicators */
+.indicators { display: flex; gap: 16px; padding: 12px 20px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border); font-size: 0.8em; }
+.ind { display: flex; align-items: center; gap: 6px; }
+.ind-label { color: var(--text3); }
+.ind-value { font-weight: 600; }
 
-.stat-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px 20px;
-    position: relative;
-    overflow: hidden;
-    transition: border-color 0.2s;
-}
-.stat-card:hover { border-color: var(--border2); }
-.stat-card::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 2px;
-    border-radius: 0 0 10px 10px;
-}
-.stat-card.blue::after { background: var(--accent); }
-.stat-card.green::after { background: var(--green); }
-.stat-card.red::after { background: var(--red); }
-.stat-card.yellow::after { background: var(--yellow); }
-.stat-card.purple::after { background: var(--purple); }
-.stat-card.orange::after { background: var(--orange); }
-
-.stat-label {
-    font-size: 0.7em; text-transform: uppercase;
-    letter-spacing: 2px; color: var(--text3);
-    font-family: var(--font-mono); margin-bottom: 8px;
-}
-.stat-value {
-    font-size: 1.6em; font-weight: 700;
-    font-family: var(--font-mono);
-    line-height: 1;
-}
-.stat-value.positive { color: var(--green); }
-.stat-value.negative { color: var(--red); }
-.stat-value.neutral  { color: var(--accent); }
-.stat-sub {
-    font-size: 0.7em; color: var(--text3);
-    font-family: var(--font-mono); margin-top: 4px;
-}
-
-/* ── MAIN LAYOUT ── */
-.main-grid {
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 14px;
-    margin-bottom: 14px;
-}
-@media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
-
-.bottom-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 14px;
-    margin-bottom: 14px;
-}
-@media (max-width: 1100px) { .bottom-grid { grid-template-columns: 1fr; } }
-
-/* ── TABLES ── */
-.tbl-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
-thead tr { background: rgba(0,0,0,0.3); }
-thead th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 0.72em; font-weight: 600;
-    letter-spacing: 2px; text-transform: uppercase;
-    color: var(--text3); font-family: var(--font-mono);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-}
-tbody td {
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(30,45,69,0.5);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 0.9em;
-    white-space: nowrap;
-    vertical-align: middle;
-}
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: rgba(0,212,255,0.03); }
-
-/* ── BADGES ── */
-.badge {
-    display: inline-block;
-    padding: 3px 10px; border-radius: 20px;
-    font-size: 0.75em; font-weight: 700;
-    font-family: var(--font-mono); letter-spacing: 1px;
-}
-.b-long  { background: rgba(0,232,155,0.12); color: var(--green); border: 1px solid rgba(0,232,155,0.3); }
-.b-short { background: rgba(255,69,96,0.12); color: var(--red); border: 1px solid rgba(255,69,96,0.3); }
-.b-wait  { background: rgba(148,163,184,0.08); color: var(--text3); border: 1px solid var(--border); }
-.b-blue  { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
-
-/* ── SCORE BAR ── */
-.score-wrap { display: flex; align-items: center; gap: 8px; }
-.score-num {
-    font-weight: 700; font-family: var(--font-mono);
-    min-width: 26px; text-align: right;
-}
-.score-bar {
-    width: 60px; height: 6px; background: var(--bg3);
-    border-radius: 3px; overflow: hidden;
-}
-.score-fill {
-    height: 100%; border-radius: 3px;
-    transition: width 0.3s ease;
-}
-.score-high .score-num { color: var(--green); }
-.score-high .score-fill { background: var(--green); }
-.score-med  .score-num { color: var(--yellow); }
-.score-med  .score-fill { background: var(--yellow); }
-.score-low  .score-num { color: var(--text3); }
-.score-low  .score-fill { background: var(--text3); }
-
-/* ── RSI BAR ── */
-.rsi-bar {
-    display: flex; align-items: center; gap: 6px;
-    font-family: var(--font-mono); font-size: 0.85em;
-}
-.rsi-track {
-    width: 50px; height: 4px;
-    background: var(--bg3); border-radius: 2px;
-    overflow: hidden;
-}
-.rsi-fill { height: 100%; border-radius: 2px; }
-.rsi-oversold  .rsi-fill { background: var(--red); }
-.rsi-neutral   .rsi-fill { background: var(--text3); }
-.rsi-overbought .rsi-fill { background: var(--orange); }
-
-/* ── PROGRESS BAR (Position TP) ── */
-.progress-wrap { display: flex; align-items: center; gap: 6px; min-width: 100px; }
-.progress-track {
-    flex: 1; height: 6px; background: var(--bg3);
-    border-radius: 3px; overflow: hidden;
-}
-.progress-fill {
-    height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
-}
-.progress-pct { font-size: 0.75em; color: var(--text3); font-family: var(--font-mono); }
-
-/* ── BOT LOG ── */
-.log-wrap { height: 300px; overflow-y: auto; }
-.log-line {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 7px 16px;
-    border-bottom: 1px solid rgba(30,45,69,0.3);
-    font-size: 0.75em; font-family: var(--font-mono);
-    transition: background 0.1s;
-}
-.log-line:hover { background: rgba(0,0,0,0.2); }
-.log-time { color: var(--text3); flex-shrink: 0; width: 60px; }
-.log-level {
-    flex-shrink: 0; width: 45px; text-align: center;
-    border-radius: 3px; padding: 1px 4px; font-size: 0.9em;
-    font-weight: 700;
-}
-.level-INFO  { background: rgba(0,212,255,0.1); color: var(--accent); }
-.level-TRADE { background: rgba(0,232,155,0.1); color: var(--green); }
-.level-WARN  { background: rgba(255,215,0,0.1); color: var(--yellow); }
-.level-ERROR { background: rgba(255,69,96,0.1); color: var(--red); }
-.log-msg { color: var(--text2); flex: 1; word-break: break-all; }
-
-/* ── MARKET SENTIMENT ── */
-.sentiment-bar {
-    display: flex; height: 8px; border-radius: 4px; overflow: hidden;
-    margin: 8px 16px;
-}
-.sent-bull { background: var(--green); transition: width 0.5s ease; }
-.sent-bear { background: var(--red); transition: width 0.5s ease; }
-.sent-neut { background: var(--text3); transition: width 0.5s ease; }
-
-/* ── INDICATORS MINI PANEL ── */
-.ind-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 2px;
-}
-.ind-item {
-    padding: 6px 10px;
-    background: rgba(0,0,0,0.2);
-    border-radius: 4px;
-}
-.mini-stat {
-    background: rgba(0,0,0,0.25);
-    border-radius: 6px;
-    padding: 10px;
-    text-align: center;
-    border: 1px solid var(--border);
-}
-.mini-stat .ind-label {
-    font-size: 0.65em;
-    color: var(--text3);
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-.mini-stat .ind-val {
-    font-size: 1em;
-    font-family: var(--font-mono);
-    font-weight: 700;
-    color: var(--text);
-}
-.ind-label { font-size: 0.65em; color: var(--text3); font-family: var(--font-mono); letter-spacing: 1px; text-transform: uppercase; }
-.ind-val { font-size: 0.85em; font-family: var(--font-mono); font-weight: 600; }
-
-/* ── SIGNAL STRENGTH ── */
-.conf-ring {
-    width: 36px; height: 36px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.7em; font-weight: 700; font-family: var(--font-mono);
-    border: 2px solid;
-    flex-shrink: 0;
-}
-.conf-high { border-color: var(--green); color: var(--green); }
-.conf-med  { border-color: var(--yellow); color: var(--yellow); }
-.conf-low  { border-color: var(--text3); color: var(--text3); }
-
-/* ── PNL COLORS ── */
-.pnl-pos { color: var(--green); }
-.pnl-neg { color: var(--red); }
-
-/* ── TREND ICON ── */
-.trend-bull { color: var(--green); }
-.trend-bear { color: var(--red); }
-.trend-neut { color: var(--text3); }
-
-/* ── TABS ── */
-.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
-.tab {
-    padding: 10px 20px;
-    font-size: 0.8em; font-family: var(--font-mono);
-    letter-spacing: 1px; text-transform: uppercase;
-    color: var(--text3); cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s; user-select: none;
-}
-.tab:hover { color: var(--text2); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-
-/* ── MANUAL CLOSE BTN ── */
-.btn-close {
-    background: rgba(255,69,96,0.1);
-    border: 1px solid rgba(255,69,96,0.3);
-    color: var(--red);
-    padding: 4px 10px; border-radius: 4px;
-    font-size: 0.75em; font-family: var(--font-mono);
-    cursor: pointer; transition: all 0.2s;
-    letter-spacing: 1px;
-}
-.btn-close:hover { background: rgba(255,69,96,0.25); }
-
-/* ── EMPTY STATE ── */
-.empty {
-    text-align: center; padding: 40px;
-    color: var(--text3); font-family: var(--font-mono); font-size: 0.85em;
-}
-
-/* ── FOOTER ── */
-.footer {
-    text-align: center; padding: 20px;
-    color: var(--text3); font-size: 0.75em;
-    font-family: var(--font-mono); letter-spacing: 1px;
-    border-top: 1px solid var(--border); margin-top: 10px;
-}
-.footer span { color: var(--red); }
-
-/* ── ANIMATIONS ── */
-@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
-.card { animation: fadeIn 0.3s ease; }
-
-/* ── LEVEL INDICATORS ── */
-.level-tag {
-    font-size: 0.72em; font-family: var(--font-mono);
-    padding: 2px 6px; border-radius: 3px;
-}
-.sl-tag { background: rgba(255,69,96,0.1); color: var(--red); }
-.tp-tag { background: rgba(0,232,155,0.1); color: var(--green); }
-.rr-tag { background: rgba(0,212,255,0.1); color: var(--accent); }
-
-/* ── PATTERNS ── */
-.pattern-tag {
-    display: inline-block;
-    font-size: 0.65em; font-family: var(--font-mono);
-    background: rgba(168,85,247,0.1);
-    color: var(--purple);
-    border: 1px solid rgba(168,85,247,0.2);
-    padding: 1px 5px; border-radius: 3px; margin: 1px;
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 </style>
 </head>
 <body>
 <div class="app">
 
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- HEADER                                                     -->
-<!-- ══════════════════════════════════════════════════════════ -->
+<!-- HEADER -->
 <div class="header">
-    <div class="header-title">
-        <div class="header-logo">⚡</div>
-        <div class="header-text">
-            <h1>CRYPTO SCANNER ULTIME</h1>
-            <span>SWING TRADING BOT v2.0 — BINANCE {{ timeframe|upper }}</span>
-        </div>
+    <div>
+        <h1>âš¡ Crypto Trading Bot</h1>
+        <span style="font-size:0.8em;color:var(--text3)">Swing Trading â€¢ {{ timeframe|upper }} â€¢ Auto-buy â‰¥ {{ min_score }}</span>
     </div>
-    <div class="header-right">
-        <div class="status-dot">
-            <div class="dot {% if is_scanning %}scanning{% endif %}"></div>
-            {% if is_scanning %}SCAN EN COURS{% else %}ACTIF{% endif %}
-        </div>
-        <div class="header-meta">
-            <span>SCAN #{{ scan_count }}</span>
-            <span>MAJ: {{ last_update }}</span>
-            <span>AUTO-BUY ≥ {{ min_score }}</span>
-        </div>
+    <div class="status">
+        <div class="dot {% if is_scanning %}scanning{% endif %}"></div>
+        {% if is_scanning %}Scanning...{% else %}Active{% endif %}
+        <span style="margin-left:16px;color:var(--text3)">Scan #{{ scan_count }} â€¢ {{ last_update }}</span>
     </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- STAT CARDS                                                  -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="stat-grid">
-    <div class="stat-card blue">
-        <div class="stat-label">Capital Total</div>
-        <div class="stat-value neutral">${{ "%.2f"|format(total_capital) }}</div>
-        <div class="stat-sub">Solde libre: ${{ "%.2f"|format(balance) }}</div>
+<!-- STATS PRINCIPAUX -->
+<div class="stats">
+    <div class="stat">
+        <div class="stat-label">ðŸ’° Capital</div>
+        <div class="stat-value blue">${{ "%.2f"|format(total_capital) }}</div>
+        <div class="stat-sub">Disponible: ${{ "%.2f"|format(balance) }}</div>
     </div>
-    <div class="stat-card {% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">
-        <div class="stat-label">PnL Latent</div>
-        <div class="stat-value {% if total_unrealized_pnl >= 0 %}positive{% else %}negative{% endif %}">
-            {{ "%+.2f"|format(total_unrealized_pnl) }}$
-        </div>
-        <div class="stat-sub">{{ positions|length }} position(s) active(s)</div>
+    <div class="stat">
+        <div class="stat-label">ðŸ“Š PnL Latent</div>
+        <div class="stat-value {% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(total_unrealized_pnl) }}$</div>
+        <div class="stat-sub">{{ positions|length }} position(s) ouverte(s)</div>
     </div>
-    <div class="stat-card {% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">
-        <div class="stat-label">PnL Réalisé</div>
-        <div class="stat-value {% if perf.total_pnl >= 0 %}positive{% else %}negative{% endif %}">
-            {{ "%+.2f"|format(perf.total_pnl) }}$
-        </div>
-        <div class="stat-sub">{{ perf.total_trades }} trades fermés</div>
+    <div class="stat">
+        <div class="stat-label">âœ… PnL RÃ©alisÃ©</div>
+        <div class="stat-value {% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(perf.total_pnl) }}$</div>
+        <div class="stat-sub">{{ perf.winning_trades }}/{{ perf.total_trades }} trades gagnants</div>
     </div>
-    <div class="stat-card yellow">
-        <div class="stat-label">Win Rate</div>
-        <div class="stat-value neutral">{{ perf.win_rate }}%</div>
-        <div class="stat-sub">{{ perf.winning_trades }}/{{ perf.total_trades }} gagnants</div>
-    </div>
-    <div class="stat-card purple">
-        <div class="stat-label">Sentiment Marché</div>
-        <div class="stat-value" style="font-size:1.1em">{{ mkt.sentiment }}</div>
-        <div class="stat-sub">RSI moy: {{ mkt.avg_rsi }}</div>
-    </div>
-    <div class="stat-card orange">
-        <div class="stat-label">Opportunités</div>
-        <div class="stat-value neutral">{{ opportunities|length }}</div>
-        <div class="stat-sub">↑{{ mkt.total_bullish }} ↓{{ mkt.total_bearish }} –{{ mkt.total_neutral }}</div>
+    <div class="stat">
+        <div class="stat-label">ðŸŽ¯ Win Rate</div>
+        <div class="stat-value">{{ perf.win_rate }}%</div>
+        <div class="stat-sub">{{ perf.total_trades }} trades au total</div>
     </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- MARKET SENTIMENT BAR                                        -->
-<!-- ══════════════════════════════════════════════════════════ -->
-{% set total_pairs = mkt.total_bullish + mkt.total_bearish + mkt.total_neutral %}
-{% if total_pairs > 0 %}
-<div class="card" style="margin-bottom:14px;">
+<!-- POSITIONS ACTIVES -->
+<div class="card">
     <div class="card-header">
-        <h2>📊 Sentiment Marché Global ({{ total_pairs }} paires)</h2>
-        <span style="font-size:0.78em;font-family:var(--font-mono);color:var(--text3)">
-            ↑ {{ mkt.total_bullish }} HAUSSIER | ↓ {{ mkt.total_bearish }} BAISSIER | — {{ mkt.total_neutral }} NEUTRE
-        </span>
+        <h2>ðŸ’¼ Positions Actives ({{ positions|length }})</h2>
+        <span class="badge b-blue">PAPER TRADING</span>
     </div>
-    <div class="card-body" style="padding:12px 16px;">
-        <div class="sentiment-bar">
-            <div class="sent-bull" style="width:{{ (mkt.total_bullish / total_pairs * 100)|round }}%"></div>
-            <div class="sent-neut" style="width:{{ (mkt.total_neutral / total_pairs * 100)|round }}%"></div>
-            <div class="sent-bear" style="width:{{ (mkt.total_bearish / total_pairs * 100)|round }}%"></div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- INTELLIGENCE DASHBOARD (ML + On-Chain + Kelly)              -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="bottom-grid" style="margin-bottom:14px;">
-    <!-- ML & ON-CHAIN -->
-    <div class="card">
-        <div class="card-header">
-            <h2>🧠 Intelligence Avancée</h2>
-            <span class="badge b-blue" id="intel-status">CHARGEMENT...</span>
-        </div>
-        <div class="card-body" style="padding:12px 16px;">
-            <div class="stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">🤖 ML Accuracy</div>
-                    <div class="ind-val" id="ml-accuracy">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📊 ML Trades</div>
-                    <div class="ind-val" id="ml-trades">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">🔗 On-Chain</div>
-                    <div class="ind-val" id="onchain-signal">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📈 NUPL</div>
-                    <div class="ind-val" id="nupl-value">--</div>
-                </div>
-            </div>
-            <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">💰 TVL DeFi</div>
-                    <div class="ind-val" id="tvl-value">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">🔄 Ex. Flow</div>
-                    <div class="ind-val" id="exchange-flow">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📉 MVRV</div>
-                    <div class="ind-val" id="mvrv-value">--</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- KELLY POSITION SIZING -->
-    <div class="card">
-        <div class="card-header">
-            <h2>💎 Position Sizing (Kelly)</h2>
-        </div>
-        <div class="card-body" style="padding:12px 16px;">
-            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">📊 Kelly Fraction</div>
-                    <div class="ind-val" id="kelly-fraction">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">🎯 Win Rate</div>
-                    <div class="ind-val" id="kelly-winrate">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">💵 Position Rec.</div>
-                    <div class="ind-val" id="kelly-position">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📈 R/R Ratio</div>
-                    <div class="ind-val" id="kelly-rr">--</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- MACRO EVENTS & CALENDAR -->
-    <div class="card">
-        <div class="card-header">
-            <h2>📅 Événements Macro</h2>
-            <span class="badge" id="macro-pause-badge" style="font-size:0.7em;display:none">⏸️ PAUSE</span>
-        </div>
-        <div class="card-body" style="padding:12px 16px;">
-            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">🔮 Prochain Event</div>
-                    <div class="ind-val" id="next-macro-event" style="font-size:0.75em">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">⏰ Dans</div>
-                    <div class="ind-val" id="next-event-time">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">⚡ Impact</div>
-                    <div class="ind-val" id="next-event-impact">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📰 Régulations</div>
-                    <div class="ind-val" id="regulation-alerts">0</div>
-                </div>
-            </div>
-            <div id="macro-events-list" style="margin-top:12px;max-height:100px;overflow-y:auto;font-size:0.75em;color:var(--text3);"></div>
-        </div>
-    </div>
-    
-    <!-- SOCIAL SENTIMENT -->
-    <div class="card">
-        <div class="card-header">
-            <h2>😨 Sentiment Social</h2>
-        </div>
-        <div class="card-body" style="padding:12px 16px;">
-            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">🎭 Fear & Greed</div>
-                    <div class="ind-val" id="fear-greed-value" style="font-size:1.2em">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📊 Classification</div>
-                    <div class="ind-val" id="fear-greed-class">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📱 Reddit</div>
-                    <div class="ind-val" id="reddit-sentiment">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">💡 Signal</div>
-                    <div class="ind-val" id="social-signal">--</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- TRADE JOURNAL AI -->
-    <div class="card">
-        <div class="card-header">
-            <h2>📔 Journal AI</h2>
-        </div>
-        <div class="card-body" style="padding:12px 16px;">
-            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
-                <div class="mini-stat">
-                    <div class="ind-label">📈 Win Rate</div>
-                    <div class="ind-val" id="journal-winrate">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📊 Sharpe</div>
-                    <div class="ind-val" id="journal-sharpe">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">📉 Max DD</div>
-                    <div class="ind-val" id="journal-maxdd">--</div>
-                </div>
-                <div class="mini-stat">
-                    <div class="ind-label">🎯 Expectancy</div>
-                    <div class="ind-val" id="journal-expectancy">--</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- MAIN GRID: POSITIONS + BOT LOG                             -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="main-grid">
-
-    <!-- POSITIONS ACTIVES -->
-    <div class="card">
-        <div class="card-header">
-            <h2>💼 Positions Actives ({{ positions|length }})</h2>
-            <span class="badge b-blue" style="font-size:0.7em">PAPER TRADING</span>
-        </div>
-        <div class="card-body tbl-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Paire</th>
-                        <th>Entrée</th>
-                        <th>Actuel</th>
-                        <th>Investi</th>
-                        <th>PnL $</th>
-                        <th>PnL %</th>
-                        <th>Stop Loss</th>
-                        <th>Take Profit</th>
-                        <th>Progression TP</th>
-                        <th>Ouvert</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% if not positions %}
-                <tr><td colspan="11" class="empty">Aucune position ouverte</td></tr>
-                {% else %}
-                {% for p in positions %}
-                <tr>
-                    <td style="font-weight:700;color:var(--accent)">{{ p.symbol }}</td>
-                    <td>${{ "%.4f"|format(p.entry) }}</td>
-                    <td style="font-weight:600">${{ "%.4f"|format(p.current) }}</td>
-                    <td>${{ "%.0f"|format(p.amount) }}</td>
-                    <td class="{% if p.pnl_value >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                        {{ "%+.2f"|format(p.pnl_value) }}$
-                    </td>
-                    <td class="{% if p.pnl_percent >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                        {{ "%+.2f"|format(p.pnl_percent) }}%
-                    </td>
-                    <td><span class="level-tag sl-tag">{{ "%.4f"|format(p.sl) }}</span></td>
-                    <td><span class="level-tag tp-tag">{{ "%.4f"|format(p.tp) }}</span></td>
-                    <td>
-                        <div class="progress-wrap">
-                            <div class="progress-track">
-                                <div class="progress-fill" style="width:{{ [0,[100,p.progress]|min]|max }}%"></div>
-                            </div>
-                            <span class="progress-pct">{{ "%.0f"|format(p.progress) }}%</span>
-                        </div>
-                    </td>
-                    <td style="color:var(--text3);font-size:0.8em">{{ p.entry_time }}</td>
-                    <td>
-                        <button class="btn-close" onclick="closePos('{{ p.symbol }}')">VENDRE</button>
-                    </td>
-                </tr>
-                {% endfor %}
-                {% endif %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- BOT LOG -->
-    <div class="card">
-        <div class="card-header">
-            <h2>🤖 Journal du Bot</h2>
-        </div>
-        <div class="card-body">
-            <div class="log-wrap" id="bot-log">
-                {% if not bot_log %}
-                <div class="empty">En attente d'activité...</div>
-                {% else %}
-                {% for entry in bot_log %}
-                <div class="log-line">
-                    <span class="log-time">{{ entry.time }}</span>
-                    <span class="log-level level-{{ entry.level }}">{{ entry.level }}</span>
-                    <span class="log-msg">{{ entry.msg }}</span>
-                </div>
-                {% endfor %}
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- SCANNER OPPORTUNITÉS (ULTIME)                              -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="card" style="margin-bottom:14px;">
-    <div class="card-header">
-        <h2>📡 Scanner Opportunités — Top Signaux</h2>
-        <span style="font-size:0.75em;color:var(--text3);font-family:var(--font-mono)">
-            {{ opportunities|length }} signal(s) actif(s)
-        </span>
-    </div>
-    <div class="card-body tbl-wrap">
+    {% if positions %}
+    <div style="overflow-x:auto;">
         <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Paire</th>
-                    <th>Score</th>
-                    <th>Signal</th>
-                    <th>Conf.</th>
-                    <th>Prix</th>
-                    <th>Entrée</th>
-                    <th>Stop Loss</th>
-                    <th>TP 1</th>
-                    <th>TP 2</th>
-                    <th>R/R</th>
-                    <th>RSI</th>
-                    <th>MACD Hist</th>
-                    <th>ADX</th>
-                    <th>Vol Ratio</th>
-                    <th>ATR%</th>
-                    <th>BB%</th>
-                    <th>Tendance</th>
-                    <th>EMA 9/21</th>
-                    <th>SMA dist</th>
-                    <th>Support</th>
-                    <th>Résist.</th>
-                    <th>Patterns</th>
-                    <th>Détails</th>
-                </tr>
-            </thead>
+            <thead><tr>
+                <th>Paire</th><th>Type</th><th>EntrÃ©e</th><th>Actuel</th><th>Investi</th>
+                <th>PnL</th><th>SL / TP</th><th>Progression</th><th>Action</th>
+            </tr></thead>
             <tbody>
-            {% if not opportunities %}
-            <tr><td colspan="24" class="empty">En attente du prochain scan... ({{ timeframe|upper }})</td></tr>
-            {% else %}
-            {% for opp in opportunities %}
-            {% set score_class = 'score-high' if opp.score >= 70 else ('score-med' if opp.score >= 45 else 'score-low') %}
-            {% set sig_class   = 'b-long' if opp.entry_signal == 'LONG' else ('b-short' if opp.entry_signal == 'SHORT' else 'b-wait') %}
-            {% set conf_class  = 'conf-high' if opp.confidence >= 70 else ('conf-med' if opp.confidence >= 45 else 'conf-low') %}
-            {% set rsi_class   = 'rsi-oversold' if opp.rsi and opp.rsi < 35 else ('rsi-overbought' if opp.rsi and opp.rsi > 65 else 'rsi-neutral') %}
+            {% for p in positions %}
             <tr>
-                <td style="color:var(--text3)">{{ loop.index }}</td>
-                <td style="font-weight:700;color:var(--accent)">{{ opp.pair }}</td>
+                <td style="font-weight:700;color:var(--blue)">{{ p.symbol }}</td>
+                <td><span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}</span></td>
+                <td>${{ "%.4f"|format(p.entry) }}</td>
+                <td style="font-weight:600">${{ "%.4f"|format(p.current) }}</td>
+                <td>${{ "%.0f"|format(p.amount) }}</td>
+                <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">
+                    {{ "%+.2f"|format(p.pnl_percent) }}% ({{ "%+.2f"|format(p.pnl_value) }}$)
+                </td>
+                <td style="font-size:0.85em;color:var(--text3)">
+                    <span class="red">{{ "%.4f"|format(p.sl) }}</span> / 
+                    <span class="green">{{ "%.4f"|format(p.tp) }}</span>
+                </td>
                 <td>
-                    <div class="score-wrap {{ score_class }}">
-                        <span class="score-num">{{ opp.score }}</span>
-                        <div class="score-bar">
-                            <div class="score-fill" style="width:{{ opp.score }}%"></div>
-                        </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div class="progress"><div class="progress-fill" style="width:{{ [0,[100,p.progress]|min]|max }}%"></div></div>
+                        <span style="font-size:0.8em;color:var(--text3)">{{ "%.0f"|format(p.progress) }}%</span>
                     </div>
                 </td>
-                <td><span class="badge {{ sig_class }}">{{ opp.entry_signal }}</span></td>
-                <td>
-                    <div class="conf-ring {{ conf_class }}">{{ opp.confidence }}</div>
-                </td>
-                <td style="font-weight:600">${{ "%.4f"|format(opp.price) }}</td>
-                <td>{% if opp.entry_price %}<span style="color:var(--accent)">${{ "%.4f"|format(opp.entry_price) }}</span>{% else %}—{% endif %}</td>
-                <td>{% if opp.stop_loss %}<span class="level-tag sl-tag">${{ "%.4f"|format(opp.stop_loss) }}</span>{% else %}—{% endif %}</td>
-                <td>{% if opp.take_profit_1 %}<span class="level-tag tp-tag">${{ "%.4f"|format(opp.take_profit_1) }}</span>{% else %}—{% endif %}</td>
-                <td>{% if opp.take_profit_2 %}<span class="level-tag tp-tag" style="opacity:0.7">${{ "%.4f"|format(opp.take_profit_2) }}</span>{% else %}—{% endif %}</td>
-                <td>{% if opp.rr_ratio %}<span class="level-tag rr-tag">{{ opp.rr_ratio }}x</span>{% else %}—{% endif %}</td>
-                <td>
-                    {% if opp.rsi %}
-                    <div class="rsi-bar {{ rsi_class }}">
-                        <span>{{ opp.rsi }}</span>
-                        <div class="rsi-track"><div class="rsi-fill" style="width:{{ opp.rsi }}%"></div></div>
-                    </div>
-                    {% else %}—{% endif %}
-                </td>
-                <td>
-                    {% if opp.macd_hist is not none %}
-                    <span class="{% if opp.macd_hist > 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                        {{ "%+.4f"|format(opp.macd_hist) }}
-                    </span>
-                    {% else %}—{% endif %}
-                </td>
-                <td>
-                    {% if opp.adx %}
-                    <span style="color:{% if opp.adx > 25 %}var(--green){% elif opp.adx > 15 %}var(--yellow){% else %}var(--text3){% endif %}">{{ opp.adx }}</span>
-                    {% else %}—{% endif %}
-                </td>
-                <td>
-                    {% if opp.volume_ratio %}
-                    <span style="color:{% if opp.volume_ratio > 1.5 %}var(--green){% elif opp.volume_ratio > 1 %}var(--text){% else %}var(--text3){% endif %}">
-                        {{ opp.volume_ratio }}x
-                    </span>
-                    {% else %}—{% endif %}
-                </td>
-                <td style="color:var(--text2)">{% if opp.atr_percent %}{{ opp.atr_percent }}%{% else %}—{% endif %}</td>
-                <td>
-                    {% if opp.bb_percent %}
-                    <span style="color:{% if opp.bb_percent > 80 %}var(--red){% elif opp.bb_percent < 20 %}var(--green){% else %}var(--text2){% endif %}">
-                        {{ opp.bb_percent }}%
-                    </span>
-                    {% else %}—{% endif %}
-                </td>
-                <td class="{% if opp.trend == 'Bullish' %}trend-bull{% elif opp.trend == 'Bearish' %}trend-bear{% else %}trend-neut{% endif %}">
-                    {{ opp.trend }}
-                </td>
-                <td style="font-size:0.78em;color:var(--text3)">
-                    {% if opp.ema9 and opp.ema21 %}
-                    <span style="color:{% if opp.ema9 > opp.ema21 %}var(--green){% else %}var(--red){% endif %}">
-                        {{ "%.3f"|format(opp.ema9) }}/{{ "%.3f"|format(opp.ema21) }}
-                    </span>
-                    {% else %}—{% endif %}
-                </td>
-                <td style="font-size:0.78em">
-                    {% if opp.dist_sma50 is not none %}
-                    <span class="{% if opp.dist_sma50 > 0 %}pnl-pos{% else %}pnl-neg{% endif %}">SMA50: {{ "%+.1f"|format(opp.dist_sma50) }}%</span>
-                    {% endif %}
-                </td>
-                <td>{% if opp.support %}<span class="level-tag sl-tag" style="opacity:0.7">${{ "%.4f"|format(opp.support) }}</span>{% else %}—{% endif %}</td>
-                <td>{% if opp.resistance %}<span class="level-tag tp-tag" style="opacity:0.7">${{ "%.4f"|format(opp.resistance) }}</span>{% else %}—{% endif %}</td>
-                <td>
-                    {% for pat in opp.patterns[:2] %}
-                    <span class="pattern-tag">{{ pat }}</span>
-                    {% endfor %}
-                </td>
-                <td style="color:var(--text3);font-size:0.8em;max-width:150px;white-space:normal">{{ opp.details }}</td>
+                <td><button class="btn btn-close" onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
             </tr>
             {% endfor %}
-            {% endif %}
             </tbody>
         </table>
     </div>
+    {% else %}
+    <div class="empty">Aucune position ouverte</div>
+    {% endif %}
 </div>
 
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- BOTTOM GRID: ALL SCANNED + HISTORY                         -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="bottom-grid">
-
-    <!-- TOUTES LES PAIRES SCANNÉES -->
+<div class="grid-2">
+    <!-- OPPORTUNITÃ‰S -->
     <div class="card">
         <div class="card-header">
-            <h2>🔍 Toutes les Paires Scannées ({{ all_scanned|length }})</h2>
+            <h2>ðŸŽ¯ Meilleures OpportunitÃ©s ({{ opportunities|length }})</h2>
+            <span style="font-size:0.8em;color:var(--text3)">Score â‰¥ {{ min_score }} = Auto-achat</span>
         </div>
-        <div class="card-body">
-            <div class="tabs">
-                <div class="tab active" onclick="switchTab('all')">Toutes</div>
-                <div class="tab" onclick="switchTab('bull')">Haussières</div>
-                <div class="tab" onclick="switchTab('bear')">Baissières</div>
-            </div>
-            <div class="tab-content active" id="tab-all">
-            <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>#</th><th>Paire</th><th>Prix</th><th>Score</th>
-                            <th>Signal</th><th>Tendance</th><th>RSI</th><th>ADX</th>
-                            <th>MACD↕</th><th>Vol×</th><th>SL</th><th>TP1</th><th>R/R</th>
-                            <th>SMA50%</th><th>ATR%</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in all_scanned %}
-                    {% set score_class = 'score-high' if item.score >= 70 else ('score-med' if item.score >= 45 else 'score-low') %}
-                    <tr class="row-{{ item.trend|lower }}">
-                        <td style="color:var(--text3)">{{ loop.index }}</td>
-                        <td style="font-weight:700;color:{% if item.entry_signal == 'LONG' %}var(--green){% elif item.entry_signal == 'SHORT' %}var(--red){% else %}var(--text){% endif %}">
-                            {{ item.pair }}
-                        </td>
-                        <td>${{ "%.4f"|format(item.price) }}</td>
-                        <td>
-                            <div class="score-wrap {{ score_class }}">
-                                <span class="score-num">{{ item.score }}</span>
-                                <div class="score-bar"><div class="score-fill" style="width:{{ item.score }}%"></div></div>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge {% if item.entry_signal == 'LONG' %}b-long{% elif item.entry_signal == 'SHORT' %}b-short{% else %}b-wait{% endif %}">
-                                {{ item.entry_signal }}
-                            </span>
-                        </td>
-                        <td class="{% if item.trend == 'Bullish' %}trend-bull{% elif item.trend == 'Bearish' %}trend-bear{% else %}trend-neut{% endif %}">
-                            {{ item.trend }}
-                        </td>
-                        <td>
-                            {% if item.rsi %}
-                            <span style="color:{% if item.rsi < 35 %}var(--red){% elif item.rsi > 65 %}var(--orange){% else %}var(--text2){% endif %}">
-                                {{ item.rsi }}
-                            </span>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td>
-                            {% if item.adx %}
-                            <span style="color:{% if item.adx > 25 %}var(--green){% else %}var(--text3){% endif %}">{{ item.adx }}</span>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td>
-                            {% if item.macd_hist is not none %}
-                            <span class="{% if item.macd_hist > 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                                {{ "%.4f"|format(item.macd_hist) }}
-                            </span>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td style="color:{% if item.volume_ratio > 1.5 %}var(--green){% elif item.volume_ratio > 1 %}var(--text){% else %}var(--text3){% endif %}">
-                            {{ item.volume_ratio }}x
-                        </td>
-                        <td>{% if item.stop_loss %}<span class="sl-tag level-tag">${{ "%.4f"|format(item.stop_loss) }}</span>{% else %}—{% endif %}</td>
-                        <td>{% if item.take_profit_1 %}<span class="tp-tag level-tag">${{ "%.4f"|format(item.take_profit_1) }}</span>{% else %}—{% endif %}</td>
-                        <td>{% if item.rr_ratio %}<span class="rr-tag level-tag">{{ item.rr_ratio }}x</span>{% else %}—{% endif %}</td>
-                        <td>
-                            {% if item.dist_sma50 is not none %}
-                            <span class="{% if item.dist_sma50 > 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ "%+.1f"|format(item.dist_sma50) }}%</span>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td style="color:var(--text3)">{{ item.atr_percent }}%</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- HISTORIQUE DES TRADES -->
-    <div class="card">
-        <div class="card-header">
-            <h2>📜 Historique des Trades</h2>
-            <span style="font-size:0.78em;color:var(--text3);font-family:var(--font-mono)">
-                PnL total: <span class="{% if perf.total_pnl >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ "%+.2f"|format(perf.total_pnl) }}$</span>
-            </span>
-        </div>
-        <div class="card-body tbl-wrap">
+        {% if opportunities %}
+        <div style="overflow-x:auto;">
             <table>
-                <thead>
-                    <tr>
-                        <th>Paire</th>
-                        <th>Type</th>
-                        <th>Prix</th>
-                        <th>PnL $</th>
-                        <th>PnL %</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Paire</th><th>Prix</th><th>Signal</th><th>Score</th><th>R/R</th></tr></thead>
                 <tbody>
-                {% if not history %}
-                <tr><td colspan="6" class="empty">Aucune transaction fermée</td></tr>
-                {% else %}
-                {% for t in history[:20] %}
+                {% for opp in opportunities[:10] %}
                 <tr>
-                    <td style="font-weight:700">{{ t.symbol }}</td>
-                    <td style="font-size:0.8em;color:var(--text3)">{{ t.type }}</td>
-                    <td>${{ "%.4f"|format(t.price) }}</td>
-                    <td class="{% if t.pnl >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                        {{ "%+.2f"|format(t.pnl) }}$
-                    </td>
-                    <td class="{% if t.pnl_percent >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">
-                        {{ "%+.2f"|format(t.pnl_percent) }}%
-                    </td>
-                    <td style="color:var(--text3);font-size:0.8em">{{ t.time }}</td>
+                    <td style="font-weight:700">{{ opp.pair }}</td>
+                    <td>${{ "%.4f"|format(opp.price) }}</td>
+                    <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal }}</span></td>
+                    <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %}">{{ opp.score }}</td>
+                    <td style="color:var(--blue)">{{ opp.rr_ratio }}x</td>
                 </tr>
                 {% endfor %}
-                {% endif %}
                 </tbody>
             </table>
         </div>
+        {% else %}
+        <div class="empty">Aucune opportunitÃ© dÃ©tectÃ©e</div>
+        {% endif %}
     </div>
 
+    <!-- HISTORIQUE -->
+    <div class="card">
+        <div class="card-header">
+            <h2>ðŸ“œ Derniers Trades</h2>
+            <span class="{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:600">Total: {{ "%+.2f"|format(perf.total_pnl) }}$</span>
+        </div>
+        {% if history %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th>Paire</th><th>PnL</th><th>Date</th></tr></thead>
+                <tbody>
+                {% for t in history[:8] %}
+                <tr>
+                    <td style="font-weight:600">{{ t.symbol }}</td>
+                    <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(t.pnl) }}$ ({{ "%+.1f"|format(t.pnl_percent) }}%)</td>
+                    <td style="color:var(--text3);font-size:0.85em">{{ t.time }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">Aucun trade fermÃ©</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- BOT LOG -->
+<div class="card">
+    <div class="card-header">
+        <h2>ðŸ¤– Journal du Bot</h2>
+    </div>
+    <div class="log">
+        {% if bot_log %}
+        {% for entry in bot_log %}
+        <div class="log-line">
+            <span class="log-time">{{ entry.time }}</span>
+            <span class="log-level l-{{ entry.level }}">{{ entry.level }}</span>
+            <span class="log-msg">{{ entry.msg }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">En attente d'activitÃ©...</div>
+        {% endif %}
+    </div>
+    <!-- Quick Indicators -->
+    <div class="indicators">
+        <div class="ind"><span class="ind-label">Sentiment:</span><span class="ind-value">{{ mkt.sentiment }}</span></div>
+        <div class="ind"><span class="ind-label">RSI moy:</span><span class="ind-value">{{ mkt.avg_rsi }}</span></div>
+        <div class="ind"><span class="ind-label">Bullish:</span><span class="ind-value green">{{ mkt.total_bullish }}</span></div>
+        <div class="ind"><span class="ind-label">Bearish:</span><span class="ind-value red">{{ mkt.total_bearish }}</span></div>
+        <div class="ind" id="fear-greed-display"><span class="ind-label">Fear/Greed:</span><span class="ind-value" id="fg-val">--</span></div>
+    </div>
 </div>
 
 <!-- FOOTER -->
-<div class="footer">
-    ⚡ CRYPTO SCANNER ULTIME v2.0 — Paper Trading Only — <span>PAS DE CONSEILS FINANCIERS</span> — DYOR — Auto-refresh: 15s
+<div style="text-align:center;padding:20px;color:var(--text3);font-size:0.8em;">
+    Crypto Trading Bot v2.0 â€¢ Tous modules actifs (ML, On-Chain, Kelly, Macro, Social)
 </div>
 
-</div><!-- .app -->
+</div>
 
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- JAVASCRIPT                                                  -->
-<!-- ══════════════════════════════════════════════════════════ -->
 <script>
-// ── Tabs ──────────────────────────────────────────────
-function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
-    const rows = document.querySelectorAll('#tab-all tbody tr');
-    rows.forEach(r => {
-        if (tab === 'all') { r.style.display = ''; }
-        else if (tab === 'bull') { r.style.display = r.classList.contains('row-bullish') ? '' : 'none'; }
-        else if (tab === 'bear') { r.style.display = r.classList.contains('row-bearish') ? '' : 'none'; }
-    });
-}
-
-// ── Close Position ───────────────────────────────────
 function closePos(symbol) {
-    if (!confirm(`Fermer la position ${symbol} au prix actuel ?`)) return;
-    fetch(`/api/close/${symbol}`, {method:'POST'})
-        .then(r => r.json())
-        .then(d => {
-            if (d.success) {
-                showToast(`✅ Position ${symbol} fermée`);
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showToast(`❌ Erreur: ${d.error}`, true);
-            }
-        }).catch(() => showToast('❌ Erreur réseau', true));
-}
-
-// ── Toast Notification ───────────────────────────────
-function showToast(msg, isError = false) {
-    const t = document.createElement('div');
-    t.textContent = msg;
-    t.style.cssText = `
-        position:fixed; bottom:24px; right:24px; z-index:9999;
-        background:${isError ? 'rgba(255,69,96,0.9)' : 'rgba(0,232,155,0.9)'};
-        color:#080c14; padding:12px 20px; border-radius:8px;
-        font-family:'JetBrains Mono',monospace; font-size:0.85em;
-        font-weight:600; box-shadow:0 4px 20px rgba(0,0,0,0.4);
-        animation:fadeIn 0.2s ease;
-    `;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
-}
-
-// ── Auto-refresh désactivé ─────────────────────────────────────
-// Refresh disabled - scan continues in background
-
-// ── Intelligence Dashboard Update ─────────────────────────────
-function updateIntelligence() {
-    fetch('/api/intelligence_summary')
-        .then(r => r.json())
-        .then(data => {
-            // ML Stats
-            if (data.ml_stats) {
-                document.getElementById('ml-accuracy').textContent = data.ml_stats.accuracy ? data.ml_stats.accuracy.toFixed(1) + '%' : '--';
-                document.getElementById('ml-trades').textContent = data.ml_stats.completed_trades || 0;
-            }
-            
-            // On-Chain
-            if (data.onchain) {
-                const signal = data.onchain.global_signal || 'neutral';
-                const score = data.onchain.global_score || 0;
-                document.getElementById('onchain-signal').textContent = signal.toUpperCase() + ' (' + score + ')';
-                document.getElementById('onchain-signal').style.color = 
-                    signal === 'bullish' ? 'var(--green)' : (signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
-                
-                if (data.onchain.metrics) {
-                    const nupl = data.onchain.metrics.nupl;
-                    if (nupl) {
-                        document.getElementById('nupl-value').textContent = nupl.phase || '--';
-                        document.getElementById('nupl-value').style.color = 
-                            nupl.signal === 'bullish' || nupl.signal === 'strong_bullish' ? 'var(--green)' : 
-                            (nupl.signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
-                    }
-                    
-                    const mvrv = data.onchain.metrics.mvrv;
-                    if (mvrv) {
-                        document.getElementById('mvrv-value').textContent = mvrv.mvrv_estimated ? mvrv.mvrv_estimated.toFixed(2) : '--';
-                    }
-                    
-                    const tvl = data.onchain.metrics.tvl;
-                    if (tvl) {
-                        document.getElementById('tvl-value').textContent = tvl.total_tvl_formatted || '--';
-                    }
-                    
-                    const flow = data.onchain.metrics.exchange_flow;
-                    if (flow) {
-                        document.getElementById('exchange-flow').textContent = flow.signal || '--';
-                        document.getElementById('exchange-flow').style.color = 
-                            flow.signal === 'bullish' ? 'var(--green)' : (flow.signal === 'bearish' ? 'var(--red)' : 'var(--text2)');
-                    }
-                }
-            }
-            
-            // Kelly Positioning
-            if (data.position_sizing) {
-                document.getElementById('kelly-fraction').textContent = data.position_sizing.calculated_kelly || '--';
-                document.getElementById('kelly-winrate').textContent = data.position_sizing.win_rate || '--';
-                document.getElementById('kelly-rr').textContent = data.position_sizing.risk_reward || '--';
-            }
-            
-            if (data.kelly_recommendations) {
-                document.getElementById('kelly-position').textContent = data.kelly_recommendations.avg_position_size || '--';
-            }
-            
-            // Macro Events
-            if (data.macro_events) {
-                const macro = data.macro_events;
-                
-                // Pause status badge
-                const pauseBadge = document.getElementById('macro-pause-badge');
-                if (macro.should_pause) {
-                    pauseBadge.style.display = 'inline-block';
-                    pauseBadge.classList.add('b-short');
-                } else {
-                    pauseBadge.style.display = 'none';
-                }
-                
-                // Next event
-                if (macro.upcoming_events && macro.upcoming_events.length > 0) {
-                    const next = macro.upcoming_events[0];
-                    document.getElementById('next-macro-event').textContent = next.name || '--';
-                    document.getElementById('next-event-time').textContent = next.days_until !== undefined ? 
-                        (next.days_until === 0 ? 'Aujourd\\'hui' : next.days_until + 'j') : '--';
-                    
-                    const impactEl = document.getElementById('next-event-impact');
-                    impactEl.textContent = next.impact || '--';
-                    impactEl.style.color = next.impact === 'CRITICAL' ? 'var(--red)' : 
-                        (next.impact === 'HIGH' ? '#f39c12' : 'var(--text2)');
-                }
-                
-                // Regulation alerts count
-                if (macro.regulation_news) {
-                    const regCount = macro.regulation_news.regulation_count || 0;
-                    const regEl = document.getElementById('regulation-alerts');
-                    regEl.textContent = regCount;
-                    regEl.style.color = regCount > 0 ? '#f39c12' : 'var(--text2)';
-                }
-                
-                // Events list
-                if (macro.upcoming_events && macro.upcoming_events.length > 0) {
-                    const listEl = document.getElementById('macro-events-list');
-                    let html = '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px;">';
-                    macro.upcoming_events.slice(0, 5).forEach(e => {
-                        const impactColor = e.impact === 'CRITICAL' ? 'var(--red)' : 
-                            (e.impact === 'HIGH' ? '#f39c12' : 'var(--text3)');
-                        html += '<div style="padding:2px 0;"><span style="color:' + impactColor + '">●</span> ' + 
-                            e.date + ' - ' + e.name + '</div>';
-                    });
-                    html += '</div>';
-                    listEl.innerHTML = html;
-                }
-            }
-            
-            // Social Sentiment
-            if (data.social_sentiment) {
-                const social = data.social_sentiment;
-                
-                // Fear & Greed
-                if (social.fear_greed) {
-                    const fg = social.fear_greed;
-                    const fgEl = document.getElementById('fear-greed-value');
-                    fgEl.textContent = fg.value || '--';
-                    fgEl.style.color = fg.value <= 25 ? 'var(--red)' : 
-                        (fg.value >= 75 ? 'var(--green)' : 'var(--text)');
-                    
-                    document.getElementById('fear-greed-class').textContent = fg.classification || '--';
-                }
-                
-                // Reddit sentiment
-                if (social.reddit) {
-                    const redditEl = document.getElementById('reddit-sentiment');
-                    const score = social.reddit.sentiment_score || 0;
-                    redditEl.textContent = (score > 0 ? '+' : '') + score.toFixed(0);
-                    redditEl.style.color = score > 20 ? 'var(--green)' : 
-                        (score < -20 ? 'var(--red)' : 'var(--text2)');
-                }
-                
-                // Signal
-                const signalEl = document.getElementById('social-signal');
-                signalEl.textContent = social.signal ? social.signal.toUpperCase() : '--';
-                signalEl.style.color = social.signal === 'strong_buy' || social.signal === 'buy' ? 'var(--green)' :
-                    (social.signal === 'strong_sell' || social.signal === 'caution' ? 'var(--red)' : 'var(--text2)');
-            }
-            
-            // Trade Journal AI
-            if (data.trade_journal && data.trade_journal.total_trades > 0) {
-                const journal = data.trade_journal;
-                
-                document.getElementById('journal-winrate').textContent = journal.win_rate ? journal.win_rate + '%' : '--';
-                document.getElementById('journal-sharpe').textContent = journal.sharpe_ratio || '--';
-                document.getElementById('journal-maxdd').textContent = journal.max_drawdown ? '-' + journal.max_drawdown + '%' : '--';
-                document.getElementById('journal-expectancy').textContent = journal.expectancy ? journal.expectancy + '%' : '--';
-                
-                // Color coding
-                const wrEl = document.getElementById('journal-winrate');
-                wrEl.style.color = journal.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
-                
-                const sharpeEl = document.getElementById('journal-sharpe');
-                sharpeEl.style.color = journal.sharpe_ratio >= 1 ? 'var(--green)' : 
-                    (journal.sharpe_ratio >= 0 ? 'var(--text2)' : 'var(--red)');
-            }
-            
-            document.getElementById('intel-status').textContent = 'ACTIF';
-            document.getElementById('intel-status').classList.remove('b-wait');
-            document.getElementById('intel-status').classList.add('b-long');
-        })
-        .catch(e => {
-            document.getElementById('intel-status').textContent = 'ERREUR';
-            document.getElementById('intel-status').classList.add('b-short');
+    if (confirm('Fermer la position ' + symbol + ' ?')) {
+        fetch('/close/' + symbol).then(r => r.json()).then(d => {
+            if(d.success) location.reload();
+            else alert('Erreur: ' + (d.error || 'Ã‰chec'));
         });
+    }
 }
 
-// Update intelligence on page load and every 60 seconds
-updateIntelligence();
-setInterval(updateIntelligence, 60000);
+// Auto-refresh every 30 seconds
+setTimeout(() => location.reload(), 30000);
 
+// Fetch Fear & Greed
+fetch('/api/social/fear_greed')
+    .then(r => r.json())
+    .then(data => {
+        if(data.value) {
+            const el = document.getElementById('fg-val');
+            el.textContent = data.value + ' (' + data.classification + ')';
+            el.style.color = data.value <= 30 ? 'var(--red)' : (data.value >= 70 ? 'var(--green)' : 'var(--yellow)');
+        }
+    })
+    .catch(() => {});
 </script>
 </body>
 </html>
 """
 
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # BOUCLE PRINCIPALE (THREAD BACKGROUND)
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_loop():
-    """Boucle infinie qui lance le scanner périodiquement."""
-    add_bot_log("⚡ Swing Bot démarré — Timeframe: " + TIMEFRAME, 'INFO')
+    """Boucle infinie qui lance le scanner pÃ©riodiquement."""
+    add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
     while True:
         shared_data['is_scanning'] = True
         try:
@@ -2597,19 +1582,20 @@ def run_loop():
         finally:
             shared_data['is_scanning'] = False
 
-        add_bot_log(f"Pause {SCAN_INTERVAL//60} min — prochain scan: {datetime.now().strftime('%H:%M')}", 'INFO')
+        add_bot_log(f"Pause {SCAN_INTERVAL//60} min â€” prochain scan: {datetime.now().strftime('%H:%M')}", 'INFO')
         time.sleep(SCAN_INTERVAL)
 
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # LANCEMENT
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if __name__ == '__main__':
-    # Thread Scanner (daemon — s'arrête avec le programme principal)
+    # Thread Scanner (daemon â€” s'arrÃªte avec le programme principal)
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
 
     port = int(os.environ.get('PORT', 8080))
     add_bot_log(f"Dashboard: http://localhost:{port}", 'INFO')
     app.run(host='0.0.0.0', port=port, debug=False)
+
