@@ -20,6 +20,7 @@ from scalping_signals import find_resistance
 from trade_filters import trade_filters
 from crash_protection import crash_protector, check_for_crash, is_crash_mode, get_crash_status
 from news_analyzer import news_analyzer, get_market_sentiment, get_fear_greed
+from market_intelligence import market_intel, get_market_intelligence, should_trade_with_intel
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -124,6 +125,15 @@ shared_data = {
         'news_bullish': 0,
         'news_bearish': 0,
         'action': 'NORMAL',
+        'updated': None
+    },
+    'market_intelligence': {    # Intelligence complète (Funding, L/S, Volume...)
+        'bias': 'NEUTRAL',
+        'confidence': 0,
+        'funding': 0,
+        'ls_ratio': 1,
+        'breadth': 50,
+        'alerts': [],
         'updated': None
     }
 }
@@ -265,6 +275,48 @@ def run_scanner():
                     
             except Exception as e:
                 add_bot_log(f"⚠️ Erreur analyse sentiment: {str(e)[:50]}", 'WARN')
+        
+        # ── ÉTAPE 2c : INTELLIGENCE MARCHÉ COMPLÈTE ────────────────────────────
+        intel_modifier = 0
+        try:
+            market_intelligence = get_market_intelligence()
+            bias = market_intelligence.get('overall_bias', 'NEUTRAL')
+            confidence = market_intelligence.get('confidence', 0)
+            alerts = market_intelligence.get('alerts', [])
+            intel_data = market_intelligence.get('data', {})
+            
+            # Log intelligence
+            funding = intel_data.get('funding', {}).get('btc_funding', 0)
+            ls_ratio = intel_data.get('long_short_ratio', {}).get('ratio', 1)
+            breadth = intel_data.get('top_movers', {}).get('market_breadth', 50)
+            
+            add_bot_log(
+                f"🧠 Intelligence: {bias} ({confidence:.0f}%) | "
+                f"Funding:{funding:.3f}% | L/S:{ls_ratio:.2f} | Breadth:{breadth:.0f}%",
+                'INFO'
+            )
+            
+            # Afficher les alertes
+            for alert in alerts[:3]:  # Max 3 alertes
+                add_bot_log(f"   {alert}", 'INFO')
+            
+            # Stocker pour le dashboard
+            shared_data['market_intelligence'] = {
+                'bias': bias,
+                'confidence': confidence,
+                'funding': funding,
+                'ls_ratio': ls_ratio,
+                'breadth': breadth,
+                'alerts': alerts,
+                'updated': datetime.now().strftime('%H:%M')
+            }
+            
+            # Modificateur de score basé sur l'intelligence
+            intel_modifier = market_intelligence.get('score_modifier', 0)
+            sentiment_modifier += intel_modifier  # Combiner avec news
+            
+        except Exception as e:
+            add_bot_log(f"⚠️ Erreur intelligence marché: {str(e)[:50]}", 'WARN')
         
         # ── ÉTAPE 3 : Analyse Technique (faire AVANT la vérification des positions) ────────────────────────
         add_bot_log("Analyse technique en cours...", 'INFO')
@@ -747,6 +799,32 @@ def api_sentiment():
         return jsonify(sentiment)
     except Exception as e:
         return jsonify({'error': str(e), 'cached': shared_data.get('market_sentiment', {})})
+
+
+@app.route('/api/intelligence')
+def api_intelligence():
+    """Retourne l'intelligence de marché complète."""
+    try:
+        intel = get_market_intelligence()
+        intel['cached'] = shared_data.get('market_intelligence', {})
+        return jsonify(intel)
+    except Exception as e:
+        return jsonify({'error': str(e), 'cached': shared_data.get('market_intelligence', {})})
+
+
+@app.route('/api/quick_intel')
+def api_quick_intel():
+    """Version rapide de l'intelligence (moins de données)."""
+    try:
+        return jsonify({
+            'funding': market_intel.get_funding_rates(),
+            'ls_ratio': market_intel.get_long_short_ratio(),
+            'orderbook': market_intel.get_order_book_imbalance(),
+            'top_movers': market_intel.get_top_movers(),
+            'cached': shared_data.get('market_intelligence', {})
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 # ─────────────────────────────────────────────────────────────
