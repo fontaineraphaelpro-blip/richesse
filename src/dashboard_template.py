@@ -92,6 +92,19 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 /* Table scroll wrapper */
 .table-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
 
+/* Mobile cards - hidden on desktop, shown on mobile */
+.mobile-cards { display: none; padding: 12px; }
+.pos-card { background: var(--bg3); border-radius: 10px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); }
+.pos-card:last-child { margin-bottom: 0; }
+.pos-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pos-card-symbol { font-weight: 700; font-size: 1.1em; color: var(--blue); }
+.pos-card-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85em; }
+.pos-card-row:last-child { border-bottom: none; }
+.pos-card-label { color: var(--text3); }
+.pos-card-value { font-weight: 600; }
+.pos-card-actions { margin-top: 12px; display: flex; gap: 8px; }
+.pos-card-pnl { font-size: 1.2em; font-weight: 700; }
+
 /* Progress */
 .progress { width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--yellow), var(--green)); border-radius: 3px; }
@@ -249,19 +262,6 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     .pos-card { padding: 12px; }
     .pos-card-header { font-size: 0.9em; }
 }
-
-/* Mobile cards - hidden on desktop */
-.mobile-cards { display: none; padding: 12px; }
-.pos-card { background: var(--bg3); border-radius: 10px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); }
-.pos-card:last-child { margin-bottom: 0; }
-.pos-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.pos-card-symbol { font-weight: 700; font-size: 1.1em; color: var(--blue); }
-.pos-card-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85em; }
-.pos-card-row:last-child { border-bottom: none; }
-.pos-card-label { color: var(--text3); }
-.pos-card-value { font-weight: 600; }
-.pos-card-actions { margin-top: 12px; display: flex; gap: 8px; }
-.pos-card-pnl { font-size: 1.2em; font-weight: 700; }
 
 /* Touch improvements */
 @media (hover: none) and (pointer: coarse) {
