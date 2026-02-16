@@ -370,11 +370,11 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                 {% for opp in opportunities[:10] %}
                 <tr>
                     <td style="font-weight:700">{{ opp.pair }}</td>
-                    <td>${{ "%.4f"|format(opp.price) }}</td>
-                    <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal }}</span></td>
-                    <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %}">{{ opp.score }}</td>
-                    <td style="color:var(--blue)">{{ opp.rr_ratio }}x</td>
-                    <td style="color:var(--text3)">${{ "%.0f"|format(opp.volume_24h / 1000000) }}M</td>
+                    <td>${{ "%.4f"|format(opp.price|default(0)) }}</td>
+                    <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal|default('N/A') }}</span></td>
+                    <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %}">{{ opp.score|default(0) }}</td>
+                    <td style="color:var(--blue)">{{ opp.rr_ratio|default('N/A') }}{% if opp.rr_ratio %}x{% endif %}</td>
+                    <td style="color:var(--text3)">${{ "%.0f"|format((opp.volume_24h|default(0)) / 1000000) }}M</td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -710,17 +710,17 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </tr></thead>
             <tbody>
             {% for t in history %}
-            <tr data-direction="{{ t.direction }}" data-result="{% if t.pnl >= 0 %}win{% else %}loss{% endif %}" data-pair="{{ t.symbol }}" data-date="{{ t.date }}">
-                <td style="color:var(--text3);font-size:0.85em">{{ t.time }}</td>
-                <td style="font-weight:700">{{ t.symbol }}</td>
-                <td><span class="badge {% if t.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ t.direction }}</span></td>
-                <td>${{ "%.4f"|format(t.entry_price) }}</td>
-                <td>${{ "%.4f"|format(t.exit_price) }}</td>
-                <td>${{ "%.0f"|format(t.amount) }}</td>
-                <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(t.pnl) }}$</td>
-                <td class="{% if t.pnl_percent >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(t.pnl_percent) }}%</td>
-                <td style="color:var(--text3)">{{ t.duration }}</td>
-                <td style="font-size:0.85em;color:var(--text3)">{{ t.exit_reason }}</td>
+            <tr data-direction="{{ t.direction|default('LONG') }}" data-result="{% if t.pnl|default(0) >= 0 %}win{% else %}loss{% endif %}" data-pair="{{ t.symbol|default('') }}" data-date="{{ t.date|default('') }}">
+                <td style="color:var(--text3);font-size:0.85em">{{ t.time|default('N/A') }}</td>
+                <td style="font-weight:700">{{ t.symbol|default('N/A') }}</td>
+                <td><span class="badge {% if t.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ t.direction|default('N/A') }}</span></td>
+                <td>${{ "%.4f"|format(t.entry_price|default(0)) }}</td>
+                <td>${{ "%.4f"|format(t.exit_price|default(0)) }}</td>
+                <td>${{ "%.0f"|format(t.amount|default(0)) }}</td>
+                <td class="{% if t.pnl|default(0) >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(t.pnl|default(0)) }}$</td>
+                <td class="{% if t.pnl_percent|default(0) >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(t.pnl_percent|default(0)) }}%</td>
+                <td style="color:var(--text3)">{{ t.duration|default('N/A') }}</td>
+                <td style="font-size:0.85em;color:var(--text3)">{{ t.exit_reason|default('N/A') }}</td>
             </tr>
             {% endfor %}
             </tbody>
