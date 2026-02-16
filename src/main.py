@@ -25,6 +25,8 @@ from ml_predictor import ml_predictor, get_ml_prediction, log_trade_result
 from onchain_analyzer import onchain_analyzer, get_onchain_analysis, get_onchain_signal_adjustment
 from position_sizing import position_sizer, calculate_position_size, update_position_stats, get_position_recommendations
 from macro_events import macro_analyzer, get_macro_analysis, check_macro_events, get_upcoming_economic_events
+from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment, get_sentiment_modifier
+from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_journal_stats, should_trade as journal_should_trade, get_trade_modifier
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -102,6 +104,14 @@ MACRO_EVENTS_ENABLED = True   # Activer le calendrier économique
 PAUSE_ON_FOMC = True          # Pause trading autour du FOMC
 PAUSE_ON_CPI = True           # Pause trading autour du CPI
 REGULATION_ALERTS = True      # Alertes régulations crypto
+
+# Social Sentiment
+SOCIAL_SENTIMENT_ENABLED = True  # Utiliser Fear & Greed Index
+SOCIAL_SCORE_MODIFIER = True     # Modifier score selon sentiment
+
+# Trade Journal AI
+TRADE_JOURNAL_ENABLED = True     # Enregistrer tous les trades
+JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passées
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
@@ -1109,7 +1119,9 @@ def api_intelligence_summary():
             'ml_stats': ml_predictor.get_model_stats(),
             'position_sizing': position_sizer.get_stats(),
             'kelly_recommendations': get_position_recommendations(trader.get_usdt_balance(), MAX_POSITIONS),
-            'macro': shared_data.get('macro_analysis', {})
+            'macro': shared_data.get('macro_analysis', {}),
+            'social_sentiment': get_social_sentiment('BTC') if SOCIAL_SENTIMENT_ENABLED else {},
+            'trade_journal': get_journal_stats(30) if TRADE_JOURNAL_ENABLED else {}
         })
     except Exception as e:
         return jsonify({'error': str(e)})
@@ -1168,6 +1180,89 @@ def api_add_macro_event():
             pause_hours=data.get('pause_hours', 1)
         )
         return jsonify({'success': success})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+# ═══════════════════════════════════════════════════════════════
+# API SOCIAL SENTIMENT
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/social')
+def api_social_sentiment():
+    """Retourne l'analyse du sentiment social complète."""
+    try:
+        symbol = request.args.get('symbol', 'BTC')
+        return jsonify(get_social_sentiment(symbol))
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/social/fear_greed')
+def api_fear_greed():
+    """Retourne le Fear & Greed Index."""
+    try:
+        return jsonify(get_social_fear_greed())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/social/trending')
+def api_trending():
+    """Retourne les coins trending."""
+    try:
+        analyzer = get_social_analyzer()
+        return jsonify(analyzer.get_trending_coins())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+# ═══════════════════════════════════════════════════════════════
+# API TRADE JOURNAL AI
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/journal')
+def api_trade_journal():
+    """Retourne l'analyse complète du journal de trading."""
+    try:
+        return jsonify(get_trade_journal().get_complete_analysis())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/journal/stats')
+def api_journal_stats():
+    """Retourne les statistiques de performance."""
+    try:
+        days = request.args.get('days', 30, type=int)
+        return jsonify(get_journal_stats(days))
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/journal/errors')
+def api_journal_errors():
+    """Retourne l'analyse des erreurs."""
+    try:
+        return jsonify(get_trade_journal().analyze_errors())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/journal/successes')
+def api_journal_successes():
+    """Retourne l'analyse des succès."""
+    try:
+        return jsonify(get_trade_journal().analyze_successes())
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/journal/daily')
+def api_journal_daily():
+    """Retourne le rapport journalier."""
+    try:
+        return jsonify(get_trade_journal().get_daily_report())
     except Exception as e:
         return jsonify({'error': str(e)})
 
@@ -1834,6 +1929,60 @@ tbody tr:hover td { background: rgba(0,212,255,0.03); }
             <div id="macro-events-list" style="margin-top:12px;max-height:100px;overflow-y:auto;font-size:0.75em;color:var(--text3);"></div>
         </div>
     </div>
+    
+    <!-- SOCIAL SENTIMENT -->
+    <div class="card">
+        <div class="card-header">
+            <h2>😨 Sentiment Social</h2>
+        </div>
+        <div class="card-body" style="padding:12px 16px;">
+            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">🎭 Fear & Greed</div>
+                    <div class="ind-val" id="fear-greed-value" style="font-size:1.2em">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📊 Classification</div>
+                    <div class="ind-val" id="fear-greed-class">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📱 Reddit</div>
+                    <div class="ind-val" id="reddit-sentiment">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">💡 Signal</div>
+                    <div class="ind-val" id="social-signal">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- TRADE JOURNAL AI -->
+    <div class="card">
+        <div class="card-header">
+            <h2>📔 Journal AI</h2>
+        </div>
+        <div class="card-body" style="padding:12px 16px;">
+            <div class="stats-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                <div class="mini-stat">
+                    <div class="ind-label">📈 Win Rate</div>
+                    <div class="ind-val" id="journal-winrate">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📊 Sharpe</div>
+                    <div class="ind-val" id="journal-sharpe">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">📉 Max DD</div>
+                    <div class="ind-val" id="journal-maxdd">--</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="ind-label">🎯 Expectancy</div>
+                    <div class="ind-val" id="journal-expectancy">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -2360,6 +2509,55 @@ function updateIntelligence() {
                     html += '</div>';
                     listEl.innerHTML = html;
                 }
+            }
+            
+            // Social Sentiment
+            if (data.social_sentiment) {
+                const social = data.social_sentiment;
+                
+                // Fear & Greed
+                if (social.fear_greed) {
+                    const fg = social.fear_greed;
+                    const fgEl = document.getElementById('fear-greed-value');
+                    fgEl.textContent = fg.value || '--';
+                    fgEl.style.color = fg.value <= 25 ? 'var(--red)' : 
+                        (fg.value >= 75 ? 'var(--green)' : 'var(--text)');
+                    
+                    document.getElementById('fear-greed-class').textContent = fg.classification || '--';
+                }
+                
+                // Reddit sentiment
+                if (social.reddit) {
+                    const redditEl = document.getElementById('reddit-sentiment');
+                    const score = social.reddit.sentiment_score || 0;
+                    redditEl.textContent = (score > 0 ? '+' : '') + score.toFixed(0);
+                    redditEl.style.color = score > 20 ? 'var(--green)' : 
+                        (score < -20 ? 'var(--red)' : 'var(--text2)');
+                }
+                
+                // Signal
+                const signalEl = document.getElementById('social-signal');
+                signalEl.textContent = social.signal ? social.signal.toUpperCase() : '--';
+                signalEl.style.color = social.signal === 'strong_buy' || social.signal === 'buy' ? 'var(--green)' :
+                    (social.signal === 'strong_sell' || social.signal === 'caution' ? 'var(--red)' : 'var(--text2)');
+            }
+            
+            // Trade Journal AI
+            if (data.trade_journal && data.trade_journal.total_trades > 0) {
+                const journal = data.trade_journal;
+                
+                document.getElementById('journal-winrate').textContent = journal.win_rate ? journal.win_rate + '%' : '--';
+                document.getElementById('journal-sharpe').textContent = journal.sharpe_ratio || '--';
+                document.getElementById('journal-maxdd').textContent = journal.max_drawdown ? '-' + journal.max_drawdown + '%' : '--';
+                document.getElementById('journal-expectancy').textContent = journal.expectancy ? journal.expectancy + '%' : '--';
+                
+                // Color coding
+                const wrEl = document.getElementById('journal-winrate');
+                wrEl.style.color = journal.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+                
+                const sharpeEl = document.getElementById('journal-sharpe');
+                sharpeEl.style.color = journal.sharpe_ratio >= 1 ? 'var(--green)' : 
+                    (journal.sharpe_ratio >= 0 ? 'var(--text2)' : 'var(--red)');
             }
             
             document.getElementById('intel-status').textContent = 'ACTIF';
