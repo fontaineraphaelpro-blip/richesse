@@ -15,24 +15,24 @@ class TradeFilters:
     """Gère tous les filtres de qualité des trades."""
     
     def __init__(self):
-        # Configuration Volume STRICT
+        # Configuration Volume (FILTRE SHITCOINS)
         self.volume_filter_enabled = True
-        self.min_volume_ratio = 1.5  # Volume doit être 1.5x la moyenne (augmente de 1.2)
+        self.min_volume_ratio = 1.2  # Volume 1.2x moyenne (filtre les dead coins)
         
-        # Configuration Heures de Trading (UTC) - HEURES OPTIMALES
+        # Configuration Heures de Trading (UTC) - LARGE POUR 5 TRADES/JOUR
         self.trading_hours_enabled = True
-        self.trading_start_hour = 8   # 8h UTC (meilleure liquidité)
-        self.trading_end_hour = 20    # 20h UTC (éviter fin de session)
+        self.trading_start_hour = 6   # 6h UTC (debut session Europe)
+        self.trading_end_hour = 22    # 22h UTC (fin session US)
         self.avoid_weekends = True
         
-        # Configuration Score Dynamique ULTRA-STRICT
+        # Configuration Score Dynamique EQUILIBRE
         self.dynamic_score_enabled = True
-        self.score_bullish_market = 80   # STRICT
-        self.score_bearish_market = 90   # TRES STRICT
-        self.score_neutral_market = 85   # STRICT
+        self.score_bullish_market = 68   # Plus permissif en bull
+        self.score_bearish_market = 78   # Plus strict en bear
+        self.score_neutral_market = 72   # Standard
         
-        # Configuration Risk/Reward ULTRA-STRICT
-        self.min_risk_reward = 3.0  # R/R minimum de 3:1 (qualité maximale)
+        # Configuration Risk/Reward REALISTE
+        self.min_risk_reward = 2.0  # R/R 2:1 = rentable avec 40%+ winrate
 
     # ─────────────────────────────────────────────────────────────
     # FILTRE VOLUME

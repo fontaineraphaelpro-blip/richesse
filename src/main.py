@@ -38,15 +38,15 @@ from advanced_technical_analysis import advanced_ta, get_advanced_technical_anal
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
-MIN_SCORE_BUY    = 85      # Score min ULTRA-STRICT (augmente de 75 a 85)
-SCAN_INTERVAL    = 300     # Secondes entre scans (5 min)
-MAX_POSITIONS    = 3       # Positions simultanees max (reduit de 5 a 3 pour focus)
-RISK_PERCENT     = 1.5     # % du capital par trade (reduit de 2.0 pour securite)
+MIN_SCORE_BUY    = 72      # Score min EQUILIBRE (~5 trades/jour)
+SCAN_INTERVAL    = 180     # Secondes entre scans (3 min - plus reactif)
+MAX_POSITIONS    = 5       # Positions simultanees max
+RISK_PERCENT     = 2.0     # % du capital par trade
 
 # Configuration Multi-Timeframe
 MTF_TIMEFRAMES   = ['15m', '1h', '4h']  # Timeframes pour confirmation
 MTF_ENABLED      = True                  # Activer/desactiver multi-TF
-MTF_MIN_ALIGN    = 80                    # Alignement minimum requis STRICT (augmente a 80%)
+MTF_MIN_ALIGN    = 66                    # Alignement minimum (2/3 TF doivent confirmer)
 
 # Configuration Drawdown & Break-Even
 MAX_DRAWDOWN_PCT = 10.0    # ArrÃªter si perte > 10% du capital initial
@@ -76,14 +76,14 @@ TRADING_START_HOUR = 7       # 7h UTC (8h Paris, 2h New York)
 TRADING_END_HOUR = 22        # 22h UTC (23h Paris, 17h New York)
 AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
 
-# Score Dynamique selon Marche (PARAMETRES ULTRA-STRICTS)
+# Score Dynamique selon Marche (EQUILIBRE)
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 80    # Score min si marche haussier STRICT
-SCORE_BEARISH_MARKET = 90    # Score min si marche baissier TRES STRICT
-SCORE_NEUTRAL_MARKET = 85    # Score min si marche neutre STRICT
+SCORE_BULLISH_MARKET = 68    # Score min si marche haussier (plus permissif)
+SCORE_BEARISH_MARKET = 78    # Score min si marche baissier (plus strict)
+SCORE_NEUTRAL_MARKET = 72    # Score min si marche neutre
 
-# Risk/Reward Minimum ELEVE
-MIN_RISK_REWARD = 3.0        # Rejeter si R/R < 3:1 (TRES STRICT - qualite max)
+# Risk/Reward Minimum REALISTE
+MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1 (realiste et rentable)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True           # Activer l'analyse des news
@@ -117,17 +117,17 @@ SOCIAL_SCORE_MODIFIER = True     # Modifier score selon sentiment
 TRADE_JOURNAL_ENABLED = True     # Enregistrer tous les trades
 JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passees
 
-# ANALYSE FONDAMENTALE (STRICT)
+# ANALYSE FONDAMENTALE (EQUILIBRE)
 FUNDAMENTAL_ENABLED = True       # Activer l'analyse fondamentale
 FUNDAMENTAL_SCORE_ADJUST = True  # Ajuster score selon fondamentaux
-FUNDAMENTAL_MIN_SCORE = 60       # Score fondamental minimum STRICT (augmente de 40 a 60)
+FUNDAMENTAL_MIN_SCORE = 45       # Score fondamental minimum (filtre les shitcoins)
 FUNDAMENTAL_BLOCK_AVOID = True   # Bloquer les trades sur tokens "AVOID"
 
-# ANALYSE TECHNIQUE AVANCEE (STRICT)
+# ANALYSE TECHNIQUE AVANCEE (EQUILIBRE)
 ADVANCED_TA_ENABLED = True       # Activer l'analyse technique avancee
 ADVANCED_TA_SCORE_ADJUST = True  # Ajuster score selon analyse avancee
-ADVANCED_TA_MIN_SCORE = 65       # Score technique minimum STRICT (augmente de 55 a 65)
-ADVANCED_TA_WEIGHT = 0.4         # Poids de l'analyse avancee (augmente de 0.3 a 0.4)
+ADVANCED_TA_MIN_SCORE = 50       # Score technique minimum
+ADVANCED_TA_WEIGHT = 0.25        # Poids de l'analyse avancee
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # DÃ©sactivÃ© par dÃ©faut (risquÃ©)

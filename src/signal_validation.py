@@ -111,9 +111,9 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
     # Calcul final
     coherence_percent = (coherence_score / max_score * 100) if max_score > 0 else 0
     
-    # Validation ULTRA-STRICTE : 80% de cohérence minimum
-    # Un signal doit avoir une cohérence PARFAITE pour être validé
-    is_valid = coherence_percent >= 80
+    # Validation EQUILIBREE : 60% de cohérence minimum
+    # Permet ~5 trades/jour tout en filtrant les mauvais signaux
+    is_valid = coherence_percent >= 60
 
     return {
         'is_valid': is_valid,

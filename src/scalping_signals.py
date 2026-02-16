@@ -152,34 +152,38 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     if adx is not None and adx < 15:
         confidence -= 20 # Pénalité forte
 
-    # CRITÈRES D'ENTRÉE ULTRA-STRICTS (ZERO PERTE) :
-    # 1. Minimum 6 confirmations obligatoires
-    # 2. Confiance >= 70% (très haute qualité)
-    # 3. La direction DOIT être cohérente avec la tendance EMA
-    # 4. Écart minimum de 4 entre bullish et bearish confirmations
-    # 5. ADX > 20 requis (tendance forte)
+    # CRITÈRES D'ENTRÉE EQUILIBRES (~5 trades/jour de qualité) :
+    # 1. Minimum 4 confirmations
+    # 2. Confiance >= 50%
+    # 3. Tendance EMA alignée OU signal très fort
+    # 4. Écart minimum de 2 entre bullish et bearish
+    # 5. ADX > 18 (tendance présente)
     
-    # Calcul de l'écart entre signaux (éviter les signaux ambigus)
+    # Calcul de l'écart entre signaux
     signal_strength_diff = abs(bullish_confirmations - bearish_confirmations)
     
-    # Filtre ADX strict - tendance forte obligatoire
-    adx_valid = adx is not None and adx >= 20
+    # Filtre ADX - tendance présente (pas extrême)
+    adx_valid = adx is None or adx >= 18
     
-    if bullish_confirmations > bearish_confirmations and adx_valid:
-        # Plus de signaux bullish - exiger confluence maximale
-        if bullish_confirmations >= 6 and confidence >= 70 and signal_strength_diff >= 4 and ema_trend == 'BULLISH':
-            # Signal PARFAIT : 6+ confirmations, très haute confiance, écart net
+    if bullish_confirmations > bearish_confirmations:
+        # Signal FORT: 5+ confirmations avec bonne confiance
+        if bullish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3:
             entry_signal = 'LONG'
             entry_price = current_price
-        # AUCUNE autre entrée acceptée - qualité maximale uniquement
+        # Signal VALIDE: 4+ confirmations aligné avec tendance
+        elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH' and signal_strength_diff >= 2 and adx_valid:
+            entry_signal = 'LONG'
+            entry_price = current_price
             
-    elif bearish_confirmations > bullish_confirmations and adx_valid:
-        # Plus de signaux bearish - exiger confluence maximale
-        if bearish_confirmations >= 6 and confidence >= 70 and signal_strength_diff >= 4 and ema_trend == 'BEARISH':
-            # Signal PARFAIT : 6+ confirmations, très haute confiance, écart net
+    elif bearish_confirmations > bullish_confirmations:
+        # Signal FORT: 5+ confirmations avec bonne confiance
+        if bearish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3:
             entry_signal = 'SHORT'
             entry_price = current_price
-        # AUCUNE autre entrée acceptée - qualité maximale uniquement
+        # Signal VALIDE: 4+ confirmations aligné avec tendance
+        elif bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH' and signal_strength_diff >= 2 and adx_valid:
+            entry_signal = 'SHORT'
+            entry_price = current_price
 
     # --- 10. Gestion du Risque (Stop Loss & Take Profit) ---
     stop_loss = None
@@ -188,10 +192,11 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     rr_ratio = None
     
     if entry_signal != 'NEUTRAL' and atr and entry_price:
-        # Stop Loss basé sur ATR (Volatilité) - ULTRA STRICT R/R 3:1
-        # SL à 1.0x ATR (très serré), TP à 3.0x ATR = R/R de 3:1
-        # SL très serré = perte minimale si signal échoue
-        atr_sl_multiplier = 1.0
+        # Stop Loss basé sur ATR (Volatilité) - REALISTE R/R 2:1
+        # SL à 1.5x ATR (assez serré mais évite le bruit)
+        # TP à 3.0x ATR = R/R de 2:1 solide
+        # Ce ratio permet d'être rentable avec 40% de win rate
+        atr_sl_multiplier = 1.5
         atr_tp_multiplier = 3.0
         
         atr_value = atr

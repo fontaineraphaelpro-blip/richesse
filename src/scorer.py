@@ -62,18 +62,18 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
             'entry_signal': 'NEUTRAL', 'confidence': 0
         }
     
-    # FILTRE ADX OBLIGATOIRE - Tendance forte requise
+    # FILTRE ADX - Tendance presente (pas trop strict)
     adx = indicators.get('adx')
-    if adx is None or adx < 20:
+    if adx is not None and adx < 15:
         return {
-            'score': 0, 'signal': "⚪ ADX FAIBLE", 'details': f"ADX {adx:.1f} < 20 requis",
+            'score': 0, 'signal': "⚪ RANGE", 'details': f"ADX {adx:.1f} < 15 (marché plat)",
             'trend': trend, 'entry_signal': 'NEUTRAL', 'confidence': 0
         }
     
-    # FILTRE CONFIANCE MINIMALE - 70% obligatoire
-    if confidence < 70:
+    # FILTRE CONFIANCE MINIMALE - 45% pour filtrer le bruit
+    if confidence < 45:
         return {
-            'score': 0, 'signal': "⚪ CONFIANCE FAIBLE", 'details': f"Confiance {confidence}% < 70%",
+            'score': 0, 'signal': "⚪ CONFIANCE FAIBLE", 'details': f"Confiance {confidence}% < 45%",
             'trend': trend, 'entry_signal': 'NEUTRAL', 'confidence': 0
         }
 
