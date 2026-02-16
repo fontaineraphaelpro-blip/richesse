@@ -481,50 +481,6 @@ class ReversalProtector:
         }
 
     # ─────────────────────────────────────────────────────────────
-    # AJUSTEMENT DYNAMIQUE DU SL
-    # ─────────────────────────────────────────────────────────────
-
-    def calculate_dynamic_sl(
-        self,
-        entry_price: float,
-        initial_sl: float,
-        indicators: Dict,
-        direction: str = 'LONG'
-    ) -> float:
-        """
-        Élargit le SL dynamiquement en cas de haute volatilité.
-        Empêche les fermetures prématurées sur bruit.
-        
-        Return:
-            adjusted_sl_price
-        """
-        # Obtenir l'ATR pour la volatilité
-        atr = indicators.get('atr', 0)
-        if not atr or atr == 0:
-            return initial_sl
-        
-        bb_width = indicators.get('bb_width', 0)
-        
-        # Élargissement du SL basé sur volatilité  
-        # Si BB Width > 4%, ajouter 0.5x ATR au SL (pour LONG, soustraire)
-        adjustment_factor = 0
-        if bb_width and bb_width > 0.04:
-            # Volatilité élevée : augmenter l'espace
-            adjustment_factor = 0.5 * atr
-        elif bb_width and bb_width < 0.02:
-            # Volatilité très basse : peut resserrer (cautieusement)
-            adjustment_factor = -0.25 * atr
-        
-        if direction == 'LONG':
-            # Pour LONG, SL est en dessous, on le baisse (augmente la distance)
-            adjusted_sl = initial_sl - adjustment_factor
-        else:
-            # Pour SHORT, SL est au-dessus, on le monte (augmente la distance)
-            adjusted_sl = initial_sl + adjustment_factor
-        
-        return adjusted_sl
-
-    # ─────────────────────────────────────────────────────────────
     # STATISTIQUES ET DEBUG
     # ─────────────────────────────────────────────────────────────
 
