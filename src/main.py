@@ -18,6 +18,7 @@ from scorer import calculate_opportunity_score
 from support import find_swing_low
 from scalping_signals import find_resistance
 from trade_filters import trade_filters
+from crash_protection import crash_protector, check_for_crash, is_crash_mode, get_crash_status
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -104,6 +105,12 @@ shared_data = {
         'winning_trades': 0,
         'total_pnl': 0,
         'win_rate': 0,
+    },
+    'crash_status': {           # Statut protection crash
+        'crash_detected': False,
+        'crash_type': None,
+        'trading_allowed': True,
+        'reason': None
     }
 }
 
@@ -171,6 +178,39 @@ def run_scanner():
         shared_data['last_prices'] = real_prices
         add_bot_log(f"{len(data)} paires chargées avec succès", 'INFO')
 
+        # ── ÉTAPE 2 : DÉTECTION CRASH ────────────────────────────
+        btc_price = real_prices.get('BTCUSDT', 0)
+        if btc_price > 0:
+            # Calculer les variations de prix pour détection multi-asset
+            price_changes = {}
+            for symbol, df in data.items():
+                if len(df) >= 2:
+                    current = df['close'].iloc[-1]
+                    prev = df['close'].iloc[-4] if len(df) >= 4 else df['close'].iloc[0]  # ~15min ago
+                    change = ((current - prev) / prev) * 100
+                    price_changes[symbol] = change
+            
+            # Vérifier crash
+            crash_analysis = check_for_crash(btc_price, price_changes)
+            
+            if crash_analysis.get('crash_detected'):
+                crash_type = crash_analysis.get('crash_type', 'UNKNOWN')
+                add_bot_log(f"🚨 CRASH DÉTECTÉ: {crash_type}! Fermeture d'urgence...", 'ERROR')
+                
+                # Fermer TOUTES les positions immédiatement
+                trader = PaperTrader()
+                closed_count = trader.emergency_close_all(real_prices, f"Crash {crash_type}")
+                add_bot_log(f"💥 {closed_count} position(s) fermée(s) d'urgence", 'ERROR')
+                
+                # Ajouter au dashboard
+                shared_data['crash_status'] = crash_analysis
+                return []  # Arrêter le scan
+            
+            if not crash_analysis.get('trading_allowed'):
+                reason = crash_analysis.get('reason', 'Trading pausé')
+                add_bot_log(f"⏸️ {reason}", 'WARN')
+                return []  # Pas de trading pendant la pause
+        
         # ── ÉTAPE 3 : Analyse Technique (faire AVANT la vérification des positions) ────────────────────────
         add_bot_log("Analyse technique en cours...", 'INFO')
         
@@ -576,6 +616,22 @@ def close_position_route(symbol):
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok', 'scan_count': shared_data['scan_count']}), 200
+
+
+@app.route('/api/crash_status')
+def crash_status():
+    """Retourne le statut du système anti-crash."""
+    status = get_crash_status()
+    status['stats'] = crash_protector.get_crash_stats()
+    return jsonify(status)
+
+
+@app.route('/api/resume_trading', methods=['POST'])
+def resume_trading():
+    """Force la reprise du trading après un crash (bypass manuel)."""
+    crash_protector.force_resume_trading()
+    add_bot_log("⚠️ REPRISE MANUELLE du trading après crash", 'WARN')
+    return jsonify({'success': True, 'message': 'Trading resumed'})
 
 
 # ─────────────────────────────────────────────────────────────
