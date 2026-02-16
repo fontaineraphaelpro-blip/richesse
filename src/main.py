@@ -13,6 +13,8 @@ from flask import Flask, render_template_string, jsonify, request
 # Import des modules internes
 from trader import PaperTrader
 from data_fetcher import fetch_multiple_pairs, validate_signal_multi_timeframe
+from dashboard_template import get_enhanced_dashboard
+from dashboard_stats import calculate_advanced_stats, calculate_chart_data, format_history_for_display, get_all_pairs_from_history
 from indicators import calculate_indicators
 from scorer import calculate_opportunity_score
 from support import find_swing_low
@@ -853,13 +855,20 @@ def dashboard():
     total_invested = sum(p['amount'] for p in positions_view)
     total_capital = balance + total_invested + total_unrealized_pnl
     
+    # Calculer les stats avancees et donnees de graphiques
+    stats = calculate_advanced_stats(all_trades)
+    chart_data = calculate_chart_data(all_trades)
+    formatted_history = format_history_for_display(all_trades)
+    all_pairs = get_all_pairs_from_history(all_trades)
+    crash = get_crash_status()
+    
     return render_template_string(
-        get_html_template(),
+        get_enhanced_dashboard(),
         balance=balance,
         total_capital=total_capital,
         positions=positions_view,
         total_unrealized_pnl=total_unrealized_pnl,
-        history=history,
+        history=formatted_history,
         opportunities=shared_data['opportunities'],
         all_scanned=shared_data['all_scanned'][:200],
         is_scanning=shared_data['is_scanning'],
@@ -871,6 +880,10 @@ def dashboard():
         min_score=MIN_SCORE_BUY,
         timeframe=TIMEFRAME,
         trade_amount=TRADE_AMOUNT,
+        stats=stats,
+        chart_data=chart_data,
+        all_pairs=all_pairs,
+        crash=crash,
     )
 
 
