@@ -19,6 +19,7 @@ from support import find_swing_low
 from scalping_signals import find_resistance
 from trade_filters import trade_filters
 from crash_protection import crash_protector, check_for_crash, is_crash_mode, get_crash_status
+from news_analyzer import news_analyzer, get_market_sentiment, get_fear_greed
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -73,6 +74,11 @@ SCORE_NEUTRAL_MARKET = 70    # Score min si marché neutre
 # Risk/Reward Minimum
 MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
 
+# Configuration News & Sentiment
+NEWS_ENABLED = True           # Activer l'analyse des news
+SENTIMENT_SCORE_ADJUST = True # Ajuster le score selon sentiment
+PAUSE_ON_EVENTS = True        # Pause trading lors d'événements majeurs (FOMC, CPI)
+
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
 MAX_PYRAMIDING = 2           # Max 2 ajouts par position
@@ -111,6 +117,14 @@ shared_data = {
         'crash_type': None,
         'trading_allowed': True,
         'reason': None
+    },
+    'market_sentiment': {       # Sentiment marché (News & Fear/Greed)
+        'fear_greed': 50,
+        'fear_greed_class': 'Neutral',
+        'news_bullish': 0,
+        'news_bearish': 0,
+        'action': 'NORMAL',
+        'updated': None
     }
 }
 
@@ -210,6 +224,47 @@ def run_scanner():
                 reason = crash_analysis.get('reason', 'Trading pausé')
                 add_bot_log(f"⏸️ {reason}", 'WARN')
                 return []  # Pas de trading pendant la pause
+        
+        # ── ÉTAPE 2b : ANALYSE SENTIMENT & NEWS ────────────────────────────
+        sentiment_modifier = 0
+        if NEWS_ENABLED:
+            try:
+                market_sentiment = get_market_sentiment()
+                fg = market_sentiment.get('fear_greed', {})
+                news_sent = market_sentiment.get('news_sentiment', {})
+                
+                fg_value = fg.get('value', 50)
+                fg_class = fg.get('classification', 'Neutral')
+                trading_action = market_sentiment.get('trading_action', 'NORMAL')
+                
+                add_bot_log(
+                    f"📊 Sentiment: Fear&Greed={fg_value} ({fg_class}) | "
+                    f"News: {news_sent.get('bullish', 0)}↑ {news_sent.get('bearish', 0)}↓",
+                    'INFO'
+                )
+                
+                # Pause si événement économique majeur
+                if PAUSE_ON_EVENTS and trading_action == 'PAUSE':
+                    reason = market_sentiment.get('reason', 'Événement majeur')
+                    add_bot_log(f"⏸️ NEWS PAUSE: {reason}", 'WARN')
+                    return []
+                
+                # Enregistrer le sentiment pour le dashboard
+                shared_data['market_sentiment'] = {
+                    'fear_greed': fg_value,
+                    'fear_greed_class': fg_class,
+                    'news_bullish': news_sent.get('bullish', 0),
+                    'news_bearish': news_sent.get('bearish', 0),
+                    'action': trading_action,
+                    'updated': datetime.now().strftime('%H:%M')
+                }
+                
+                # Modificateur de score
+                if SENTIMENT_SCORE_ADJUST:
+                    sentiment_modifier = market_sentiment.get('combined_score_modifier', 0)
+                    
+            except Exception as e:
+                add_bot_log(f"⚠️ Erreur analyse sentiment: {str(e)[:50]}", 'WARN')
         
         # ── ÉTAPE 3 : Analyse Technique (faire AVANT la vérification des positions) ────────────────────────
         add_bot_log("Analyse technique en cours...", 'INFO')
@@ -396,8 +451,26 @@ def run_scanner():
                 # Direction du signal
                 signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
                 
+                # Ajuster le score selon le sentiment marché
+                adjusted_score = opp['score'] + sentiment_modifier
+                
+                # Vérifier compatibilité direction/sentiment
+                if NEWS_ENABLED and 'market_sentiment' in shared_data:
+                    ms = shared_data['market_sentiment']
+                    fg_value = ms.get('fear_greed', 50)
+                    
+                    # Éviter LONG en Extreme Greed (risque de correction)
+                    if signal_direction == 'LONG' and fg_value >= 80:
+                        add_bot_log(f"⚠️ {opp['pair']} LONG évité (Extreme Greed {fg_value})", 'WARN')
+                        continue
+                    
+                    # Éviter SHORT en Extreme Fear (rebond probable)
+                    if signal_direction == 'SHORT' and fg_value <= 20:
+                        add_bot_log(f"⚠️ {opp['pair']} SHORT évité (Extreme Fear {fg_value})", 'WARN')
+                        continue
+                
                 # Règles strictes d'ouverture (LONG ou SHORT)
-                if (opp['score'] >= effective_min_score
+                if (adjusted_score >= effective_min_score
                         and signal_direction in ['LONG', 'SHORT']  # Accepter LONG ET SHORT
                         and opp['pair'] not in my_positions
                         and len(my_positions) < MAX_POSITIONS
@@ -663,6 +736,17 @@ def resume_trading():
     crash_protector.force_resume_trading()
     add_bot_log("⚠️ REPRISE MANUELLE du trading après crash", 'WARN')
     return jsonify({'success': True, 'message': 'Trading resumed'})
+
+
+@app.route('/api/sentiment')
+def api_sentiment():
+    """Retourne l'analyse de sentiment marché."""
+    try:
+        sentiment = get_market_sentiment()
+        sentiment['cached'] = shared_data.get('market_sentiment', {})
+        return jsonify(sentiment)
+    except Exception as e:
+        return jsonify({'error': str(e), 'cached': shared_data.get('market_sentiment', {})})
 
 
 # ─────────────────────────────────────────────────────────────
