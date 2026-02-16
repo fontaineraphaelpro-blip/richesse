@@ -21,6 +21,8 @@ from trade_filters import trade_filters
 from crash_protection import crash_protector, check_for_crash, is_crash_mode, get_crash_status
 from news_analyzer import news_analyzer, get_market_sentiment, get_fear_greed
 from market_intelligence import market_intel, get_market_intelligence, should_trade_with_intel
+from ml_predictor import ml_predictor, get_ml_prediction, log_trade_result
+from onchain_analyzer import onchain_analyzer, get_onchain_analysis, get_onchain_signal_adjustment
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION DU BOT
@@ -79,6 +81,15 @@ MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1
 NEWS_ENABLED = True           # Activer l'analyse des news
 SENTIMENT_SCORE_ADJUST = True # Ajuster le score selon sentiment
 PAUSE_ON_EVENTS = True        # Pause trading lors d'événements majeurs (FOMC, CPI)
+
+# Configuration Machine Learning
+ML_ENABLED = True             # Activer les prédictions ML
+ML_MIN_PROBABILITY = 60       # Probabilité minimum pour trader
+ML_SCORE_ADJUST = True        # Ajuster le score selon ML
+
+# Configuration On-Chain
+ONCHAIN_ENABLED = True        # Activer l'analyse on-chain
+ONCHAIN_SCORE_ADJUST = True   # Ajuster le score selon on-chain
 
 # Pyramiding (Renforcement de position)
 PYRAMIDING_ENABLED = False   # Désactivé par défaut (risqué)
@@ -613,12 +624,14 @@ def run_scanner():
                         continue
                     
                     # ── VALIDATION MULTI-TIMEFRAME ─────────────
+                    mtf_alignment = 0
                     if MTF_ENABLED:
                         mtf_result = validate_signal_multi_timeframe(
                             opp['pair'], 
                             signal_direction, 
                             MTF_TIMEFRAMES
                         )
+                        mtf_alignment = mtf_result.get('alignment_score', 0)
                         if not mtf_result['is_valid']:
                             add_bot_log(
                                 f"❌ {opp['pair']} MTF rejeté: {mtf_result['reason']}", 
@@ -627,9 +640,44 @@ def run_scanner():
                             continue
                         else:
                             add_bot_log(
-                                f"✅ {opp['pair']} MTF confirmé: {mtf_result['alignment_score']}% aligné",
+                                f"✅ {opp['pair']} MTF confirmé: {mtf_alignment}% aligné",
                                 'INFO'
                             )
+                    
+                    # ── PRÉDICTION ML ─────────────
+                    if ML_ENABLED:
+                        sentiment_data = shared_data.get('market_sentiment', {})
+                        ml_prediction = get_ml_prediction(
+                            opp_indicators, 
+                            signal_direction,
+                            sentiment_data,
+                            mtf_alignment
+                        )
+                        ml_prob = ml_prediction.get('probability', 50)
+                        ml_confidence = ml_prediction.get('confidence', 'low')
+                        
+                        if ml_prob < ML_MIN_PROBABILITY:
+                            add_bot_log(
+                                f"🤖 {opp['pair']} ML rejeté: {ml_prob:.0f}% ({ml_confidence})", 
+                                'WARN'
+                            )
+                            continue
+                        else:
+                            add_bot_log(
+                                f"🤖 {opp['pair']} ML: {ml_prob:.0f}% ({ml_confidence})",
+                                'INFO'
+                            )
+                            if ML_SCORE_ADJUST:
+                                ml_bonus = int((ml_prob - 60) / 4)  # +0 à +10
+                                adjusted_score += ml_bonus
+                    
+                    # ── ANALYSE ON-CHAIN ─────────────
+                    if ONCHAIN_ENABLED:
+                        btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
+                        onchain_adj, onchain_reason = get_onchain_signal_adjustment(signal_direction, btc_price)
+                        if ONCHAIN_SCORE_ADJUST and onchain_adj != 0:
+                            adjusted_score += onchain_adj
+                            add_bot_log(f"🔗 {opp['pair']} On-chain: {onchain_reason}", 'INFO')
 
                     if balance >= TRADE_AMOUNT:
                         # ── EXÉCUTION LONG OU SHORT ─────────────
@@ -877,6 +925,80 @@ def api_quick_intel():
             'top_movers': market_intel.get_top_movers(),
             'cached': shared_data.get('market_intelligence', {})
         })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/ml_prediction/<symbol>')
+def api_ml_prediction(symbol):
+    """Retourne la prédiction ML pour une paire."""
+    try:
+        direction = request.args.get('direction', 'LONG')
+        indicators = all_indicators.get(symbol, {})
+        
+        if not indicators:
+            return jsonify({'error': f'No indicators for {symbol}'})
+        
+        sentiment = shared_data.get('market_sentiment', {})
+        prediction = get_ml_prediction(indicators, direction, sentiment, 0)
+        
+        return jsonify({
+            'symbol': symbol,
+            'direction': direction,
+            'prediction': prediction
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/ml_stats')
+def api_ml_stats():
+    """Retourne les statistiques du modèle ML."""
+    try:
+        stats = ml_predictor.get_model_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/ml_update', methods=['POST'])
+def api_ml_update():
+    """Force une mise à jour du modèle ML avec les données d'entraînement."""
+    try:
+        ml_predictor.update_weights_from_history()
+        return jsonify({'success': True, 'message': 'ML model updated'})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/onchain')
+def api_onchain():
+    """Retourne l'analyse on-chain complète."""
+    try:
+        btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
+        analysis = get_onchain_analysis(btc_price)
+        return jsonify(analysis)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/onchain/tvl')
+def api_onchain_tvl():
+    """Retourne les données TVL DeFi."""
+    try:
+        tvl = onchain_analyzer.get_defi_tvl()
+        return jsonify(tvl)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/onchain/nupl')
+def api_onchain_nupl():
+    """Retourne l'estimation NUPL."""
+    try:
+        btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
+        nupl = onchain_analyzer.estimate_nupl(btc_price)
+        return jsonify(nupl)
     except Exception as e:
         return jsonify({'error': str(e)})
 
