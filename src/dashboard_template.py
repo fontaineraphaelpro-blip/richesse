@@ -216,6 +216,10 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     
     /* Buttons mobile */
     .btn { padding: 8px 12px; font-size: 0.75em; }
+    
+    /* Hide table on mobile, show mobile cards */
+    .table-scroll { display: none; }
+    .mobile-cards { display: block; }
 }
 
 @media (max-width: 480px) {
@@ -240,7 +244,24 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     /* Log extra small */
     .log-line { flex-wrap: wrap; gap: 6px; }
     .log-time { width: auto; }
+    
+    /* Mobile cards extra small */
+    .pos-card { padding: 12px; }
+    .pos-card-header { font-size: 0.9em; }
 }
+
+/* Mobile cards - hidden on desktop */
+.mobile-cards { display: none; padding: 12px; }
+.pos-card { background: var(--bg3); border-radius: 10px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); }
+.pos-card:last-child { margin-bottom: 0; }
+.pos-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pos-card-symbol { font-weight: 700; font-size: 1.1em; color: var(--blue); }
+.pos-card-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85em; }
+.pos-card-row:last-child { border-bottom: none; }
+.pos-card-label { color: var(--text3); }
+.pos-card-value { font-weight: 600; }
+.pos-card-actions { margin-top: 12px; display: flex; gap: 8px; }
+.pos-card-pnl { font-size: 1.2em; font-weight: 700; }
 
 /* Touch improvements */
 @media (hover: none) and (pointer: coarse) {
@@ -357,6 +378,40 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </tbody>
         </table>
     </div>
+    <!-- Mobile Cards View -->
+    <div class="mobile-cards">
+        {% for p in positions %}
+        <div class="pos-card">
+            <div class="pos-card-header">
+                <span class="pos-card-symbol">{{ p.symbol }}</span>
+                <span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}</span>
+            </div>
+            <div class="pos-card-row">
+                <span class="pos-card-label">PnL</span>
+                <span class="pos-card-pnl {% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(p.pnl_percent) }}% ({{ "%+.2f"|format(p.pnl_value) }}$)</span>
+            </div>
+            <div class="pos-card-row">
+                <span class="pos-card-label">Taille</span>
+                <span class="pos-card-value">${{ "%.0f"|format(p.amount) }}</span>
+            </div>
+            <div class="pos-card-row">
+                <span class="pos-card-label">Entree / Actuel</span>
+                <span class="pos-card-value">${{ "%.4f"|format(p.entry) }} &#8594; ${{ "%.4f"|format(p.current) }}</span>
+            </div>
+            <div class="pos-card-row">
+                <span class="pos-card-label">SL / TP</span>
+                <span class="pos-card-value"><span class="red">${{ "%.4f"|format(p.sl) }}</span> / <span class="green">${{ "%.4f"|format(p.tp) }}</span></span>
+            </div>
+            <div class="pos-card-row">
+                <span class="pos-card-label">Progression</span>
+                <span class="pos-card-value">{{ "%.0f"|format(p.progress) }}%</span>
+            </div>
+            <div class="pos-card-actions">
+                <button class="btn btn-close" style="flex:1" onclick="closePos('{{ p.symbol }}')">Fermer Position</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
     {% else %}
     <div class="empty">Aucune position ouverte</div>
     {% endif %}
@@ -386,6 +441,33 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                 {% endfor %}
                 </tbody>
             </table>
+        </div>
+        <!-- Mobile Cards View -->
+        <div class="mobile-cards">
+            {% for opp in opportunities[:10] %}
+            <div class="pos-card">
+                <div class="pos-card-header">
+                    <span class="pos-card-symbol">{{ opp.pair }}</span>
+                    <span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal|default('N/A') }}</span>
+                </div>
+                <div class="pos-card-row">
+                    <span class="pos-card-label">Score</span>
+                    <span class="pos-card-value" style="color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %};font-weight:700;font-size:1.1em">{{ opp.score|default(0) }}</span>
+                </div>
+                <div class="pos-card-row">
+                    <span class="pos-card-label">Prix</span>
+                    <span class="pos-card-value">${{ "%.4f"|format(opp.price|default(0)) }}</span>
+                </div>
+                <div class="pos-card-row">
+                    <span class="pos-card-label">R/R</span>
+                    <span class="pos-card-value" style="color:var(--blue)">{{ opp.rr_ratio|default('N/A') }}{% if opp.rr_ratio %}x{% endif %}</span>
+                </div>
+                <div class="pos-card-row">
+                    <span class="pos-card-label">Volume 24h</span>
+                    <span class="pos-card-value">${{ "%.0f"|format((opp.volume_24h|default(0)) / 1000000) }}M</span>
+                </div>
+            </div>
+            {% endfor %}
         </div>
         {% else %}
         <div class="empty">Aucune opportunite detectee</div>
