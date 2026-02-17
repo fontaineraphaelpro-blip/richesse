@@ -39,10 +39,10 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
 TRADE_AMOUNT     = 200     # USDT par trade
-MIN_SCORE_BUY    = 72      # Score min EQUILIBRE (~5 trades/jour)
-SCAN_INTERVAL    = 180     # Secondes entre scans (3 min - plus reactif)
-MAX_POSITIONS    = 5       # Positions simultanees max
-RISK_PERCENT     = 2.0     # % du capital par trade
+MIN_SCORE_BUY    = 65      # Score min AGRESSIF - plus de trades
+SCAN_INTERVAL    = 60      # Secondes entre scans (1 min - ULTRA REACTIF)
+MAX_POSITIONS    = 8       # Positions simultanees max (AUGMENTÉ)
+RISK_PERCENT     = 2.5     # % du capital par trade (légèrement augmenté)
 
 # Configuration Multi-Timeframe
 MTF_TIMEFRAMES   = ['15m', '1h', '4h']  # Timeframes pour confirmation
@@ -135,9 +135,9 @@ PYRAMIDING_ENABLED = False   # DÃ©sactivÃ© par dÃ©faut (risquÃ©)
 MAX_PYRAMIDING = 2           # Max 2 ajouts par position
 PYRAMIDING_GAIN_THRESHOLD = 2.0  # Ajouter si position gagne +2%
 
-# Cooldown aprÃ¨s Trade
+# Cooldown après Trade
 COOLDOWN_ENABLED = True
-COOLDOWN_MINUTES = 30        # Attendre 30 min avant de re-trader la mÃªme paire
+COOLDOWN_MINUTES = 10        # Attendre 10 min seulement (RÉDUIT)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STRATÉGIE ADAPTATIVE (NOUVEAU!)
