@@ -72,9 +72,9 @@ VOLUME_FILTER_ENABLED = True
 MIN_VOLUME_RATIO = 1.2       # Volume doit Ãªtre 1.2x la moyenne
 
 # Heures de Trading Optimales (UTC)
-TRADING_HOURS_ENABLED = True
-TRADING_START_HOUR = 7       # 7h UTC (8h Paris, 2h New York)
-TRADING_END_HOUR = 22        # 22h UTC (23h Paris, 17h New York)
+TRADING_HOURS_ENABLED = False  # DÉSACTIVÉ - trade 24/7
+TRADING_START_HOUR = 0         # (non utilisé)
+TRADING_END_HOUR = 24          # (non utilisé)
 AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
 
 # Score Dynamique selon Marche (EQUILIBRE)
