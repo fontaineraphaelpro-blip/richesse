@@ -95,40 +95,65 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     
     # Bonus Contextuels (0-30 pts)
     
-    # 1. RSI favorable - LOGIQUE AMELIOREE (zones optimales)
+    # 1. RSI favorable - TREND FOLLOWING (zones de momentum sain)
     if rsi14:
         if entry_signal == 'LONG':
-            # LONG: bonus si RSI en zone OPTIMALE (30-50), pas extreme
-            if 30 <= rsi14 <= 50:
-                score += 15  # Zone ideale pour LONG
-                details.append("RSI Zone Optimale LONG")
-            elif 50 < rsi14 <= 60:
+            # LONG: bonus si RSI en zone de MOMENTUM HAUSSIER (40-60)
+            # RSI < 35 = marché en chute = DANGER
+            # RSI > 65 = surachat = risque de correction
+            if 45 <= rsi14 <= 60:
+                score += 15  # Zone idéale pour LONG (momentum sain)
+                details.append("RSI Momentum Haussier")
+            elif 40 <= rsi14 < 45:
                 score += 10
-                details.append("RSI Momentum LONG")
-            elif rsi14 < 30:
-                score += 5   # Oversold risque mais possible
-                details.append("RSI Oversold (risque)")
-            # RSI > 60 = pas de bonus pour LONG
+                details.append("RSI Haussier Modéré")
+            elif 60 < rsi14 <= 70:
+                score += 5   # Prudence - proche surachat
+                details.append("RSI Élevé (prudence)")
+            elif rsi14 < 40:
+                score -= 5   # PÉNALITÉ - momentum faible pour LONG
+                details.append("RSI Faible - Danger LONG")
+            # RSI > 70 = pas de bonus, éviter LONG
         elif entry_signal == 'SHORT':
-            # SHORT: bonus si RSI en zone OPTIMALE (50-70), pas extreme
-            if 50 <= rsi14 <= 70:
-                score += 15  # Zone ideale pour SHORT
-                details.append("RSI Zone Optimale SHORT")
-            elif 40 <= rsi14 < 50:
+            # SHORT: bonus si RSI en zone de MOMENTUM BAISSIER (40-55)
+            # RSI > 65 = marché en hausse = DANGER pour SHORT
+            # RSI < 30 = survente = risque de rebond
+            if 40 <= rsi14 <= 55:
+                score += 15  # Zone idéale pour SHORT (momentum baissier)
+                details.append("RSI Momentum Baissier")
+            elif 55 < rsi14 <= 60:
                 score += 10
-                details.append("RSI Pre-correction")
-            elif rsi14 > 70:
-                score += 5   # Overbought risque mais possible
-                details.append("RSI Overbought (risque)")
-            # RSI < 40 = pas de bonus pour SHORT
+                details.append("RSI Pré-correction")
+            elif 30 <= rsi14 < 40:
+                score += 5   # Prudence - proche survente
+                details.append("RSI Bas (prudence)")
+            elif rsi14 > 60:
+                score -= 5   # PÉNALITÉ - momentum fort pour SHORT
+                details.append("RSI Élevé - Danger SHORT")
+            # RSI < 30 = pas de bonus, éviter SHORT
+    
+    # 2. Momentum Confirmation (NOUVEAU - Trade AVEC le marché!)
+    price_momentum = indicators.get('price_momentum', 'NEUTRAL')
+    if entry_signal == 'LONG' and price_momentum == 'BULLISH':
+        score += 10
+        details.append("Prix Monte ↑")
+    elif entry_signal == 'SHORT' and price_momentum == 'BEARISH':
+        score += 10
+        details.append("Prix Descend ↓")
+    elif entry_signal == 'LONG' and price_momentum == 'BEARISH':
+        score -= 10  # PÉNALITÉ - trader contre le mouvement
+        details.append("CONTRE Momentum!")
+    elif entry_signal == 'SHORT' and price_momentum == 'BULLISH':
+        score -= 10  # PÉNALITÉ - trader contre le mouvement
+        details.append("CONTRE Momentum!")
             
-    # 2. Alignement Tendance
+    # 3. Alignement Tendance
     if (entry_signal == 'LONG' and trend == 'Bullish') or \
        (entry_signal == 'SHORT' and trend == 'Bearish'):
         score += 10
         details.append("Aligné Tendance")
         
-    # 3. Volume
+    # 4. Volume
     vol = indicators.get('current_volume')
     vol_ma = indicators.get('volume_ma20')
     if vol and vol_ma and vol > vol_ma:

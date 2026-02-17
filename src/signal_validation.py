@@ -58,44 +58,48 @@ def validate_signal_coherence(indicators: Dict, entry_signal: str) -> Dict:
             else:
                 warnings.append("MACD Achat")
 
-    # 3. RSI (25 pts) - LOGIQUE AMÉLIORÉE pour éviter les contradictions
+    # 3. RSI (25 pts) - TREND FOLLOWING (pas contrarian!)
+    # PRINCIPE: Trader AVEC la tendance, pas anticiper les retournements
     max_score += 25
     if rsi is not None:
         if entry_signal == 'LONG':
-            # LONG valide si RSI en zone neutre-basse (pas extreme)
-            # Un RSI < 30 avec signal LONG signifie souvent un faux rebond
-            if 30 <= rsi <= 50:
-                coherence_score += 25  # Zone idéale pour LONG (pas survend ni surachet)
-                strengths.append("RSI Zone Optimale LONG")
-            elif 50 < rsi <= 60:
+            # LONG valide si RSI en zone de MOMENTUM HAUSSIER (40-65)
+            # RSI < 35 = marché en chute = DANGER pour LONG
+            # RSI > 70 = surachat = risque de correction
+            if 45 <= rsi <= 60:
+                coherence_score += 25  # Zone IDEALE pour LONG (momentum sain)
+                strengths.append("RSI Momentum Haussier Optimal")
+            elif 40 <= rsi < 45:
                 coherence_score += 20
-                strengths.append("RSI Momentum LONG")
-            elif 20 <= rsi < 30:
-                coherence_score += 15  # Oversold, risqué mais possible
-                warnings.append("RSI Oversold - rebond risqué")
-            elif rsi > 60:
-                warnings.append("RSI trop haut pour LONG sécurisé")
-                coherence_score += 5
-            else:  # RSI < 20 extreme
-                warnings.append("RSI EXTREME - attendre stabilisation")
-                coherence_score += 0  # Pas de points
+                strengths.append("RSI Momentum Haussier")
+            elif 60 < rsi <= 70:
+                coherence_score += 15  # Encore OK mais prudence
+                warnings.append("RSI élevé - proche surachat")
+            elif rsi < 40:
+                coherence_score += 5  # Marché faible - LONG risqué
+                warnings.append("RSI faible - momentum baissier!")
+            else:  # RSI > 70
+                coherence_score += 0
+                warnings.append("RSI SURACHAT - éviter LONG")
         elif entry_signal == 'SHORT':
-            # SHORT valide si RSI en zone neutre-haute (pas extreme)
-            if 50 <= rsi <= 70:
-                coherence_score += 25  # Zone idéale pour SHORT
-                strengths.append("RSI Zone Optimale SHORT")
-            elif 40 <= rsi < 50:
+            # SHORT valide si RSI en zone de MOMENTUM BAISSIER (35-55)
+            # RSI > 65 = marché en hausse = DANGER pour SHORT
+            # RSI < 30 = survente = risque de rebond
+            if 40 <= rsi <= 55:
+                coherence_score += 25  # Zone IDEALE pour SHORT (momentum baissier)
+                strengths.append("RSI Momentum Baissier Optimal")
+            elif 55 < rsi <= 60:
                 coherence_score += 20
                 strengths.append("RSI Pré-correction")
-            elif 70 < rsi <= 80:
-                coherence_score += 15  # Overbought, risqué mais possible
-                warnings.append("RSI Overbought - correction risquée")
-            elif rsi < 40:
-                warnings.append("RSI trop bas pour SHORT sécurisé")
-                coherence_score += 5
-            else:  # RSI > 80 extreme
-                warnings.append("RSI EXTREME - attendre retournement")
-                coherence_score += 0  # Pas de points
+            elif 30 <= rsi < 40:
+                coherence_score += 15  # Encore OK mais prudence
+                warnings.append("RSI bas - proche survente")
+            elif rsi > 60:
+                coherence_score += 5  # Marché fort - SHORT risqué
+                warnings.append("RSI élevé - momentum haussier!")
+            else:  # RSI < 30
+                coherence_score += 0
+                warnings.append("RSI SURVENTE - éviter SHORT")
 
     # 4. ADX (25 pts)
     max_score += 25

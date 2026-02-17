@@ -207,7 +207,49 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         except Exception:
             pass
 
-    # 6. CONSTRUCTION DU DICTIONNAIRE FINAL
+    # 6. MOMENTUM CONFIRMATION (Direction récente du prix)
+    # ----------------------------------------
+    # Vérifier si le prix MONTE ou DESCEND actuellement (dernières 3 bougies)
+    price_momentum = 'NEUTRAL'
+    momentum_strength = 0
+    
+    if len(close) >= 4:
+        # Calculer le changement de prix sur les 3 dernières bougies
+        price_3_candles_ago = close.iloc[-4]
+        price_2_candles_ago = close.iloc[-3]
+        price_1_candle_ago = close.iloc[-2]
+        current = close.iloc[-1]
+        
+        # Changement en %
+        change_3 = ((current - price_3_candles_ago) / price_3_candles_ago) * 100
+        change_2 = ((current - price_2_candles_ago) / price_2_candles_ago) * 100
+        
+        # Vérifier si les bougies font des hauts plus hauts (bullish) ou bas plus bas (bearish)
+        higher_highs = df['high'].iloc[-1] > df['high'].iloc[-2] and df['high'].iloc[-2] > df['high'].iloc[-3]
+        lower_lows = df['low'].iloc[-1] < df['low'].iloc[-2] and df['low'].iloc[-2] < df['low'].iloc[-3]
+        
+        # Bougies vertes vs rouges (close > open = vert)
+        green_candles = sum([
+            1 if df['close'].iloc[-i] > df['open'].iloc[-i] else 0 
+            for i in range(1, 4)
+        ])
+        red_candles = 3 - green_candles
+        
+        # Déterminer le momentum
+        if change_3 > 0.5 and green_candles >= 2:
+            price_momentum = 'BULLISH'
+            momentum_strength = min(change_3 * 10, 100)  # Force du momentum
+        elif change_3 < -0.5 and red_candles >= 2:
+            price_momentum = 'BEARISH'
+            momentum_strength = min(abs(change_3) * 10, 100)
+        elif higher_highs:
+            price_momentum = 'BULLISH'
+            momentum_strength = 50
+        elif lower_lows:
+            price_momentum = 'BEARISH'
+            momentum_strength = 50
+    
+    # 7. CONSTRUCTION DU DICTIONNAIRE FINAL
     # ----------------------------------------
     # On prend la dernière valeur (.iloc[-1]) pour le temps réel
     # On prend parfois l'avant-dernière (.iloc[-2]) pour confirmer une clôture
@@ -263,6 +305,10 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         'candlestick_patterns': patterns.get('patterns', []),
         'is_bearish_candle': patterns.get('has_bearish_pattern', False),
         'support_zones': support_zones,
+        
+        # --- MOMENTUM CONFIRMATION (TREND FOLLOWING) ---
+        'price_momentum': price_momentum,        # 'BULLISH', 'BEARISH', 'NEUTRAL'
+        'momentum_strength': momentum_strength,  # 0-100
     }
     
     # Nettoyage des valeurs NaN (au cas où)

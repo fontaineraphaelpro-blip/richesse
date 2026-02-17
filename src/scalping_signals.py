@@ -45,6 +45,10 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     # On suppose que tu pourrais avoir des patterns bullish à l'avenir
     # candlestick_bullish = indicators.get('candlestick_bullish_signals', 0) 
     
+    # MOMENTUM CONFIRMATION (direction récente du prix)
+    price_momentum = indicators.get('price_momentum', 'NEUTRAL')
+    momentum_strength = indicators.get('momentum_strength', 0)
+    
     # Ratio Volume (Force du mouvement)
     volume_ratio = 1.0
     if volume_current and volume_ma and volume_ma > 0:
@@ -70,24 +74,41 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                 bearish_confirmations += 2 
                 confidence += 20
 
-    # --- 4. Analyse du Momentum (RSI) ---
-    # Stratégie améliorée: utiliser les zones extremes ET les zones neutres
+    # --- 4. Analyse du Momentum (RSI) --- TREND FOLLOWING (pas contrarian!)
+    # PRINCIPE: On trade AVEC la tendance, pas contre elle
+    # RSI < 35 = marché en CHUTE = NE PAS ACHETER
+    # RSI > 65 = marché en HAUSSE = NE PAS SHORTER
     if rsi14 is not None:
-        # LONG: RSI en survente (rebond) OU en zone favorable avec tendance haussière
-        if rsi14 < 35:  # Zone oversold - signal de rebond potentiel
+        # LONG: RSI en zone de momentum HAUSSIER (40-65) avec tendance confirmée
+        # On évite les extrêmes (< 35 = trop risqué, > 65 = surachat)
+        if 40 <= rsi14 <= 65 and ema_trend == 'BULLISH':
             bullish_confirmations += 2
             confidence += 20
-        elif 35 <= rsi14 <= 60 and ema_trend == 'BULLISH':
+        elif 35 <= rsi14 < 40 and ema_trend == 'BULLISH':
+            # Zone transition - momentum faible mais tendance OK
             bullish_confirmations += 1
             confidence += 10
         
-        # SHORT: RSI en surachat (correction) OU en zone favorable avec tendance baissière  
-        if rsi14 > 65:  # Zone overbought - signal de correction potentielle
+        # FILTRE ANTI-PIÈGE: RSI < 35 = marché en CHUTE LIBRE = DANGER pour LONG
+        if rsi14 < 35:
+            bullish_confirmations -= 1  # Pénaliser les LONG en oversold
+            bearish_confirmations += 1  # Favoriser SHORT (tendance baissière)
+            confidence -= 5
+        
+        # SHORT: RSI en zone de momentum BAISSIER (35-60) avec tendance confirmée
+        if 35 <= rsi14 <= 60 and ema_trend == 'BEARISH':
             bearish_confirmations += 2
             confidence += 20
-        elif 40 <= rsi14 <= 65 and ema_trend == 'BEARISH':
+        elif 60 < rsi14 <= 65 and ema_trend == 'BEARISH':
+            # Zone transition - correction imminente
             bearish_confirmations += 1
             confidence += 10
+        
+        # FILTRE ANTI-PIÈGE: RSI > 65 = marché en HAUSSE FORTE = DANGER pour SHORT
+        if rsi14 > 65:
+            bearish_confirmations -= 1  # Pénaliser les SHORT en overbought
+            bullish_confirmations += 1  # Favoriser LONG (tendance haussière)
+            confidence -= 5
                 
         # Divergences (Si calculées)
         div_type = indicators.get('rsi_divergence_type')
@@ -142,7 +163,24 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
         bullish_confirmations += 1
         confidence += 10
     
-    # --- 9. DÉCISION FINALE (Seuils Assouplis pour Réalité Marché) ---
+    # --- 9. MOMENTUM CONFIRMATION (CRUCIAL - Trade AVEC le marché!) ---
+    # On ne trade que si le prix VA DÉJÀ dans notre direction
+    if price_momentum == 'BULLISH':
+        bullish_confirmations += 2  # Bonus important - le prix monte!
+        confidence += 15
+        # Pénaliser les SHORT contre le momentum
+        bearish_confirmations -= 1
+    elif price_momentum == 'BEARISH':
+        bearish_confirmations += 2  # Bonus important - le prix descend!
+        confidence += 15
+        # Pénaliser les LONG contre le momentum
+        bullish_confirmations -= 1
+    
+    # S'assurer que les confirmations ne sont pas négatives
+    bullish_confirmations = max(0, bullish_confirmations)
+    bearish_confirmations = max(0, bearish_confirmations)
+    
+    # --- 10. DÉCISION FINALE (TREND FOLLOWING - Trade AVEC le marché!) ---
     
     entry_signal = 'NEUTRAL'
     entry_price = None
@@ -152,12 +190,13 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     if adx is not None and adx < 15:
         confidence -= 20 # Pénalité forte
 
-    # CRITÈRES D'ENTRÉE EQUILIBRES (~5 trades/jour de qualité) :
+    # CRITÈRES D'ENTRÉE TREND FOLLOWING:
     # 1. Minimum 4 confirmations
     # 2. Confiance >= 50%
-    # 3. Tendance EMA alignée OU signal très fort
-    # 4. Écart minimum de 2 entre bullish et bearish
-    # 5. ADX > 18 (tendance présente)
+    # 3. Tendance EMA alignée
+    # 4. MOMENTUM aligné (le prix va DÉJÀ dans notre direction!)
+    # 5. Écart minimum de 2 entre bullish et bearish
+    # 6. ADX > 18 (tendance présente)
     
     # Calcul de l'écart entre signaux
     signal_strength_diff = abs(bullish_confirmations - bearish_confirmations)
@@ -165,27 +204,31 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     # Filtre ADX - tendance présente (pas extrême)
     adx_valid = adx is None or adx >= 18
     
+    # FILTRE MOMENTUM - Ne pas trader CONTRE le mouvement actuel!
+    momentum_aligned_long = price_momentum in ['BULLISH', 'NEUTRAL']  # OK si neutre ou bullish
+    momentum_aligned_short = price_momentum in ['BEARISH', 'NEUTRAL']  # OK si neutre ou bearish
+    
     if bullish_confirmations > bearish_confirmations:
-        # Signal FORT: 5+ confirmations avec bonne confiance
-        if bullish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3:
+        # Signal FORT: 5+ confirmations avec bonne confiance + momentum aligné
+        if bullish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3 and momentum_aligned_long:
             entry_signal = 'LONG'
             entry_price = current_price
-        # Signal VALIDE: 4+ confirmations aligné avec tendance
-        elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH' and signal_strength_diff >= 2 and adx_valid:
+        # Signal VALIDE: 4+ confirmations aligné avec tendance + momentum
+        elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_long:
             entry_signal = 'LONG'
             entry_price = current_price
             
     elif bearish_confirmations > bullish_confirmations:
-        # Signal FORT: 5+ confirmations avec bonne confiance
-        if bearish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3:
+        # Signal FORT: 5+ confirmations avec bonne confiance + momentum aligné
+        if bearish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3 and momentum_aligned_short:
             entry_signal = 'SHORT'
             entry_price = current_price
-        # Signal VALIDE: 4+ confirmations aligné avec tendance
-        elif bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH' and signal_strength_diff >= 2 and adx_valid:
+        # Signal VALIDE: 4+ confirmations aligné avec tendance + momentum
+        elif bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_short:
             entry_signal = 'SHORT'
             entry_price = current_price
 
-    # --- 10. Gestion du Risque (Stop Loss & Take Profit) ---
+    # --- 11. Gestion du Risque (Stop Loss & Take Profit) ---
     stop_loss = None
     tp1 = None
     tp2 = None

@@ -31,6 +31,7 @@ from social_sentiment import get_social_analyzer, get_fear_greed as get_social_f
 from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_journal_stats, should_trade as journal_should_trade, get_trade_modifier
 from fundamental_analysis import fundamental_analyzer, get_fundamental_score, should_trade_fundamentally, get_fundamental_modifier
 from advanced_technical_analysis import advanced_ta, get_advanced_technical_analysis, get_technical_score_adjustment
+from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive_strategy
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
@@ -138,6 +139,13 @@ PYRAMIDING_GAIN_THRESHOLD = 2.0  # Ajouter si position gagne +2%
 COOLDOWN_ENABLED = True
 COOLDOWN_MINUTES = 30        # Attendre 30 min avant de re-trader la mÃªme paire
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRATÉGIE ADAPTATIVE (NOUVEAU!)
+# Le bot s'adapte automatiquement aux conditions du marché
+# ═══════════════════════════════════════════════════════════════════════════════
+ADAPTIVE_STRATEGY_ENABLED = True  # Activer la stratégie adaptative
+ADAPTIVE_OVERRIDE_PARAMS = True   # Les paramètres adaptatifs remplacent les fixes
+
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Ã‰TAT PARTAGÃ‰ (Thread Scanner â†” Serveur Web Flask)
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -183,6 +191,16 @@ shared_data = {
         'ls_ratio': 1,
         'breadth': 50,
         'alerts': [],
+        'updated': None
+    },
+    'adaptive_regime': {        # Régime adaptatif (NOUVEAU!)
+        'regime': 'UNKNOWN',
+        'confidence': 0,
+        'trading_mode': 'NORMAL',
+        'min_score': 72,
+        'allow_long': True,
+        'allow_short': True,
+        'summary': '',
         'updated': None
     }
 }
@@ -593,6 +611,47 @@ def run_scanner():
                 add_bot_log(f"âš ï¸ Erreur macro events: {e}", 'WARN')
                 macro_can_trade = True
         
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # STRATÉGIE ADAPTATIVE: Détecter le régime de marché et adapter les paramètres
+        # ═══════════════════════════════════════════════════════════════════════════
+        adaptive_params = None
+        regime_info = None
+        
+        if ADAPTIVE_STRATEGY_ENABLED:
+            try:
+                # Construire les données de marché pour l'analyse
+                # Utiliser les indicateurs du BTC comme référence globale
+                btc_indicators = all_indicators.get('BTCUSDT', {})
+                
+                market_data_for_regime = {
+                    'indicators': btc_indicators,
+                    'sentiment': shared_data.get('market_sentiment', {}),
+                    'intelligence': shared_data.get('market_intelligence', {}),
+                    'market_stats': shared_data.get('market_stats', {})
+                }
+                
+                # Analyser et obtenir les paramètres adaptatifs
+                regime_info, adaptive_params, regime_summary = analyze_and_adapt(market_data_for_regime)
+                
+                # Stocker pour le dashboard
+                shared_data['adaptive_regime'] = {
+                    'regime': regime_info['regime'],
+                    'confidence': regime_info['confidence'],
+                    'trading_mode': adaptive_params['trading_mode'],
+                    'min_score': adaptive_params['min_score'],
+                    'allow_long': adaptive_params['allow_long'],
+                    'allow_short': adaptive_params['allow_short'],
+                    'summary': regime_summary,
+                    'updated': datetime.now().strftime('%H:%M')
+                }
+                
+                add_bot_log(f"🎯 RÉGIME: {regime_summary}", 'INFO')
+                
+            except Exception as e:
+                add_bot_log(f"⚠️ Erreur stratégie adaptative: {e}", 'WARN')
+                adaptive_params = None
+        
         # VÃ©rifier si drawdown max atteint - pas de nouveau trading
         if is_drawdown_exceeded:
             add_bot_log(f"ðŸš¨ TRADING SUSPENDU - Drawdown max dÃ©passÃ©", 'ERROR')
@@ -609,8 +668,17 @@ def run_scanner():
             add_bot_log(f"Auto-trade | Solde: ${balance:.2f} | {len(my_positions)} pos | {score_reason}", 'INFO')
 
             for opp in opportunities:
-                # Utiliser le score dynamique au lieu du fixe
-                effective_min_score = dynamic_min_score if DYNAMIC_SCORE_ENABLED else MIN_SCORE_BUY
+                # Utiliser les paramètres adaptatifs si disponibles, sinon le score dynamique
+                if adaptive_params and ADAPTIVE_OVERRIDE_PARAMS:
+                    effective_min_score = adaptive_params['min_score']
+                    allow_long = adaptive_params['allow_long']
+                    allow_short = adaptive_params['allow_short']
+                    max_pos = adaptive_params['max_positions']
+                else:
+                    effective_min_score = dynamic_min_score if DYNAMIC_SCORE_ENABLED else MIN_SCORE_BUY
+                    allow_long = True
+                    allow_short = True
+                    max_pos = MAX_POSITIONS
                 
                 # Direction du signal
                 signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
@@ -644,9 +712,8 @@ def run_scanner():
                                 adjusted_score -= 15  # PÃ©nalitÃ© forte
                                 add_bot_log(f"âš ï¸ {opp['pair']} LONG pÃ©nalisÃ© -15 (Extreme Greed)", 'INFO')
                         elif signal_direction == 'SHORT':
-                            # SHORT en Extreme Greed = BONUS (correction probable)
-                            adjusted_score += 10
-                            add_bot_log(f"ðŸ’¡ {opp['pair']} SHORT bonus +10 (Extreme Greed = correction)", 'INFO')
+                            # SHORT en Extreme Greed: pas de bonus contrarian
+                            pass
                     
                     # â”€â”€ EXTREME FEAR (â‰¤20): MarchÃ© en panique â”€â”€
                     elif fg_value <= 20:
@@ -666,32 +733,33 @@ def run_scanner():
                                 # Technique encore baissiÃ¨re = SHORT OK
                                 add_bot_log(f"âœ… {opp['pair']} SHORT confirmÃ© (Fear + technique bearish)", 'INFO')
                         elif signal_direction == 'LONG':
-                            # LONG en Extreme Fear = BONUS (contrarian prouvÃ©)
-                            if rsi < 35:  # Oversold
-                                adjusted_score += 15  # Gros bonus
-                                add_bot_log(f"ðŸ’° {opp['pair']} LONG bonus +15 (Extreme Fear + RSI {rsi:.0f})", 'INFO')
-                            else:
-                                adjusted_score += 5
+                            # LONG en Extreme Fear = PRUDENCE (pas de bonus)
+                            # Ne pas attraper un couteau qui tombe!
+                            price_mom = opp_indicators.get('price_momentum', 'NEUTRAL')
+                            if price_mom != 'BULLISH':
+                                adjusted_score -= 10  # Penalite sans momentum
+                                add_bot_log(f"Warning {opp['pair']} LONG prudent", 'INFO')
                     
                     # â”€â”€ FEAR (21-40): Prudent mais opportunitÃ©s â”€â”€
                     elif fg_value <= 40:
                         if signal_direction == 'SHORT' and rsi < 35:
                             adjusted_score -= 5  # LÃ©gÃ¨re pÃ©nalitÃ© si RSI dÃ©jÃ  bas
-                        elif signal_direction == 'LONG' and rsi < 40:
-                            adjusted_score += 5  # LÃ©ger bonus pour achat en fear
+                        # LONG en Fear: pas de bonus automatique
+                        pass
                     
                     # â”€â”€ GREED (60-79): Prudent sur les LONG â”€â”€
                     elif fg_value >= 60:
                         if signal_direction == 'LONG' and rsi > 65:
                             adjusted_score -= 5  # LÃ©gÃ¨re pÃ©nalitÃ©
-                        elif signal_direction == 'SHORT':
-                            adjusted_score += 3  # LÃ©ger bonus
+                        # SHORT en Greed: pas de bonus automatique
+                        pass
                 
                 # RÃ¨gles strictes d'ouverture (LONG ou SHORT)
                 if (adjusted_score >= effective_min_score
                         and signal_direction in ['LONG', 'SHORT']  # Accepter LONG ET SHORT
+                        and ((signal_direction == 'LONG' and allow_long) or (signal_direction == 'SHORT' and allow_short))
                         and opp['pair'] not in my_positions
-                        and len(my_positions) < MAX_POSITIONS
+                        and len(my_positions) < max_pos
                         and opp['stop_loss'] is not None
                         and opp['take_profit_1'] is not None):
 
@@ -1737,4 +1805,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     add_bot_log(f"Dashboard: http://localhost:{port}", 'INFO')
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
