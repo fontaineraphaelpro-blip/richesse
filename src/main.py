@@ -87,47 +87,47 @@ SCORE_NEUTRAL_MARKET = 72    # Score min si marche neutre
 MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1 (realiste et rentable)
 
 # Configuration News & Sentiment
-NEWS_ENABLED = True           # Activer l'analyse des news
-SENTIMENT_SCORE_ADJUST = True # Ajuster le score selon sentiment
-PAUSE_ON_EVENTS = True        # Pause trading lors d'Ã©vÃ©nements majeurs (FOMC, CPI)
+NEWS_ENABLED = False          # DÉSACTIVÉ - trop de bruit
+SENTIMENT_SCORE_ADJUST = False # DÉSACTIVÉ
+PAUSE_ON_EVENTS = False       # DÉSACTIVÉ
 
 # Configuration Machine Learning
-ML_ENABLED = True             # Activer les prÃ©dictions ML
-ML_MIN_PROBABILITY = 60       # ProbabilitÃ© minimum pour trader
-ML_SCORE_ADJUST = True        # Ajuster le score selon ML
+ML_ENABLED = False            # DÉSACTIVÉ - trop de bruit
+ML_MIN_PROBABILITY = 60       # (non utilisé)
+ML_SCORE_ADJUST = False       # DÉSACTIVÉ
 
 # Configuration On-Chain
-ONCHAIN_ENABLED = True        # Activer l'analyse on-chain
-ONCHAIN_SCORE_ADJUST = True   # Ajuster le score selon on-chain
+ONCHAIN_ENABLED = False       # DÉSACTIVÉ - trop de bruit
+ONCHAIN_SCORE_ADJUST = False  # DÉSACTIVÉ
 
 # Configuration Position Sizing (Kelly)
 KELLY_SIZING_ENABLED = True   # Utiliser Kelly pour le sizing
 FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly dÃ©sactivÃ©
 
-# Configuration Macro Events (Calendrier Ã©conomique)
-MACRO_EVENTS_ENABLED = True   # Activer le calendrier Ã©conomique
-PAUSE_ON_FOMC = True          # Pause trading autour du FOMC
-PAUSE_ON_CPI = True           # Pause trading autour du CPI
-REGULATION_ALERTS = True      # Alertes rÃ©gulations crypto
+# Configuration Macro Events (Calendrier économique)
+MACRO_EVENTS_ENABLED = False  # DÉSACTIVÉ - trop de bruit
+PAUSE_ON_FOMC = False         # DÉSACTIVÉ
+PAUSE_ON_CPI = False          # DÉSACTIVÉ
+REGULATION_ALERTS = False     # DÉSACTIVÉ
 
 # Social Sentiment
-SOCIAL_SENTIMENT_ENABLED = True  # Utiliser Fear & Greed Index
-SOCIAL_SCORE_MODIFIER = True     # Modifier score selon sentiment
+SOCIAL_SENTIMENT_ENABLED = False # DÉSACTIVÉ - trop de bruit
+SOCIAL_SCORE_MODIFIER = False    # DÉSACTIVÉ
 
 # Trade Journal AI
 TRADE_JOURNAL_ENABLED = True     # Enregistrer tous les trades
 JOURNAL_LEARN_PATTERNS = True    # Apprendre des erreurs passees
 
-# ANALYSE FONDAMENTALE (EQUILIBRE)
-FUNDAMENTAL_ENABLED = True       # Activer l'analyse fondamentale
-FUNDAMENTAL_SCORE_ADJUST = True  # Ajuster score selon fondamentaux
-FUNDAMENTAL_MIN_SCORE = 45       # Score fondamental minimum (filtre les shitcoins)
-FUNDAMENTAL_BLOCK_AVOID = True   # Bloquer les trades sur tokens "AVOID"
+# ANALYSE FONDAMENTALE
+FUNDAMENTAL_ENABLED = False      # DÉSACTIVÉ - trop de bruit
+FUNDAMENTAL_SCORE_ADJUST = False # DÉSACTIVÉ
+FUNDAMENTAL_MIN_SCORE = 0        # (non utilisé)
+FUNDAMENTAL_BLOCK_AVOID = False  # DÉSACTIVÉ
 
-# ANALYSE TECHNIQUE AVANCEE (EQUILIBRE)
-ADVANCED_TA_ENABLED = True       # Activer l'analyse technique avancee
-ADVANCED_TA_SCORE_ADJUST = True  # Ajuster score selon analyse avancee
-ADVANCED_TA_MIN_SCORE = 50       # Score technique minimum
+# ANALYSE TECHNIQUE AVANCEE
+ADVANCED_TA_ENABLED = False      # DÉSACTIVÉ - garder simple
+ADVANCED_TA_SCORE_ADJUST = False # DÉSACTIVÉ
+ADVANCED_TA_MIN_SCORE = 0        # (non utilisé)
 ADVANCED_TA_WEIGHT = 0.25        # Poids de l'analyse avancee
 
 # Pyramiding (Renforcement de position)
