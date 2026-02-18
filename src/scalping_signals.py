@@ -45,7 +45,8 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     # Patterns + indicateurs + structure de marché
     if HAS_CHART_ANALYZER and df is not None and len(df) >= 100:
         chart_result = analyze_chart_complete(df, indicators)
-        if chart_result.get('entry_signal') != 'NEUTRAL' and chart_result.get('confidence', 0) >= 55:
+        chart_confidence = chart_result.get('confidence') or 0
+        if chart_result.get('entry_signal') != 'NEUTRAL' and chart_confidence >= 55:
             return chart_result
     
     # === FALLBACK: ANCIENNE STRATÉGIE MOMENTUM ===

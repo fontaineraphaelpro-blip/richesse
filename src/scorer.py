@@ -53,7 +53,7 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
     # Calcul signaux bruts (avec df pour l'analyse graphique complète)
     signals = calculate_entry_exit_signals(indicators, support, resistance, df)
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
-    confidence = signals.get('confidence', 0)
+    confidence = signals.get('confidence') or 0  # Handle None explicitly
 
     # Si le signal est NEUTRAL, on arrête là
     if entry_signal == 'NEUTRAL':
