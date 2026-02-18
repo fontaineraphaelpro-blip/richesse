@@ -15,20 +15,38 @@ try:
 except ImportError:
     HAS_PULLBACK_STRATEGY = False
 
+# Import de l'analyseur de graphiques complet
+try:
+    from chart_analyzer import analyze_chart_complete
+    HAS_CHART_ANALYZER = True
+except ImportError:
+    HAS_CHART_ANALYZER = False
 
-def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], resistance: Optional[float]) -> Dict:
+
+def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], resistance: Optional[float], df: pd.DataFrame = None) -> Dict:
     """
     Calcule les signaux d'entrée et de sortie.
     
-    V2: Utilise la stratégie PULLBACK en priorité pour un meilleur timing.
-    Fallback sur l'ancienne stratégie momentum si pas de pullback.
+    V3: Combine PULLBACK + CHART ANALYSIS pour le meilleur timing.
+    Ordre de priorité:
+    1. Stratégie Pullback (entrée sur retracements)
+    2. Analyse graphique complète (patterns + indicateurs)
+    3. Fallback momentum (ancienne stratégie)
     """
-    # === STRATÉGIE PULLBACK (PRIORITAIRE) ===
-    # Meilleur timing: on attend les retracements vers EMA au lieu de chasser les breakouts
+    # === STRATÉGIE 1: PULLBACK (PRIORITAIRE) ===
+    # Meilleur timing: on attend les retracements vers EMA
     if HAS_PULLBACK_STRATEGY:
         pullback_result = get_pullback_signal(indicators, support, resistance)
         if pullback_result.get('entry_signal') != 'NEUTRAL':
+            pullback_result['strategy'] = 'PULLBACK'
             return pullback_result
+    
+    # === STRATÉGIE 2: ANALYSE GRAPHIQUE COMPLÈTE ===
+    # Patterns + indicateurs + structure de marché
+    if HAS_CHART_ANALYZER and df is not None and len(df) >= 100:
+        chart_result = analyze_chart_complete(df, indicators)
+        if chart_result.get('entry_signal') != 'NEUTRAL' and chart_result.get('confidence', 0) >= 55:
+            return chart_result
     
     # === FALLBACK: ANCIENNE STRATÉGIE MOMENTUM ===
     return _calculate_momentum_signals(indicators, support, resistance)

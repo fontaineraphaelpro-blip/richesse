@@ -50,8 +50,8 @@ def calculate_opportunity_score(indicators: Dict, support_distance: Optional[flo
         support = find_swing_low(df, lookback=30)
         resistance = find_resistance(df, lookback=30)
     
-    # Calcul signaux bruts
-    signals = calculate_entry_exit_signals(indicators, support, resistance)
+    # Calcul signaux bruts (avec df pour l'analyse graphique complète)
+    signals = calculate_entry_exit_signals(indicators, support, resistance, df)
     entry_signal = signals.get('entry_signal', 'NEUTRAL')
     confidence = signals.get('confidence', 0)
 

@@ -55,7 +55,7 @@ class Backtester:
             support = scalping_signals.find_resistance(window, lookback=30)
             resistance = None
 
-            sig = scalping_signals.calculate_entry_exit_signals(indicators, support, resistance)
+            sig = scalping_signals.calculate_entry_exit_signals(indicators, support, resistance, window)
 
             entry = sig.get('entry_signal')
             entry_price = sig.get('entry_price')
