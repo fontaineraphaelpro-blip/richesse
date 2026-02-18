@@ -523,7 +523,7 @@ class ChartAnalyzer:
             if abs(p1[1] - p2[1]) / p1[1] < 0.02:  # Pics similaires (2%)
                 # Vérifier neckline
                 start_idx, end_idx = (p1[0], p2[0]) if p2[0] > p1[0] else (p2[0], p1[0])
-                valley_between = float(np.min(lows.values[start_idx:end_idx])) if end_idx > start_idx else lows.iloc[start_idx]
+                valley_between = float(np.min(lows[start_idx:end_idx])) if end_idx > start_idx else float(lows[start_idx])
                 if current_price < valley_between:
                     patterns.append('Double Top')
                     bearish_score += 40
@@ -536,7 +536,7 @@ class ChartAnalyzer:
             t1, t2 = troughs[-2], troughs[-1]
             if abs(t1[1] - t2[1]) / t1[1] < 0.02:
                 start_idx, end_idx = (t1[0], t2[0]) if t2[0] > t1[0] else (t2[0], t1[0])
-                peak_between = float(np.max(highs.values[start_idx:end_idx])) if end_idx > start_idx else highs.iloc[start_idx]
+                peak_between = float(np.max(highs[start_idx:end_idx])) if end_idx > start_idx else float(highs[start_idx])
                 if current_price > peak_between:
                     patterns.append('Double Bottom')
                     bullish_score += 40
@@ -570,8 +570,8 @@ class ChartAnalyzer:
         
         # === TRIANGLES ===
         if len(highs) >= 15:
-            recent_highs = highs.values[-15:]
-            recent_lows = lows.values[-15:]
+            recent_highs = highs[-15:]
+            recent_lows = lows[-15:]
             
             high_trend = np.polyfit(range(len(recent_highs)), recent_highs, 1)[0]
             low_trend = np.polyfit(range(len(recent_lows)), recent_lows, 1)[0]
