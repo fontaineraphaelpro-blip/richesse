@@ -271,7 +271,7 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                         stop_loss = support_sl
             
             tp1 = entry_price + (atr_value * atr_tp_multiplier)
-            tp2 = entry_price + (atr_value * 3.0)
+            tp2 = entry_price + (atr_value * 4.5)  # TP2 plus loin que TP1 pour partial TP
             
         elif entry_signal == 'SHORT':
             # SL au-dessus du prix
@@ -286,7 +286,7 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
                         stop_loss = res_sl
             
             tp1 = entry_price - (atr_value * atr_tp_multiplier)
-            tp2 = entry_price - (atr_value * 3.0)
+            tp2 = entry_price - (atr_value * 4.5)  # TP2 plus loin que TP1 pour partial TP
 
         # Calcul Ratio Risque/Récompense (Risk/Reward)
         risk = abs(entry_price - stop_loss)
