@@ -201,30 +201,42 @@ def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], res
     # Calcul de l'écart entre signaux
     signal_strength_diff = abs(bullish_confirmations - bearish_confirmations)
     
-    # Filtre ADX - tendance présente (pas extrême)
-    adx_valid = adx is None or adx >= 18
-    
-    # FILTRE MOMENTUM - Ne pas trader CONTRE le mouvement actuel!
-    momentum_aligned_long = price_momentum in ['BULLISH', 'NEUTRAL']  # OK si neutre ou bullish
-    momentum_aligned_short = price_momentum in ['BEARISH', 'NEUTRAL']  # OK si neutre ou bearish
-    
-    if bullish_confirmations > bearish_confirmations:
-        # Signal FORT: 5+ confirmations avec bonne confiance + momentum aligné
-        if bullish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3 and momentum_aligned_long:
+    # Filtre ADX - tendance présente (plus strict pour éviter de trader le bruit)
+    adx_valid = adx is None or adx >= 20
+    if adx is not None and adx < 22:
+        confidence -= 5  # légère pénalité si la force de tendance est faible
+
+    # FILTRE MOMENTUM - Ne trader que dans la direction active (plus de neutre toléré)
+    momentum_aligned_long = price_momentum == 'BULLISH'
+    momentum_aligned_short = price_momentum == 'BEARISH'
+
+    # Anti-chasing: éviter d'acheter trop haut ou de shorter trop bas
+    ema_ref = ema21 or ema9
+    chasing_long = False
+    chasing_short = False
+    if ema_ref:
+        if current_price > ema_ref * 1.02 and rsi14 and rsi14 > 65:
+            chasing_long = True
+        if current_price < ema_ref * 0.98 and rsi14 and rsi14 < 35:
+            chasing_short = True
+
+    if bullish_confirmations > bearish_confirmations and not chasing_long:
+        # Signal FORT: plus de confirmations et confiance élevée, momentum impératif
+        if bullish_confirmations >= 5 and confidence >= 60 and signal_strength_diff >= 3 and momentum_aligned_long and adx_valid:
             entry_signal = 'LONG'
             entry_price = current_price
-        # Signal VALIDE: 4+ confirmations aligné avec tendance + momentum
-        elif bullish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BULLISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_long:
+        # Signal VALIDE: seuils relevés pour réduire les entrées tardives
+        elif bullish_confirmations >= 4 and confidence >= 55 and ema_trend == 'BULLISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_long:
             entry_signal = 'LONG'
             entry_price = current_price
             
-    elif bearish_confirmations > bullish_confirmations:
-        # Signal FORT: 5+ confirmations avec bonne confiance + momentum aligné
-        if bearish_confirmations >= 5 and confidence >= 55 and signal_strength_diff >= 3 and momentum_aligned_short:
+    elif bearish_confirmations > bullish_confirmations and not chasing_short:
+        # Signal FORT
+        if bearish_confirmations >= 5 and confidence >= 60 and signal_strength_diff >= 3 and momentum_aligned_short and adx_valid:
             entry_signal = 'SHORT'
             entry_price = current_price
-        # Signal VALIDE: 4+ confirmations aligné avec tendance + momentum
-        elif bearish_confirmations >= 4 and confidence >= 50 and ema_trend == 'BEARISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_short:
+        # Signal VALIDE
+        elif bearish_confirmations >= 4 and confidence >= 55 and ema_trend == 'BEARISH' and signal_strength_diff >= 2 and adx_valid and momentum_aligned_short:
             entry_signal = 'SHORT'
             entry_price = current_price
 

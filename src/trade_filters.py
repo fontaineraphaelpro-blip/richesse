@@ -19,11 +19,12 @@ class TradeFilters:
         self.volume_filter_enabled = True
         self.min_volume_ratio = 1.2  # Volume 1.2x moyenne (filtre les dead coins)
         
-        # Configuration Heures de Trading (UTC) - LARGE POUR 5 TRADES/JOUR
-        self.trading_hours_enabled = True
+        # Configuration Heures de Trading (UTC)
+        # Par défaut désactivé pour respecter la config globale (TRADING_HOURS_ENABLED = False)
+        self.trading_hours_enabled = False
         self.trading_start_hour = 6   # 6h UTC (debut session Europe)
         self.trading_end_hour = 22    # 22h UTC (fin session US)
-        self.avoid_weekends = True
+        self.avoid_weekends = False   # Aligné avec trading_hours_enabled désactivé
         
         # Configuration Score Dynamique EQUILIBRE
         self.dynamic_score_enabled = True

@@ -20,6 +20,7 @@ class PaperTrader:
         self.balance_file  = 'paper_wallet.json'
         self.trades_file   = 'paper_trades.json'
         self.protector = ReversalProtector()  # Protection contre reversals
+        self.short_leverage = 1.0  # Levier appliqué aux positions short (symétrique aux longs)
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
@@ -37,7 +38,7 @@ class PaperTrader:
         
         # Cooldown après trade
         self.cooldown_enabled = True
-        self.cooldown_minutes = 30
+        self.cooldown_minutes = 10  # Aligner sur la config globale (10 min)
         self.recent_trades = {}  # {symbol: last_trade_timestamp}
 
         # Chargement ou création du portefeuille
@@ -498,7 +499,8 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        quantity = (amount_usdt / current_price) * 15  # Levier 15x appliqué
+        # Taille identique aux longs (pas de levier excessif qui fausse le R/R)
+        quantity = (amount_usdt / current_price) * self.short_leverage
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
