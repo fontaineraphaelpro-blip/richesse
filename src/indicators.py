@@ -298,8 +298,8 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         
         # --- VOLUME ---
         'current_volume': volume.iloc[-1],
-        'volume_ma20': volume_ma20.iloc[-1],
-        'volume_ratio': volume.iloc[-1] / volume_ma20.iloc[-1] if volume_ma20.iloc[-1] > 0 else 0,
+        'volume_ma20': volume_ma20.iloc[-1] if not pd.isna(volume_ma20.iloc[-1]) else 0,
+        'volume_ratio': volume.iloc[-1] / volume_ma20.iloc[-1] if (not pd.isna(volume_ma20.iloc[-1]) and volume_ma20.iloc[-1] > 0) else None,
         
         # --- PATTERNS & EXTRA ---
         'candlestick_patterns': patterns.get('patterns', []),

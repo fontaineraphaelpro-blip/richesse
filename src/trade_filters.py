@@ -17,7 +17,7 @@ class TradeFilters:
     def __init__(self):
         # Configuration Volume (FILTRE SHITCOINS)
         self.volume_filter_enabled = True
-        self.min_volume_ratio = 1.2  # Volume 1.2x moyenne (filtre les dead coins)
+        self.min_volume_ratio = 0.8  # Volume 0.8x moyenne (filtre seulement les dead coins)
         
         # Configuration Heures de Trading (UTC)
         # Par défaut désactivé pour respecter la config globale (TRADING_HOURS_ENABLED = False)
@@ -52,10 +52,13 @@ class TradeFilters:
         if not self.volume_filter_enabled:
             return True, "Volume filter désactivé"
         
-        volume_ratio = indicators.get('volume_ratio', 0)
+        volume_ratio = indicators.get('volume_ratio')
         
-        if volume_ratio is None or volume_ratio == 0:
-            return False, "Volume ratio non disponible"
+        if volume_ratio is None:
+            return False, "Volume data unavailable"
+        
+        if volume_ratio == 0:
+            return False, "Volume ratio zero"
         
         if volume_ratio >= self.min_volume_ratio:
             return True, f"✅ Volume OK: {volume_ratio:.2f}x moyenne"
