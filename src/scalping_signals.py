@@ -1,12 +1,40 @@
 """
 Module pour détecter les signaux d'entrée et de sortie pour le scalping.
 Adapté pour les données réelles (Binance) avec des seuils réalistes.
+
+V2: Utilise la stratégie PULLBACK en priorité (meilleur timing d'entrée).
 """
 
 import pandas as pd
 from typing import Dict, Optional, Tuple
 
+# Import de la nouvelle stratégie pullback
+try:
+    from entry_strategy import get_entry_signal as get_pullback_signal
+    HAS_PULLBACK_STRATEGY = True
+except ImportError:
+    HAS_PULLBACK_STRATEGY = False
+
+
 def calculate_entry_exit_signals(indicators: Dict, support: Optional[float], resistance: Optional[float]) -> Dict:
+    """
+    Calcule les signaux d'entrée et de sortie.
+    
+    V2: Utilise la stratégie PULLBACK en priorité pour un meilleur timing.
+    Fallback sur l'ancienne stratégie momentum si pas de pullback.
+    """
+    # === STRATÉGIE PULLBACK (PRIORITAIRE) ===
+    # Meilleur timing: on attend les retracements vers EMA au lieu de chasser les breakouts
+    if HAS_PULLBACK_STRATEGY:
+        pullback_result = get_pullback_signal(indicators, support, resistance)
+        if pullback_result.get('entry_signal') != 'NEUTRAL':
+            return pullback_result
+    
+    # === FALLBACK: ANCIENNE STRATÉGIE MOMENTUM ===
+    return _calculate_momentum_signals(indicators, support, resistance)
+
+
+def _calculate_momentum_signals(indicators: Dict, support: Optional[float], resistance: Optional[float]) -> Dict:
     """
     Calcule les signaux d'entrée et de sortie basés sur une convergence d'indicateurs.
     
