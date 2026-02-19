@@ -38,7 +38,7 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
-TRADE_AMOUNT     = 200     # USDT par trade
+TRADE_AMOUNT     = 100     # USDT par trade (fixe, sizing supprimé)
 MIN_SCORE_BUY    = 65      # Score min AGRESSIF - plus de trades
 SCAN_INTERVAL    = 60      # Secondes entre scans (1 min - ULTRA REACTIF)
 MAX_POSITIONS    = 8       # Positions simultanees max (AUGMENTÉ)
@@ -101,8 +101,8 @@ ONCHAIN_ENABLED = False       # DÉSACTIVÉ - trop de bruit
 ONCHAIN_SCORE_ADJUST = False  # DÉSACTIVÉ
 
 # Configuration Position Sizing (Kelly)
-KELLY_SIZING_ENABLED = True   # Utiliser Kelly pour le sizing
-FIXED_TRADE_AMOUNT = 200      # Montant fixe si Kelly dÃ©sactivÃ©
+KELLY_SIZING_ENABLED = False   # Sizing désactivé
+FIXED_TRADE_AMOUNT = 100      # Toujours 100€ par position
 
 # Configuration Macro Events (Calendrier économique)
 MACRO_EVENTS_ENABLED = False  # DÉSACTIVÉ - trop de bruit
@@ -915,18 +915,7 @@ def run_scanner():
                             add_bot_log(f"ðŸ”— {opp['pair']} On-chain: {onchain_reason}", 'INFO')
 
                     if balance >= TRADE_AMOUNT:
-                        # â”€â”€ CALCUL POSITION SIZING (KELLY) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                        if KELLY_SIZING_ENABLED:
-                            trade_amount, sizing_breakdown = calculate_position_size(
-                                capital=balance,
-                                indicators=opp_indicators,
-                                score=adjusted_score,
-                                ml_probability=ml_prob if ML_ENABLED else 50,
-                                stop_loss_pct=abs((opp['price'] - opp['stop_loss']) / opp['price'] * 100)
-                            )
-                            add_bot_log(f"ðŸ“Š Kelly: ${trade_amount:.0f} ({sizing_breakdown.get('final_position', 'N/A')})", 'INFO')
-                        else:
-                            trade_amount = FIXED_TRADE_AMOUNT
+                        trade_amount = 100  # Toujours 100€ par position
                         
                         # VÃ©rifier qu'on a assez de balance
                         if balance < trade_amount:

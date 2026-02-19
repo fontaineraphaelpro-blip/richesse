@@ -446,7 +446,8 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        quantity = (amount_usdt / current_price) * self.long_leverage
+        quantity = amount_usdt / current_price
+        quantity = quantity * self.long_leverage
 
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
@@ -501,7 +502,8 @@ class PaperTrader:
             return False
 
         # Taille identique aux longs (pas de levier excessif qui fausse le R/R)
-        quantity = (amount_usdt / current_price) * self.short_leverage
+        quantity = amount_usdt / current_price
+        quantity = quantity * self.short_leverage
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
