@@ -38,7 +38,7 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
-TRADE_AMOUNT     = 100     # USDT par trade (fixe, sizing supprimé)
+TRADE_AMOUNT     = 1000    # USDT par trade (taille totale, marge 100$ avec levier 10)
 MIN_SCORE_BUY    = 65      # Score min AGRESSIF - plus de trades
 SCAN_INTERVAL    = 60      # Secondes entre scans (1 min - ULTRA REACTIF)
 MAX_POSITIONS    = 8       # Positions simultanees max (AUGMENTÉ)
