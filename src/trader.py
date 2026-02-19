@@ -479,8 +479,8 @@ class PaperTrader:
 
         sl_dist_pct = abs((current_price - stop_loss_price) / current_price * 100)
         tp_dist_pct = abs((take_profit_price - current_price) / current_price * 100)
-          position_size = amount_usdt * self.long_leverage
-          print(f"🛒 ACHAT  {symbol:<12} | ${current_price:.6f} | "
+        position_size = amount_usdt * self.long_leverage
+        print(f"🛒 ACHAT  {symbol:<12} | ${current_price:.6f} | "
               f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier {self.long_leverage}x, marge ${amount_usdt:.2f})")
         return True
 
@@ -532,8 +532,8 @@ class PaperTrader:
             'pnl_percent': 0,
         })
 
-          position_size = amount_usdt * self.short_leverage
-          print(f"📉 SHORT  {symbol:<12} | ${current_price:.6f} | "
+        position_size = amount_usdt * self.short_leverage
+        print(f"📉 SHORT  {symbol:<12} | ${current_price:.6f} | "
               f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | Taille position:${position_size:.2f} (levier {self.short_leverage}x, marge ${amount_usdt:.2f})")
         return True
 
