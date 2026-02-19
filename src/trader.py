@@ -20,7 +20,8 @@ class PaperTrader:
         self.balance_file  = 'paper_wallet.json'
         self.trades_file   = 'paper_trades.json'
         self.protector = ReversalProtector()  # Protection contre reversals
-        self.short_leverage = 1.0  # Levier appliqué aux positions short (symétrique aux longs)
+        self.short_leverage = 10.0  # Levier appliqué aux positions short (symétrique aux longs)
+        self.long_leverage = 10.0   # Levier appliqué aux positions long
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
@@ -445,7 +446,7 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        quantity = amount_usdt / current_price
+        quantity = (amount_usdt / current_price) * self.long_leverage
 
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
