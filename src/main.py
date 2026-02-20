@@ -38,7 +38,7 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 TIMEFRAME        = '1h'    # Timeframe Swing Trading
 CANDLE_LIMIT     = 500     # SMA200 requires 200+ candles
-TRADE_AMOUNT     = 1000    # USDT par trade (taille totale, marge 100$ avec levier 10)
+TRADE_AMOUNT     = None    # Calculé dynamiquement par Kelly
 MIN_SCORE_BUY    = 65      # Score min AGRESSIF - plus de trades
 SCAN_INTERVAL    = 60      # Secondes entre scans (1 min - ULTRA REACTIF)
 MAX_POSITIONS    = 8       # Positions simultanees max (AUGMENTÉ)
@@ -101,8 +101,8 @@ ONCHAIN_ENABLED = False       # DÉSACTIVÉ - trop de bruit
 ONCHAIN_SCORE_ADJUST = False  # DÉSACTIVÉ
 
 # Configuration Position Sizing (Kelly)
-KELLY_SIZING_ENABLED = False   # Sizing désactivé
-FIXED_TRADE_AMOUNT = 100      # Toujours 100€ par position
+KELLY_SIZING_ENABLED = True   # Sizing activé (Kelly)
+FIXED_TRADE_AMOUNT = None     # Désactivé, calcul dynamique
 
 # Configuration Macro Events (Calendrier économique)
 MACRO_EVENTS_ENABLED = False  # DÉSACTIVÉ - trop de bruit
@@ -679,12 +679,37 @@ def run_scanner():
                     allow_long = True
                     allow_short = True
                     max_pos = MAX_POSITIONS
-                
+
                 # Direction du signal
                 signal_direction = opp['entry_signal']  # 'LONG', 'SHORT', ou 'NEUTRAL'
-                
+
                 # Ajuster le score selon le sentiment marchÃ© ET les Ã©vÃ©nements macro
                 adjusted_score = opp['score'] + sentiment_modifier + macro_modifier
+
+                # Calcul dynamique du montant par trade via Kelly
+                from position_sizing import PositionSizer
+                sizer = PositionSizer(initial_capital=100)
+                # On suppose que le capital = balance actuel
+                # On utilise les indicateurs de la paire, le score, et la distance SL
+                indicators = all_indicators.get(opp['pair'], {})
+                stop_loss_pct = abs((opp['price'] - opp['stop_loss']) / opp['price'] * 100) if opp['stop_loss'] and opp['price'] else 2.5
+                ml_prob = 50
+                if ML_ENABLED:
+                    sentiment_data = shared_data.get('market_sentiment', {})
+                    ml_prediction = get_ml_prediction(
+                        indicators,
+                        signal_direction,
+                        sentiment_data,
+                        0
+                    )
+                    ml_prob = ml_prediction.get('probability', 50)
+                trade_amount, _ = sizer.calculate_optimal_position(
+                    capital=balance,
+                    indicators=indicators,
+                    score=adjusted_score,
+                    ml_probability=ml_prob,
+                    stop_loss_pct=stop_loss_pct
+                )
                 
                 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
                 # STRATÃ‰GIE HYBRIDE PROUVÃ‰E (Trend Following + Sentiment)
@@ -914,14 +939,8 @@ def run_scanner():
                             adjusted_score += onchain_adj
                             add_bot_log(f"ðŸ”— {opp['pair']} On-chain: {onchain_reason}", 'INFO')
 
-                    if balance >= TRADE_AMOUNT:
-                        trade_amount = 100  # Toujours 100€ par position
-                        
-                        # VÃ©rifier qu'on a assez de balance
-                        if balance < trade_amount:
-                            trade_amount = balance * 0.9  # Utiliser 90% du reste
-                        
-                        # â”€â”€ EXÃ‰CUTION LONG OU SHORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    if balance >= trade_amount:
+                        # EXÉCUTION LONG OU SHORT
                         if signal_direction == 'LONG':
                             success = trader.place_buy_order(
                                 symbol=opp['pair'],
@@ -932,7 +951,7 @@ def run_scanner():
                                 entry_trend=opp['trend'],
                                 take_profit_2=opp.get('take_profit_2')
                             )
-                            trade_emoji = "ðŸŸ¢ LONG"
+                            trade_emoji = "🟢 LONG"
                         else:  # SHORT
                             success = trader.place_short_order(
                                 symbol=opp['pair'],
@@ -942,10 +961,8 @@ def run_scanner():
                                 take_profit_price=opp['take_profit_1'],
                                 entry_trend=opp['trend']
                             )
-                            trade_emoji = "ðŸ”´ SHORT"
-                        
+                            trade_emoji = "🔴 SHORT"
                         if success:
-                            # Enregistrer le trade pour le cooldown
                             trader.record_trade_time(opp['pair'])
                             balance -= trade_amount
                             my_positions = trader.get_open_positions()
@@ -956,7 +973,7 @@ def run_scanner():
                                 'TRADE'
                             )
                     else:
-                        add_bot_log(f"Solde insuffisant pour {opp['pair']} (nÃ©cessite ${TRADE_AMOUNT})", 'WARN')
+                        add_bot_log(f"Solde insuffisant pour {opp['pair']} (nécessite ${trade_amount:.2f})", 'WARN')
                         break
 
         update_performance_stats(trader)

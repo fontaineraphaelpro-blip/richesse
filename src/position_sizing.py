@@ -21,7 +21,7 @@ class PositionSizer:
     Combine plusieurs méthodes pour optimiser le sizing.
     """
     
-    def __init__(self, initial_capital: float = 1000):
+    def __init__(self, initial_capital: float = 100):
         self.initial_capital = initial_capital
         
         # Configuration Kelly

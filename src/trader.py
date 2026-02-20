@@ -16,7 +16,7 @@ from reversal_protection import ReversalProtector
 
 
 class PaperTrader:
-    def __init__(self, initial_balance=1000):
+    def __init__(self, initial_balance=100):
         self.balance_file  = 'paper_wallet.json'
         self.trades_file   = 'paper_trades.json'
         self.protector = ReversalProtector()  # Protection contre reversals
