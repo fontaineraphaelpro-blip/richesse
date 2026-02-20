@@ -1035,7 +1035,7 @@ def dashboard():
             'direction':   direction,
             'entry':       entry,
             'current':     current,
-            'amount':      pos_data['amount_usdt'] * 10,  # Affiche la taille totale (levier 10)
+            'amount':      pos_data['amount_usdt'],  # Affiche la taille totale (levier désactivé)
             'quantity':    pos_data['quantity'],
             'pnl_value':   pnl_value,
             'pnl_percent': pnl_percent,
@@ -1107,7 +1107,7 @@ def api_data():
         progress = max(0, min(100, ((current - sl) / range_total) * 100))
         positions_view.append({
             'symbol': symbol, 'entry': entry, 'current': current,
-            'amount': pos_data['amount_usdt'] * 10, 'quantity': pos_data['quantity'],  # Affiche la taille totale (levier 10)
+            'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],  # Affiche la taille totale (levier désactivé)
             'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
             'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
         })

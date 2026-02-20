@@ -20,8 +20,8 @@ class PaperTrader:
         self.balance_file  = 'paper_wallet.json'
         self.trades_file   = 'paper_trades.json'
         self.protector = ReversalProtector()  # Protection contre reversals
-        self.short_leverage = 10.0  # Levier appliqué aux positions short (symétrique aux longs)
-        self.long_leverage = 10.0   # Levier appliqué aux positions long
+        self.short_leverage = 1.0  # Levier désactivé (positions short)
+        self.long_leverage = 1.0   # Levier désactivé (positions long)
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
@@ -449,7 +449,7 @@ class PaperTrader:
             return False
 
         quantity = amount_usdt / current_price
-        quantity = quantity * self.long_leverage
+        # Levier désactivé : quantité inchangée
 
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
@@ -481,9 +481,9 @@ class PaperTrader:
 
         sl_dist_pct = abs((current_price - stop_loss_price) / current_price * 100)
         tp_dist_pct = abs((take_profit_price - current_price) / current_price * 100)
-        position_size = amount_usdt * self.long_leverage
+        position_size = amount_usdt  # Levier désactivé
         print(f"🛒 ACHAT  {symbol:<12} | ${current_price:.6f} | "
-              f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier {self.long_leverage}x, marge ${amount_usdt:.2f})")
+              f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
         return True
 
     def place_short_order(
@@ -506,7 +506,7 @@ class PaperTrader:
 
         # Taille identique aux longs (pas de levier excessif qui fausse le R/R)
         quantity = amount_usdt / current_price
-        quantity = quantity * self.short_leverage
+        # Levier désactivé : quantité inchangée
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
@@ -534,9 +534,9 @@ class PaperTrader:
             'pnl_percent': 0,
         })
 
-        position_size = amount_usdt * self.short_leverage
+        position_size = amount_usdt  # Levier désactivé
         print(f"📉 SHORT  {symbol:<12} | ${current_price:.6f} | "
-              f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | Taille position:${position_size:.2f} (levier {self.short_leverage}x, marge ${amount_usdt:.2f})")
+              f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
         return True
 
     def close_position(self, symbol: str, current_price: float, reason: str = "MANUEL") -> bool:
