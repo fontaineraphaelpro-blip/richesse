@@ -50,10 +50,12 @@ class PaperTrader:
                 # Migration: s'assurer que les nouveaux champs existent
                 if 'positions' not in self.wallet:
                     self.wallet['positions'] = {}
+                if 'initial_capital' not in self.wallet:
+                    self.wallet['initial_capital'] = 100
             except (json.JSONDecodeError, Exception):
-                self.wallet = {'USDT': initial_balance, 'positions': {}}
+                self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
         else:
-            self.wallet = {'USDT': initial_balance, 'positions': {}}
+            self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
             self.save_wallet()
 
     # ─────────────────────────────────────────────────────────
@@ -691,11 +693,11 @@ class PaperTrader:
         for symbol, reason in protected_positions:
             print(f"🛡️  {symbol} PROTÉGÉ: {reason}")
 
-    def reset_wallet(self, initial_balance: float = 1000.0):
+    def reset_wallet(self, initial_balance: float = 100):
         """Remet le portefeuille à zéro (utile pour les tests)."""
-        self.wallet = {'USDT': initial_balance, 'positions': {}}
+        self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
         self.save_wallet()
-        print(f"🔄 Portefeuille réinitialisé à ${initial_balance:.2f}")
+        print(f"🔄 Portefeuille réinitialisé à $100.00")
 
     def reverse_position(
         self,

@@ -57,13 +57,14 @@ def detect_pullback_entry(indicators: Dict, support: Optional[float], resistance
     bb_lower = indicators.get('bb_lower')
     bb_upper = indicators.get('bb_upper')
     
-    if not all([ema9, ema21, atr]):
+    if ema9 is None or ema21 is None or atr is None:
         return _empty_signal()
-    
-    # Cast pour le type checker (on sait qu'ils ne sont pas None après le check ci-dessus)
-    ema9 = float(ema9)
-    ema21 = float(ema21)
-    atr = float(atr)
+    try:
+        ema9 = float(ema9)
+        ema21 = float(ema21)
+        atr = float(atr)
+    except Exception:
+        return _empty_signal()
     
     # === ÉTAPE 1: IDENTIFIER LA TENDANCE DE FOND ===
     trend = 'NEUTRAL'

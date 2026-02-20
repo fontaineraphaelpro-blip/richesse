@@ -523,7 +523,10 @@ class ChartAnalyzer:
             if abs(p1[1] - p2[1]) / p1[1] < 0.02:  # Pics similaires (2%)
                 # Vérifier neckline
                 start_idx, end_idx = (p1[0], p2[0]) if p2[0] > p1[0] else (p2[0], p1[0])
-                valley_between = float(np.min(lows[start_idx:end_idx])) if end_idx > start_idx else float(lows[start_idx])
+                lows_slice = lows[start_idx:end_idx]
+                if hasattr(lows_slice, 'to_numpy'):
+                    lows_slice = lows_slice.to_numpy()
+                valley_between = float(np.min(lows_slice)) if end_idx > start_idx else float(lows[start_idx])
                 if current_price < valley_between:
                     patterns.append('Double Top')
                     bearish_score += 40
@@ -536,7 +539,10 @@ class ChartAnalyzer:
             t1, t2 = troughs[-2], troughs[-1]
             if abs(t1[1] - t2[1]) / t1[1] < 0.02:
                 start_idx, end_idx = (t1[0], t2[0]) if t2[0] > t1[0] else (t2[0], t1[0])
-                peak_between = float(np.max(highs[start_idx:end_idx])) if end_idx > start_idx else float(highs[start_idx])
+                highs_slice = highs[start_idx:end_idx]
+                if hasattr(highs_slice, 'to_numpy'):
+                    highs_slice = highs_slice.to_numpy()
+                peak_between = float(np.max(highs_slice)) if end_idx > start_idx else float(highs[start_idx])
                 if current_price > peak_between:
                     patterns.append('Double Bottom')
                     bullish_score += 40
@@ -572,7 +578,10 @@ class ChartAnalyzer:
         if len(highs) >= 15:
             recent_highs = highs[-15:]
             recent_lows = lows[-15:]
-            
+            if hasattr(recent_highs, 'to_numpy'):
+                recent_highs = recent_highs.to_numpy()
+            if hasattr(recent_lows, 'to_numpy'):
+                recent_lows = recent_lows.to_numpy()
             high_trend = np.polyfit(range(len(recent_highs)), recent_highs, 1)[0]
             low_trend = np.polyfit(range(len(recent_lows)), recent_lows, 1)[0]
             
