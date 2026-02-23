@@ -23,6 +23,7 @@ if __name__ == '__main__':
     # Lancer le bot de trading (SHORT) en arrière-plan
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
+    print("  [OK] Bot 1 ACTIF — SHORT grandes baisses (scan Binance 15m)")
 
     # Lancer le bot d'arbitrage (APIs publiques)
     arbitrage_thread = threading.Thread(
@@ -38,6 +39,7 @@ if __name__ == '__main__':
         daemon=True,
     )
     arbitrage_thread.start()
+    print("  [OK] Bot 2 ACTIF — Arbitrage CEX (Binance / KuCoin / Bybit)")
 
     mode = 'PRODUCTION' if env == 'production' else 'PAPER TRADING'
     print("\n" + "="*60)

@@ -75,8 +75,11 @@ def run_arbitrage_autonomous(
     try:
         import ccxt
     except ImportError:
-        _log('ERROR', 'ccxt non installé: pip install ccxt')
-        return
+        _log('ERROR', 'ccxt non installé. Installez: pip install ccxt')
+        _log('INFO', 'Bot arbitrage actif mais en attente (installez ccxt puis redémarrez).')
+        while True:
+            time.sleep(60)
+            _log('WARN', 'Toujours sans ccxt — pip install ccxt puis redémarrer run.py')
 
     exchange_ids = ['binance', 'kucoin', 'bybit']
     exchanges = []
@@ -89,8 +92,10 @@ def run_arbitrage_autonomous(
             _log('WARN', f'Exchange {ex_id} non chargé: {e}')
 
     if len(exchanges) < 2:
-        _log('ERROR', 'Au moins 2 exchanges requis pour l\'arbitrage.')
-        return
+        _log('ERROR', 'Au moins 2 exchanges requis. Bot arbitrage actif, réessaie au prochain cycle.')
+        while True:
+            time.sleep(poll_interval_sec)
+            _log('DEBUG', 'En attente de 2+ exchanges...')
 
     paper_balance, paper_trades = _load_paper_wallet()
     if shared_data is not None:
