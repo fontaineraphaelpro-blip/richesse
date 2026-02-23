@@ -327,14 +327,14 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     <div class="table-scroll">
         <table>
             <thead><tr>
-                <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Taille</th>
+                <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Marge</th>
                 <th>PnL</th><th>SL / TP</th><th>Progression</th><th>Action</th>
             </tr></thead>
             <tbody>
             {% for p in positions %}
             <tr>
                 <td style="font-weight:700;color:var(--blue)">{{ p.symbol }}</td>
-                <td><span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}</span></td>
+                <td><span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}{% if p.leverage and p.leverage != 1 %} {{ p.leverage|int }}x{% endif %}</span></td>
                 <td>${{ "%.4f"|format(p.entry) }}</td>
                 <td style="font-weight:600">${{ "%.4f"|format(p.current) }}</td>
                 <td>${{ "%.0f"|format(p.amount) }}</td>

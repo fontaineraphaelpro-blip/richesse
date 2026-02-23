@@ -21,7 +21,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class PaperTrader:
     def __init__(self, initial_balance=100):
         self.protector = ReversalProtector()  # Protection contre reversals
-        self.short_leverage = 1.0  # Levier désactivé (positions short)
+        self.short_leverage = 10.0  # Levier 10x sur les positions SHORT
         self.long_leverage = 1.0   # Levier désactivé (positions long)
         
         # Configuration Break-Even & Drawdown
@@ -509,9 +509,9 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        # Taille identique aux longs (pas de levier excessif qui fausse le R/R)
-        quantity = amount_usdt / current_price
-        # Levier désactivé : quantité inchangée
+        # Marge = amount_usdt, notional = marge × levier, quantité = notional / prix
+        lev = self.short_leverage
+        quantity = (amount_usdt * lev) / current_price
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
@@ -521,7 +521,8 @@ class PaperTrader:
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
-            'entry_trend': entry_trend,  # NOUVEAU: Mémoriser la tendance
+            'entry_trend': entry_trend,
+            'leverage':    lev,
         }
         self.save_wallet()
 
@@ -539,9 +540,10 @@ class PaperTrader:
             'pnl_percent': 0,
         })
 
-        position_size = amount_usdt  # Levier désactivé
+        notional = amount_usdt * self.short_leverage
         print(f"📉 SHORT  {symbol:<12} | ${current_price:.6f} | "
-              f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
+              f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | "
+              f"levier {int(self.short_leverage)}x | marge ${amount_usdt:.2f} | notional ${notional:.2f}")
         return True
 
     def close_position(self, symbol: str, current_price: float, reason: str = "MANUEL") -> bool:

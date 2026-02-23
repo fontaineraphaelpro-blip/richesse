@@ -399,7 +399,7 @@ def dashboard():
             'direction':   direction,
             'entry':       entry,
             'current':     current,
-            'amount':      pos_data['amount_usdt'],  # Affiche la taille totale (levier désactivé)
+            'amount':      pos_data['amount_usdt'],
             'quantity':    pos_data['quantity'],
             'pnl_value':   pnl_value,
             'pnl_percent': pnl_percent,
@@ -407,6 +407,7 @@ def dashboard():
             'tp':          tp,
             'entry_time':  pos_data.get('entry_time', 'N/A'),
             'progress':    progress,
+            'leverage':    pos_data.get('leverage', 1),
         })
 
     perf = shared_data['performance']
@@ -486,6 +487,7 @@ def api_data():
             'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],
             'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
             'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
+            'leverage': pos_data.get('leverage', 1),
         })
 
     return jsonify({
