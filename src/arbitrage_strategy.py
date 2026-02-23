@@ -13,11 +13,16 @@ import ccxt
 from web3 import Web3
 from datetime import datetime
 
-# Pour journaliser dans l'interface web
+# Pour journaliser dans l'interface web (dashboard principal)
 try:
-    from wsgi import arbitrage_logs
+    from main import shared_data
+    arbitrage_logs = shared_data.get('arbitrage_logs', [])
 except ImportError:
     arbitrage_logs = None
+    try:
+        from wsgi import arbitrage_logs
+    except ImportError:
+        pass
 
 class MultiExchangeArbitrageBot:
     def __init__(self, cex_configs, dex_configs, symbol, threshold=0.002, trade_amount=0.1, paper_trading=True):
