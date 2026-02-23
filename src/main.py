@@ -419,7 +419,7 @@ def dashboard():
         mkt=mkt,
         min_score=None,  # Plus de score minimum pour micro scalp
         timeframe=TIMEFRAME,
-        trade_amount=TRADE_AMOUNT,
+        trade_amount=FIXED_TRADE_AMOUNT,  # Micro scalp: montant fixe ou None
         stats=stats,
         chart_data=json.dumps(chart_data),
         all_pairs=all_pairs,
