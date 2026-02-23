@@ -417,7 +417,7 @@ def dashboard():
         bot_log=shared_data['bot_log'],
         perf=perf,
         mkt=mkt,
-        min_score=MIN_SCORE_BUY,
+        min_score=None,  # Plus de score minimum pour micro scalp
         timeframe=TIMEFRAME,
         trade_amount=TRADE_AMOUNT,
         stats=stats,
