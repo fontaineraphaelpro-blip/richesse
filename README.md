@@ -1,6 +1,15 @@
 # Crypto Signal Scanner — Micro Scalp Bot
 
-Scanner automatique de cryptomonnaies (Binance) qui détecte des opportunités **micro scalp** (objectif gain fixe par trade, ex: 1€) et affiche le dashboard sur le web.
+Deux bots sont présents dans le projet: **Micro Scalp** (principal, lancé par `run.py`) et **Arbitrage CEX/CEX** (optionnel, `src/arbitrage_strategy.py`). Les deux sont pensés pour être rentables et fonctionnels.
+
+## Les 2 bots
+
+| Bot | Fichier | Stratégie | Rentabilité | Lancement |
+|-----|---------|-----------|-------------|-----------|
+| **Micro Scalp** | `main.py` + `micro_scalp_strategy.py` | LONG sur RSI survendu + Bollinger basse, TP 0.35% / SL 0.15% (R:R ≈ 2.3) | R:R ≥ 2, taille plafonnée au solde, stop après 3 pertes consécutives | `python run.py` |
+| **Arbitrage** | `arbitrage_strategy.py` | Acheter sur l’exchange le moins cher, vendre sur le plus cher si spread ≥ seuil | Seuil > frais (ex: 0.5%) pour gain net | `python -m src.arbitrage_strategy` (après config CEX) |
+
+---
 
 ## 🎯 Scanner Micro Scalp (compréhensible et rentable)
 
@@ -14,6 +23,9 @@ Scanner automatique de cryptomonnaies (Binance) qui détecte des opportunités *
   - `COOLDOWN_MINUTES` = 10 après chaque trade
   - Arrêt après 3 pertes consécutives.
 
+- Arrêt après 3 pertes consécutives (sur les 3 **dernières** ventes).
+- Taille de position plafonnée au solde (98%) pour rester fonctionnel en paper trading.
+
 La logique complète est dans `src/micro_scalp_strategy.py` (entrées LONG/SHORT) et la boucle de scan dans `run_scanner()` dans `src/main.py`.
 
 ## 📊 Données
@@ -26,6 +38,8 @@ La logique complète est dans `src/micro_scalp_strategy.py` (entrées LONG/SHORT
 ```bash
 pip install -r requirements.txt
 ```
+
+Pour le **bot Arbitrage** (optionnel): `pip install ccxt web3`.
 
 ## 🚀 Utilisation
 
@@ -55,6 +69,7 @@ src/
 ├── indicators.py           # RSI, Bollinger, etc.
 ├── trader.py               # Paper trading (positions, SL/TP)
 ├── dashboard_template.py   # Template HTML du dashboard
+├── arbitrage_strategy.py   # Bot arbitrage CEX/CEX (optionnel)
 └── ...
 run.py                      # Point d'entrée: python run.py
 wsgi.py                     # Point d'entrée Gunicorn

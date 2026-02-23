@@ -2,8 +2,13 @@
 """
 arbitrage_strategy.py
 
-Bot d'arbitrage simple pour détecter et exploiter les écarts de prix entre deux exchanges.
-Ce module fonctionne indépendamment du bot de trading principal.
+Bot d'arbitrage CEX/CEX ou CEX/DEX: acheter sur l'exchange le moins cher,
+vendre sur le plus cher quand le spread dépasse un seuil.
+
+Rentabilité: le threshold (ex: 0.5% ou 1%) doit être supérieur aux frais
+des deux côtés (maker/taker) pour dégager un gain net.
+Fonctionne actuellement entre plusieurs CEX; les prix DEX sont à brancher (get_dex_prices).
+Ce module est indépendant du bot Micro Scalp (main.py).
 """
 
 
@@ -74,11 +79,10 @@ class MultiExchangeArbitrageBot:
         return prices
 
     def get_dex_prices(self):
-        # À compléter selon le DEX (Uniswap, PancakeSwap, etc.)
+        """Prix DEX (Uniswap, etc.). À implémenter selon le router du DEX."""
         prices = {}
         for dex in self.dex_exchanges:
-            # Ici, il faudrait appeler le smart contract du DEX pour obtenir le prix
-            # Placeholder: prix fictif
+            # TODO: appeler le smart contract (router) pour obtenir le prix spot
             prices[dex['name']] = None
         return prices
 
@@ -89,15 +93,18 @@ class MultiExchangeArbitrageBot:
         return all_prices
 
     def find_arbitrage(self, all_prices):
-        best_buy = min((v for v in all_prices.values() if v), default=None)
-        best_sell = max((v for v in all_prices.values() if v), default=None)
-        if best_buy is None or best_sell is None:
-            return None, None, 0
-        spread = (best_sell - best_buy) / best_buy
+        """Trouve une opportunité: acheter au moins cher, vendre au plus cher si spread >= threshold."""
+        valid_prices = {k: v for k, v in all_prices.items() if v is not None and v > 0}
+        if len(valid_prices) < 2:
+            return None, None, 0.0
+        best_buy = min(valid_prices.values())
+        best_sell = max(valid_prices.values())
+        spread = (best_sell - best_buy) / best_buy if best_buy else 0
         if spread >= self.threshold:
-            buy_ex = [k for k, v in all_prices.items() if v == best_buy][0]
-            sell_ex = [k for k, v in all_prices.items() if v == best_sell][0]
-            return buy_ex, sell_ex, spread
+            buy_ex = next(k for k, v in valid_prices.items() if v == best_buy)
+            sell_ex = next(k for k, v in valid_prices.items() if v == best_sell)
+            if buy_ex != sell_ex:
+                return buy_ex, sell_ex, spread
         return None, None, spread
 
     def log_web(self, level, msg):
@@ -148,20 +155,19 @@ class MultiExchangeArbitrageBot:
         self.running = False
         self.logger.info("Arbitrage bot stopped.")
 
-# Exemple de configuration (à remplacer par vos vraies clés et RPC)
+# Exemple de configuration (threshold > frais pour être rentable, ex: 0.5% à 1%)
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     cex_configs = [
         {'id': 'binance', 'apiKey': 'VOTRE_API_KEY', 'secret': 'VOTRE_SECRET'},
         {'id': 'kucoin', 'apiKey': 'VOTRE_API_KEY', 'secret': 'VOTRE_SECRET'},
-        # Ajoutez d'autres exchanges ici
     ]
     dex_configs = [
         {'name': 'uniswap', 'rpc_url': 'https://mainnet.infura.io/v3/VOTRE_INFURA_KEY', 'router_address': '0x...'},
-        # Ajoutez d'autres DEX ici
     ]
+    # threshold=0.005 = 0.5% (rentable si frais totaux < 0.5%)
     bot = MultiExchangeArbitrageBot(
-        cex_configs, dex_configs, 'ETH/USDT', threshold=0.01, trade_amount=0.05, paper_trading=True
+        cex_configs, dex_configs, 'ETH/USDT', threshold=0.005, trade_amount=0.05, paper_trading=True
     )
     try:
         bot.start(poll_interval=10)

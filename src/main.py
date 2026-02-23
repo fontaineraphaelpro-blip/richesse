@@ -278,9 +278,11 @@ def run_scanner():
         add_bot_log("Déjà une position ouverte, attente fermeture/cooldown.", 'INFO')
         return []
 
+    # Vérifier les 3 DERNIÈRES ventes (trades fermés): si toutes en perte → stop
     recent = trader.get_trades_history()
-    losses = [t for t in recent if t.get('pnl', 0) < 0][:MAX_CONSECUTIVE_LOSSES]
-    if len(losses) >= MAX_CONSECUTIVE_LOSSES:
+    sales = [t for t in recent if 'VENTE' in t.get('type', '')]
+    last_3_sales = sales[:3]
+    if len(last_3_sales) >= MAX_CONSECUTIVE_LOSSES and all(t.get('pnl', 0) < 0 for t in last_3_sales):
         add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
         return []
 
@@ -320,6 +322,12 @@ def run_scanner():
         if not price or price <= 0:
             continue
         pos_size = calculate_position_size(PROFIT_TARGET, SCALP_TARGET_PCT)
+        # Ne pas dépasser le solde (paper trading)
+        balance = trader.get_usdt_balance()
+        pos_size = min(pos_size, max(0, balance * 0.98))
+        if pos_size < 5:
+            add_bot_log(f"Solde insuffisant pour {symbol} (min ~5 USDT)", 'INFO')
+            continue
         stop_loss = price * (1 - STOP_LOSS_PCT / 100)
         take_profit = price * (1 + SCALP_TARGET_PCT / 100)
 
