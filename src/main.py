@@ -1,4 +1,4 @@
-﻿"""
+"""
 Script principal: Crypto Swing Trader Bot & Dashboard ULTIME.
 Version: ULTIMATE v2.0 â€” Scanner complet + Bot Swing + Paper Trading + Dashboard Pro
 """
@@ -37,23 +37,24 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # CONFIGURATION DU BOT
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# STRATÉGIE MICRO SCALP 1€ BOT
-TIMEFRAME        = '1m'    # Timeframe Micro Scalp
-CANDLE_LIMIT     = 100     # Moins de bougies nécessaires
-PROFIT_TARGET    = 1.0     # Objectif de gain fixe par trade (en €)
-SCALP_TARGET_PCT = 0.2     # Target % par trade (ex: 0.2%)
-STOP_LOSS_PCT    = 0.15    # Stop court (ex: 0.15%)
-SCAN_INTERVAL    = 10      # Scan toutes les 10 secondes
-MAX_POSITIONS    = 1       # 1 position max à la fois
-COOLDOWN_MINUTES = 3       # Cooldown 2-5 min après chaque trade
-MAX_CONSECUTIVE_LOSSES = 3 # Stop après 3 pertes consécutives
-SPREAD_MAX_PCT   = 0.05    # Pas si spread > 0.05%
-VOLUME_RATIO_MIN = 1.1     # Volume légèrement au-dessus de la moyenne
-VOLATILITY_MAX   = 2.0     # Volatilité max tolérée (%)
-TREND_FILTER_15M = True    # Filtre trend 15m (trade dans le sens du trend)
-NEWS_FILTER      = True    # Pas pendant news
-
-# Les autres configs swing sont désactivées ou supprimées
+# STRATÉGIE MICRO SCALP — Objectif 1€ par trade, R:R >= 2
+# ─────────────────────────────────────────────────────────
+TIMEFRAME        = '1m'    # Bougies 1 minute (micro scalp)
+CANDLE_LIMIT     = 100     # Nombre de bougies par paire
+PROFIT_TARGET    = 1.0     # Gain cible par trade (€)
+SCALP_TARGET_PCT = 0.35    # Take profit en % (ex: 0.35% → R:R ~2.3 avec SL 0.15%)
+STOP_LOSS_PCT    = 0.15    # Stop loss en %
+# R:R = TP% / SL% = 0.35/0.15 ≈ 2.3 (rentable si win rate > 30%)
+SCAN_INTERVAL    = 10      # Secondes entre chaque scan
+MAX_POSITIONS    = 1       # Une seule position à la fois
+MAX_CONSECUTIVE_LOSSES = 3 # Arrêt après 3 pertes d'affilée
+COOLDOWN_MINUTES = 10      # Pause après chaque trade (min)
+# Filtres de qualité
+SPREAD_MAX_PCT   = 0.05    # Écart max bougie (éviter spread trop large)
+VOLUME_RATIO_MIN = 1.1     # Volume >= 1.1× la moyenne
+VOLATILITY_MAX   = 2.0     # ATR % max (éviter trop de risque)
+TREND_FILTER_15M = True     # Ne prendre LONG que si tendance 15m pas baissière
+NEWS_FILTER      = True    # (réservé) pas de trade pendant news
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -134,7 +135,7 @@ PYRAMIDING_GAIN_THRESHOLD = 2.0  # Ajouter si position gagne +2%
 
 # Cooldown après Trade
 COOLDOWN_ENABLED = True
-COOLDOWN_MINUTES = 10        # Attendre 10 min seulement (RÉDUIT)
+# COOLDOWN_MINUTES défini ci-dessus (10)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -146,9 +147,10 @@ ADAPTIVE_OVERRIDE_PARAMS = False
 # Ã‰TAT PARTAGÃ‰ (Thread Scanner â†” Serveur Web Flask)
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 shared_data = {
-    'opportunities': [],        # Top opportunitÃ©s du dernier scan
-    'all_scanned': [],          # Toutes les paires analysÃ©es
+    'opportunities': [],        # Top opportunités du dernier scan
+    'all_scanned': [],          # Toutes les paires analysées
     'last_prices': {},          # Prix actuels
+    'last_indicators': {},      # Derniers indicateurs par symbole (pour API)
     'is_scanning': False,
     'last_update': 'Jamais',
     'scan_count': 0,
@@ -198,7 +200,8 @@ shared_data = {
         'allow_short': True,
         'summary': '',
         'updated': None
-    }
+    },
+    'arbitrage_logs': [],       # Logs arbitrage (partagé avec arbitrage_strategy si utilisé)
 }
 
 app = Flask(__name__)
@@ -241,90 +244,89 @@ def update_performance_stats(trader: PaperTrader):
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_scanner():
-
     """
-    STRATÉGIE MICRO SCALP 1€ BOT :
-    1. Récupère les données Binance (1m ou 3m)
-    2. Cherche conditions d'entrée micro scalp (RSI, Bollinger, volume, trend 15m...)
-    3. Calcule la taille de position pour viser 1€ de gain
-    4. Place le trade avec stop court et cooldown
-    5. Stop après 3 pertes consécutives
+    Scanner MICRO SCALP — une exécution complète.
+
+    Étapes:
+      1. Récupérer les bougies 1m sur toutes les paires USDT (Binance).
+      2. Vérifier qu’on peut trader (pas 3 pertes de suite, pas de position ouverte).
+      3. Pour chaque paire: calculer indicateurs, appliquer filtres (volume, spread, volatilité, tendance 15m).
+      4. Si signal LONG (RSI survendu + Bollinger basse + volume): calculer taille de position pour 1€ de gain, placer l’ordre et sortir.
+      5. Sinon passer à la paire suivante; si aucune opportunité, retourner [].
     """
     from micro_scalp_strategy import micro_scalp_entry_long, micro_scalp_entry_short, calculate_position_size
     from indicators import calculate_indicators
     from data_fetcher import fetch_multiple_pairs
     from trader import PaperTrader
-    import time
 
     shared_data['scan_count'] += 1
     scan_num = shared_data['scan_count']
     add_bot_log(f"=== MICRO SCALP SCAN #{scan_num} ===", 'INFO')
 
-    # 1. Récupérer les données (1m ou 3m)
+    # —— 1. Données marché (1m) ——
     data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
     if not data:
         add_bot_log("Aucune donnée reçue de Binance", 'ERROR')
         return []
     shared_data['last_prices'] = real_prices
+    shared_data['last_indicators'] = {}
 
-    # 2. Initialiser le trader et vérifier positions
+    # —— 2. État du trader ——
     trader = PaperTrader()
     open_pos = trader.get_open_positions()
-    losses = [t for t in trader.get_trades_history() if t.get('pnl', 0) < 0][:MAX_CONSECUTIVE_LOSSES]
-    if len(losses) >= MAX_CONSECUTIVE_LOSSES:
-        add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
-        return []
     if open_pos:
         add_bot_log("Déjà une position ouverte, attente fermeture/cooldown.", 'INFO')
         return []
 
-    # 3. Scanner les paires pour un signal micro scalp
+    recent = trader.get_trades_history()
+    losses = [t for t in recent if t.get('pnl', 0) < 0][:MAX_CONSECUTIVE_LOSSES]
+    if len(losses) >= MAX_CONSECUTIVE_LOSSES:
+        add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
+        return []
+
+    # —— 3. Parcourir les paires et chercher un signal LONG ——
     for symbol, df in data.items():
         indicators = calculate_indicators(df)
-        # Vérifier volume, spread, volatilité, news, etc. (simplifié)
-        if indicators.get('volume_ratio', 1) < VOLUME_RATIO_MIN:
-            continue
-        spread = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
-        if spread > SPREAD_MAX_PCT:
-            continue
-        volatility = indicators.get('atr_percent', 0)
-        if volatility > VOLATILITY_MAX:
-            continue
-        # TODO: Ajouter filtre news si nécessaire
+        shared_data['last_indicators'][symbol] = indicators
 
-        # Filtre trend 15m (optionnel)
-        trend_ok = True
+        # Filtres de qualité (éviter mauvaises conditions)
+        if indicators.get('volume_ratio') is None or indicators.get('volume_ratio', 0) < VOLUME_RATIO_MIN:
+            continue
+        spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
+        if spread_pct > SPREAD_MAX_PCT:
+            continue
+        if (indicators.get('atr_percent') or 0) > VOLATILITY_MAX:
+            continue
+
+        # Tendance 15m: ne pas acheter si le graphique 15m est baissier
         if TREND_FILTER_15M:
             from data_fetcher import fetch_multi_timeframe
             tf_data = fetch_multi_timeframe(symbol, ['15m'])
-            if '15m' in tf_data:
+            if tf_data.get('15m') is not None:
                 tf_ind = calculate_indicators(tf_data['15m'])
                 if tf_ind.get('price_momentum') == 'BEARISH':
-                    trend_ok = False
-        if not trend_ok:
+                    continue
+
+        # —— Signal LONG (RSI survendu + Bollinger basse + volume) ——
+        if not micro_scalp_entry_long(df, indicators, VOLUME_RATIO_MIN):
             continue
 
-        # Signal LONG
-        if micro_scalp_entry_long(df, indicators, VOLUME_RATIO_MIN):
-            # Cooldown check
-            in_cooldown, cooldown_rem = trader.is_in_cooldown(symbol)
-            if in_cooldown:
-                add_bot_log(f"{symbol} en cooldown ({cooldown_rem:.1f} min)", 'INFO')
-                continue
-            # Calcul taille position
-            price = indicators['current_price']
-            pos_size = calculate_position_size(PROFIT_TARGET, SCALP_TARGET_PCT)
-            stop_loss = price * (1 - STOP_LOSS_PCT / 100)
-            take_profit = price * (1 + SCALP_TARGET_PCT / 100)
-            # Exécution
-            if trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='SCALP'):
-                trader.record_trade_time(symbol)
-                add_bot_log(f"LONG {symbol} | {price:.4f} | SL:{stop_loss:.4f} | TP:{take_profit:.4f}", 'TRADE')
-                return [{'pair': symbol, 'signal': 'LONG', 'price': price}]
+        in_cooldown, cooldown_rem = trader.is_in_cooldown(symbol)
+        if in_cooldown:
+            add_bot_log(f"{symbol} en cooldown ({cooldown_rem:.1f} min)", 'INFO')
+            continue
 
-        # Signal SHORT (optionnel, si futures)
-        # if micro_scalp_entry_short(df, indicators, VOLUME_RATIO_MIN):
-        #     ...
+        price = indicators.get('current_price')
+        if not price or price <= 0:
+            continue
+        pos_size = calculate_position_size(PROFIT_TARGET, SCALP_TARGET_PCT)
+        stop_loss = price * (1 - STOP_LOSS_PCT / 100)
+        take_profit = price * (1 + SCALP_TARGET_PCT / 100)
+
+        if trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='SCALP'):
+            trader.record_trade_time(symbol)
+            add_bot_log(f"LONG {symbol} @ {price:.4f} | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
+            return [{'pair': symbol, 'signal': 'LONG', 'price': price}]
 
     add_bot_log("Aucun signal micro scalp détecté.", 'INFO')
     return []
@@ -401,12 +403,7 @@ def dashboard():
     formatted_history = format_history_for_display(all_trades)
     all_pairs = get_all_pairs_from_history(all_trades)
     crash = get_crash_status()
-    
-    # Importer arbitrage_logs depuis wsgi.py
-    try:
-        from wsgi import arbitrage_logs
-    except ImportError:
-        arbitrage_logs = []
+
     return render_template_string(
         get_enhanced_dashboard(),
         balance=balance,
@@ -429,7 +426,7 @@ def dashboard():
         chart_data=json.dumps(chart_data),
         all_pairs=all_pairs,
         crash=crash,
-        arbitrage_logs=arbitrage_logs,
+        arbitrage_logs=shared_data.get('arbitrage_logs', []),
     )
 
 
@@ -441,22 +438,31 @@ def api_data():
     open_positions = trader.get_open_positions()
     all_trades = trader.get_trades_history()
     history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
-    
+
     positions_view = []
     total_unrealized_pnl = 0
     for symbol, pos_data in open_positions.items():
         entry = pos_data['entry_price']
         current = shared_data['last_prices'].get(symbol, entry)
-        pnl_value = (current - entry) * pos_data['quantity']
-        pnl_percent = ((current - entry) / entry) * 100
+        direction = pos_data.get('direction', 'LONG')
+        if direction == 'LONG':
+            pnl_value = (current - entry) * pos_data['quantity']
+            pnl_percent = ((current - entry) / entry) * 100
+        else:
+            pnl_value = (entry - current) * pos_data['quantity']
+            pnl_percent = ((entry - current) / entry) * 100
         total_unrealized_pnl += pnl_value
         sl = pos_data.get('stop_loss', entry)
         tp = pos_data.get('take_profit', entry)
-        range_total = tp - sl if (tp - sl) != 0 else 1
-        progress = max(0, min(100, ((current - sl) / range_total) * 100))
+        if direction == 'LONG':
+            range_total = tp - sl if (tp - sl) != 0 else 1
+            progress = max(0, min(100, ((current - sl) / range_total) * 100))
+        else:
+            range_total = sl - tp if (sl - tp) != 0 else 1
+            progress = max(0, min(100, ((sl - current) / range_total) * 100))
         positions_view.append({
-            'symbol': symbol, 'entry': entry, 'current': current,
-            'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],  # Affiche la taille totale (levier désactivé)
+            'symbol': symbol, 'direction': direction, 'entry': entry, 'current': current,
+            'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],
             'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
             'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
         })
@@ -549,9 +555,10 @@ def api_quick_intel():
 
 @app.route('/api/ml_prediction/<symbol>')
 def api_ml_prediction(symbol):
-    """Retourne la prÃ©diction ML pour une paire."""
+    """Retourne la prédiction ML pour une paire."""
     try:
         direction = request.args.get('direction', 'LONG')
+        all_indicators = shared_data.get('last_indicators', {})
         indicators = all_indicators.get(symbol, {})
         
         if not indicators:
@@ -625,6 +632,7 @@ def api_onchain_nupl():
 def api_position_sizing():
     """Retourne les statistiques et recommandations de position sizing."""
     try:
+        trader = PaperTrader()
         balance = trader.get_usdt_balance()
         stats = position_sizer.get_stats()
         recommendations = get_position_recommendations(balance, MAX_POSITIONS)
@@ -641,11 +649,13 @@ def api_position_sizing():
 def api_calculate_position():
     """Calcule la taille de position optimale pour un trade."""
     try:
+        trader = PaperTrader()
         symbol = request.args.get('symbol', 'BTCUSDT')
         score = int(request.args.get('score', 70))
         ml_prob = float(request.args.get('ml_prob', 50))
-        
+
         balance = trader.get_usdt_balance()
+        all_indicators = shared_data.get('last_indicators', {})
         indicators = all_indicators.get(symbol, {})
         
         position_size, breakdown = calculate_position_size(
@@ -667,10 +677,11 @@ def api_calculate_position():
 
 @app.route('/api/intelligence_summary')
 def api_intelligence_summary():
-    """Retourne un rÃ©sumÃ© de toute l'intelligence disponible."""
+    """Retourne un résumé de toute l'intelligence disponible."""
     try:
+        trader = PaperTrader()
         btc_price = shared_data.get('last_prices', {}).get('BTCUSDT', 45000)
-        
+
         return jsonify({
             'sentiment': shared_data.get('market_sentiment', {}),
             'intelligence': shared_data.get('market_intelligence', {}),
@@ -1069,7 +1080,7 @@ def run_loop():
         finally:
             shared_data['is_scanning'] = False
 
-        add_bot_log(f"Pause {SCAN_INTERVAL//60} min â€” prochain scan: {datetime.now().strftime('%H:%M')}", 'INFO')
+        add_bot_log(f"Pause {SCAN_INTERVAL} s - prochain scan: {datetime.now().strftime('%H:%M')}", 'INFO')
         time.sleep(SCAN_INTERVAL)
 
 

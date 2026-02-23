@@ -1,19 +1,25 @@
-# Crypto Signal Scanner Web
+# Crypto Signal Scanner — Micro Scalp Bot
 
-Scanner automatique de cryptomonnaies qui détecte les meilleures opportunités selon des critères techniques et affiche les résultats dans une page web.
+Scanner automatique de cryptomonnaies (Binance) qui détecte des opportunités **micro scalp** (objectif gain fixe par trade, ex: 1€) et affiche le dashboard sur le web.
 
-## 🎯 Fonctionnalités
+## 🎯 Scanner Micro Scalp (compréhensible et rentable)
 
-- Scanner automatique de 200 principales paires USDT
-- Génération de données OHLCV réalistes (libres de droit, sans API)
-- Calcul d'indicateurs techniques (SMA20, SMA50, RSI14)
-- Détection de support
-- Scoring d'opportunités (0-100)
-- Affichage web interactif avec actualisation automatique
+- **Objectif:** viser un gain fixe par trade (ex: 1€) avec un Risk/Reward ≥ 2.
+- **Signal LONG:** RSI &lt; 30 (survendu) + prix proche de la bande basse de Bollinger + volume ≥ 1.1× la moyenne.
+- **Filtres:** spread, volatilité (ATR), tendance 15m (pas d’achat si 15m baissier).
+- **Paramètres principaux** (dans `src/main.py`) :
+  - `PROFIT_TARGET` = 1.0 (€)
+  - `SCALP_TARGET_PCT` = 0.35 % (take profit) → R:R ≈ 2.3 avec SL 0.15 %
+  - `STOP_LOSS_PCT` = 0.15 %
+  - `COOLDOWN_MINUTES` = 10 après chaque trade
+  - Arrêt après 3 pertes consécutives.
+
+La logique complète est dans `src/micro_scalp_strategy.py` (entrées LONG/SHORT) et la boucle de scan dans `run_scanner()` dans `src/main.py`.
 
 ## 📊 Données
 
-Le projet utilise des données de démonstration générées localement, basées sur des prix de référence réalistes. Aucune API externe n'est nécessaire - toutes les données sont libres de droit et générées en local.
+- Données **réelles** Binance (OHLCV) via API publique.
+- Paires: liste des principales USDT définie dans `data_fetcher.py`.
 
 ## 📦 Installation
 
@@ -26,36 +32,32 @@ pip install -r requirements.txt
 ### Développement local
 
 ```bash
-python src/main.py
+python run.py
 ```
 
-Le serveur web sera accessible sur `http://localhost:5000`
+Dashboard: `http://localhost:8080` — le scanner tourne en arrière-plan (toutes les 10 s).
 
-### Production (Railway)
+### Production (Gunicorn / Railway)
 
-Le projet est configuré pour Railway avec Gunicorn. Le `Procfile` est déjà configuré :
-
-```
-web: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 wsgi:application
+```bash
+gunicorn --bind 0.0.0.0:$PORT wsgi:application
 ```
 
-Le serveur démarre automatiquement et met à jour les données toutes les heures.
+Le `Procfile` est déjà configuré ; le scanner démarre avec l’app.
 
-## 📁 Structure
+## 📁 Structure (principaux fichiers)
 
 ```
-/crypto_signal_scanner_web
-├── requirements.txt
-├── README.md
-├── Procfile
-└── src/
-    ├── fetch_pairs.py      # Récupération des paires USDT
-    ├── data_fetcher.py    # Récupération des données OHLCV
-    ├── indicators.py      # Calcul des indicateurs techniques
-    ├── support.py          # Détection du support
-    ├── scorer.py          # Calcul du score d'opportunité
-    ├── web_server.py      # Serveur Flask pour la page web
-    └── main.py            # Script principal
+src/
+├── main.py                 # App Flask + run_scanner() (boucle micro scalp)
+├── micro_scalp_strategy.py  # Signaux LONG/SHORT + calcul taille position
+├── data_fetcher.py         # Récupération OHLCV Binance
+├── indicators.py           # RSI, Bollinger, etc.
+├── trader.py               # Paper trading (positions, SL/TP)
+├── dashboard_template.py   # Template HTML du dashboard
+└── ...
+run.py                      # Point d'entrée: python run.py
+wsgi.py                     # Point d'entrée Gunicorn
 ```
 
 ## ⚠️ Avertissement
