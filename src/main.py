@@ -37,24 +37,27 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # CONFIGURATION DU BOT
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# STRATÉGIE MICRO SCALP — Objectif 1€ par trade, R:R >= 2
+# STRATÉGIE SHORT UNIQUEMENT — Grandes baisses
 # ─────────────────────────────────────────────────────────
-TIMEFRAME        = '1m'    # Bougies 1 minute (micro scalp)
+TIMEFRAME        = '15m'   # Bougies 15 min (détecter les vraies baisses)
 CANDLE_LIMIT     = 100     # Nombre de bougies par paire
-PROFIT_TARGET    = 1.0     # Gain cible par trade (€)
-SCALP_TARGET_PCT = 0.35    # Take profit en % (ex: 0.35% → R:R ~2.3 avec SL 0.15%)
-STOP_LOSS_PCT    = 0.15    # Stop loss en %
-# R:R = TP% / SL% = 0.35/0.15 ≈ 2.3 (rentable si win rate > 30%)
-SCAN_INTERVAL    = 10      # Secondes entre chaque scan
+# Pour un SHORT: SL au-dessus du prix, TP en dessous
+STOP_LOSS_PCT    = 1.0     # Stop loss au-dessus de l'entrée (%)
+TAKE_PROFIT_PCT  = 2.0     # Take profit en dessous de l'entrée (%) → R:R = 2
+SCAN_INTERVAL    = 60      # Secondes entre chaque scan
 MAX_POSITIONS    = 1       # Une seule position à la fois
 MAX_CONSECUTIVE_LOSSES = 3 # Arrêt après 3 pertes d'affilée
-COOLDOWN_MINUTES = 10      # Pause après chaque trade (min)
+COOLDOWN_MINUTES = 15      # Pause après chaque trade (min)
 # Filtres de qualité
-SPREAD_MAX_PCT   = 0.05    # Écart max bougie (éviter spread trop large)
-VOLUME_RATIO_MIN = 1.1     # Volume >= 1.1× la moyenne
-VOLATILITY_MAX   = 2.0     # ATR % max (éviter trop de risque)
-TREND_FILTER_15M = True     # Ne prendre LONG que si tendance 15m pas baissière
-NEWS_FILTER      = True    # (réservé) pas de trade pendant news
+SPREAD_MAX_PCT   = 0.15    # Écart max bougie
+VOLUME_RATIO_MIN = 1.0     # Volume au moins égal à la moyenne
+VOLATILITY_MAX   = 5.0     # ATR % max
+TREND_15M_MUST_BEARISH = True  # Ne short que si tendance 15m baissière
+POSITION_PCT_BALANCE   = 0.20  # Taille position = 20% du solde max
+MIN_POSITION_USDT      = 10    # Minimum 10 USDT par short
+
+# Limite de paires pour le scan (20 = test rapide, None = toutes les paires)
+SCAN_PAIRS_LIMIT = 20
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -245,7 +248,7 @@ def update_performance_stats(trader: PaperTrader):
 
 def run_scanner():
     """
-    Scanner MICRO SCALP — une exécution complète.
+    Scanner SHORT uniquement — grandes baisses.
 
     Étapes:
       1. Récupérer les bougies 1m sur toutes les paires USDT (Binance).
@@ -254,17 +257,21 @@ def run_scanner():
       4. Si signal LONG (RSI survendu + Bollinger basse + volume): calculer taille de position pour 1€ de gain, placer l’ordre et sortir.
       5. Sinon passer à la paire suivante; si aucune opportunité, retourner [].
     """
-    from micro_scalp_strategy import micro_scalp_entry_long, micro_scalp_entry_short, calculate_position_size
+    from short_crash_strategy import signal_short_big_drop, position_size_usdt
     from indicators import calculate_indicators
-    from data_fetcher import fetch_multiple_pairs
-    from trader import PaperTrader
+    from data_fetcher import fetch_multiple_pairs, get_top_pairs
 
     shared_data['scan_count'] += 1
     scan_num = shared_data['scan_count']
-    add_bot_log(f"=== MICRO SCALP SCAN #{scan_num} ===", 'INFO')
 
-    # —— 1. Données marché (1m) ——
-    data, real_prices = fetch_multiple_pairs(None, interval=TIMEFRAME, limit=CANDLE_LIMIT)
+    # Liste des paires (limité en mode test pour exécution rapide)
+    symbols = get_top_pairs()
+    if SCAN_PAIRS_LIMIT:
+        symbols = symbols[:SCAN_PAIRS_LIMIT]
+    add_bot_log(f"=== SHORT GRANDES BAISSES SCAN #{scan_num} ({len(symbols)} paires) ===", 'INFO')
+
+    # —— 1. Données marché (15m) ——
+    data, real_prices = fetch_multiple_pairs(symbols, interval=TIMEFRAME, limit=CANDLE_LIMIT)
     if not data:
         add_bot_log("Aucune donnée reçue de Binance", 'ERROR')
         return []
@@ -272,6 +279,7 @@ def run_scanner():
     shared_data['last_indicators'] = {}
 
     # —— 2. État du trader ——
+    from trader import PaperTrader
     trader = PaperTrader()
     open_pos = trader.get_open_positions()
     if open_pos:
@@ -286,12 +294,11 @@ def run_scanner():
         add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
         return []
 
-    # —— 3. Parcourir les paires et chercher un signal LONG ——
+    # —— 3. Parcourir les paires et chercher un signal SHORT (grande baisse) ——
     for symbol, df in data.items():
         indicators = calculate_indicators(df)
         shared_data['last_indicators'][symbol] = indicators
 
-        # Filtres de qualité (éviter mauvaises conditions)
         if indicators.get('volume_ratio') is None or indicators.get('volume_ratio', 0) < VOLUME_RATIO_MIN:
             continue
         spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
@@ -300,17 +307,16 @@ def run_scanner():
         if (indicators.get('atr_percent') or 0) > VOLATILITY_MAX:
             continue
 
-        # Tendance 15m: ne pas acheter si le graphique 15m est baissier
-        if TREND_FILTER_15M:
+        # Tendance 15m baissière requise pour short les grandes baisses
+        if TREND_15M_MUST_BEARISH:
             from data_fetcher import fetch_multi_timeframe
             tf_data = fetch_multi_timeframe(symbol, ['15m'])
             if tf_data.get('15m') is not None:
                 tf_ind = calculate_indicators(tf_data['15m'])
-                if tf_ind.get('price_momentum') == 'BEARISH':
+                if tf_ind.get('price_momentum') != 'BEARISH':
                     continue
 
-        # —— Signal LONG (RSI survendu + Bollinger basse + volume) ——
-        if not micro_scalp_entry_long(df, indicators, VOLUME_RATIO_MIN):
+        if not signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
             continue
 
         in_cooldown, cooldown_rem = trader.is_in_cooldown(symbol)
@@ -321,22 +327,23 @@ def run_scanner():
         price = indicators.get('current_price')
         if not price or price <= 0:
             continue
-        pos_size = calculate_position_size(PROFIT_TARGET, SCALP_TARGET_PCT)
-        # Ne pas dépasser le solde (paper trading)
         balance = trader.get_usdt_balance()
+        pos_size = position_size_usdt(balance, max_pct_balance=POSITION_PCT_BALANCE)
         pos_size = min(pos_size, max(0, balance * 0.98))
-        if pos_size < 5:
-            add_bot_log(f"Solde insuffisant pour {symbol} (min ~5 USDT)", 'INFO')
+        if pos_size < MIN_POSITION_USDT:
+            add_bot_log(f"Solde insuffisant pour {symbol} (min {MIN_POSITION_USDT} USDT)", 'INFO')
             continue
-        stop_loss = price * (1 - STOP_LOSS_PCT / 100)
-        take_profit = price * (1 + SCALP_TARGET_PCT / 100)
 
-        if trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='SCALP'):
+        # SHORT: SL au-dessus, TP en dessous
+        stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+        take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+
+        if trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
             trader.record_trade_time(symbol)
-            add_bot_log(f"LONG {symbol} @ {price:.4f} | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
-            return [{'pair': symbol, 'signal': 'LONG', 'price': price}]
+            add_bot_log(f"SHORT {symbol} @ {price:.4f} | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
+            return [{'pair': symbol, 'signal': 'SHORT', 'price': price}]
 
-    add_bot_log("Aucun signal micro scalp détecté.", 'INFO')
+    add_bot_log("Aucun signal grande baisse (SHORT) détecté.", 'INFO')
     return []
 
 
@@ -857,7 +864,7 @@ def get_html_template():
 <head>
 <meta charset=\"UTF-8\">
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-<title>&#9889; Micro Scalp 1€ Bot</title>
+<title>SHORT Grandes Baisses Bot</title>
 <style>
 /* ...existing code... */
 </style>
@@ -868,8 +875,8 @@ def get_html_template():
 <!-- HEADER -->
 <div class=\"header\">
     <div>
-        <h1>&#9889; Micro Scalp 1€ Bot</h1>
-        <span style=\"font-size:0.8em;color:var(--text3)\">Micro Scalp 1€ &#8226; TF: {{ timeframe|upper }} &#8226; Target: +{{ SCALP_TARGET_PCT }}% &#8226; SL: -{{ STOP_LOSS_PCT }}% &#8226; 1 position max</span>
+        <h1>SHORT Grandes Baisses Bot</h1>
+        <span style=\"font-size:0.8em;color:var(--text3)\">SHORT only &#8226; TF: {{ timeframe|upper }} &#8226; TP: -{{ TAKE_PROFIT_PCT }}% &#8226; SL: +{{ STOP_LOSS_PCT }}% &#8226; 1 position max</span>
     </div>
     <div class=\"status\">
         <div class=\"dot {% if is_scanning %}scanning{% endif %}\"></div>

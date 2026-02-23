@@ -11,7 +11,7 @@ def get_enhanced_dashboard():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>&#9889; Crypto Trading Bot Pro</title>
+<title>Scanner Crypto — Bot Trading & Arbitrage</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -276,101 +276,59 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 <!-- HEADER -->
 <div class="header">
     <div>
-        <h1>&#9889; Crypto Trading Bot <span class="version">PRO v2.1</span></h1>
-        <span style="font-size:0.8em;color:var(--text3)">Swing Trading &#8226; {{ timeframe|upper }} &#8226; Auto-buy &#8805; {{ min_score }}</span>
+        <h1>Scanner Crypto</h1>
+        <span style="font-size:0.8em;color:var(--text3)">SHORT grandes baisses &#8226; {{ timeframe|upper }} &#8226; Paper trading</span>
     </div>
     <div class="status">
         <div class="dot {% if is_scanning %}scanning{% endif %}"></div>
-        {% if is_scanning %}Scanning...{% else %}Active{% endif %}
+        {% if is_scanning %}Scan...{% else %}Actif{% endif %}
         <span style="margin-left:16px;color:var(--text3)">Scan #{{ scan_count }} &#8226; {{ last_update }}</span>
     </div>
 </div>
 
-<!-- TABS NAVIGATION -->
+<!-- 2 ONGLETS: Bot de trading | Bot d'arbitrage -->
 <div class="tabs">
-    <button class="tab active" onclick="showTab('dashboard')">&#128200; Dashboard</button>
-    <button class="tab" onclick="showTab('charts')">&#128202; Graphiques</button>
-    <button class="tab" onclick="showTab('stats')">&#128201; Statistiques</button>
-    <button class="tab" onclick="showTab('history')">&#128220; Historique</button>
-    <button class="tab" onclick="showTab('arbitrage')">&#129689; Arbitrage</button>
-<!-- ==================== TAB: ARBITRAGE ==================== -->
-<div id="tab-arbitrage" class="tab-content" style="display:none">
-    <div class="card">
-        <div class="card-header">
-            <h2>&#129689; Transactions Arbitrage</h2>
-        </div>
-        <div class="log">
-            {% if arbitrage_logs %}
-                {% for log in arbitrage_logs|reverse %}
-                <div class="log-line">
-                    <span class="log-time">{{ log.time }}</span>
-                    <span class="log-level l-{{ log.level|upper }}">{{ log.level }}</span>
-                    <span class="log-msg">{{ log.msg }}</span>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty">Aucune transaction arbitrage enregistrée.</div>
-            {% endif %}
-        </div>
-    </div>
-</div>
+    <button class="tab active" onclick="showTab('trading')">Bot de trading</button>
+    <button class="tab" onclick="showTab('arbitrage')">Bot d'arbitrage</button>
 </div>
 
-<!-- ==================== TAB: DASHBOARD ==================== -->
-<div id="tab-dashboard" class="tab-content active">
+<!-- ==================== ONGLET 1: BOT DE TRADING ==================== -->
+<div id="tab-trading" class="tab-content active">
 
-<!-- STATS PRINCIPAUX -->
 <div class="stats">
     <div class="stat s-blue">
-        <div class="stat-label">Capital Total</div>
+        <div class="stat-label">Capital</div>
         <div class="stat-value blue">${{ "%.2f"|format(total_capital) }}</div>
-        <div class="stat-sub">Disponible: ${{ "%.2f"|format(balance) }}</div>
-        <div class="stat-icon">&#128176;</div>
+        <div class="stat-sub">Dispo: ${{ "%.2f"|format(balance) }}</div>
     </div>
     <div class="stat s-{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">
-        <div class="stat-label">PnL Latent</div>
+        <div class="stat-label">PnL latent</div>
         <div class="stat-value {% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(total_unrealized_pnl) }}$</div>
-        <div class="stat-sub">{{ positions|length }} position(s) active(s)</div>
-        <div class="stat-icon">&#128200;</div>
+        <div class="stat-sub">{{ positions|length }} position(s)</div>
     </div>
     <div class="stat s-{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">
-        <div class="stat-label">PnL Realise</div>
+        <div class="stat-label">PnL realise</div>
         <div class="stat-value {% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(perf.total_pnl) }}$</div>
         <div class="stat-sub">{{ perf.winning_trades }}/{{ perf.total_trades }} gagnants</div>
-        <div class="stat-icon">&#10004;</div>
     </div>
     <div class="stat s-purple">
-        <div class="stat-label">Win Rate</div>
+        <div class="stat-label">Win rate</div>
         <div class="stat-value purple">{{ perf.win_rate }}%</div>
-        <div class="stat-sub">{{ perf.total_trades }} trades total</div>
-        <div class="stat-icon">&#127919;</div>
-    </div>
-    <div class="stat s-cyan">
-        <div class="stat-label">Profit Factor</div>
-        <div class="stat-value" style="color:var(--cyan)">{{ "%.2f"|format(stats.profit_factor) }}</div>
-        <div class="stat-sub">Gains / Pertes</div>
-        <div class="stat-icon">&#128178;</div>
-    </div>
-    <div class="stat s-yellow">
-        <div class="stat-label">Max Drawdown</div>
-        <div class="stat-value yellow">{{ "%.1f"|format(stats.max_drawdown) }}%</div>
-        <div class="stat-sub">Perte max depuis pic</div>
-        <div class="stat-icon">&#128201;</div>
+        <div class="stat-sub">{{ perf.total_trades }} trades</div>
     </div>
 </div>
 
-<!-- POSITIONS ACTIVES -->
 <div class="card">
     <div class="card-header">
-        <h2>&#128188; Positions Actives ({{ positions|length }})</h2>
-        <span class="badge b-blue">PAPER TRADING</span>
+        <h2>Positions actives ({{ positions|length }})</h2>
+        <span class="badge b-blue">PAPER</span>
     </div>
     {% if positions %}
     <div class="table-scroll">
         <table>
             <thead><tr>
                 <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Taille</th>
-                <th>PnL</th><th>SL / TP</th><th>Progression</th><th>Duree</th><th>Action</th>
+                <th>PnL</th><th>SL / TP</th><th>Progression</th><th>Action</th>
             </tr></thead>
             <tbody>
             {% for p in positions %}
@@ -384,8 +342,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                     {{ "%+.2f"|format(p.pnl_percent) }}% ({{ "%+.2f"|format(p.pnl_value) }}$)
                 </td>
                 <td style="font-size:0.85em;color:var(--text3)">
-                    <span class="red">{{ "%.4f"|format(p.sl) }}</span> / 
-                    <span class="green">{{ "%.4f"|format(p.tp) }}</span>
+                    <span class="red">{{ "%.4f"|format(p.sl) }}</span> / <span class="green">{{ "%.4f"|format(p.tp) }}</span>
                 </td>
                 <td>
                     <div style="display:flex;align-items:center;gap:8px;">
@@ -393,125 +350,20 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                         <span style="font-size:0.8em;color:var(--text3)">{{ "%.0f"|format(p.progress) }}%</span>
                     </div>
                 </td>
-                <td style="font-size:0.85em;color:var(--text3)">{{ p.duration }}</td>
                 <td><button class="btn btn-close" onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
             </tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
-    <!-- Mobile Cards View -->
-    <div class="mobile-cards">
-        {% for p in positions %}
-        <div class="pos-card">
-            <div class="pos-card-header">
-                <span class="pos-card-symbol">{{ p.symbol }}</span>
-                <span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}</span>
-            </div>
-            <div class="pos-card-row">
-                <span class="pos-card-label">PnL</span>
-                <span class="pos-card-pnl {% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(p.pnl_percent) }}% ({{ "%+.2f"|format(p.pnl_value) }}$)</span>
-            </div>
-            <div class="pos-card-row">
-                <span class="pos-card-label">Taille</span>
-                <span class="pos-card-value">${{ "%.0f"|format(p.amount) }}</span>
-            </div>
-            <div class="pos-card-row">
-                <span class="pos-card-label">Entree / Actuel</span>
-                <span class="pos-card-value">${{ "%.4f"|format(p.entry) }} &#8594; ${{ "%.4f"|format(p.current) }}</span>
-            </div>
-            <div class="pos-card-row">
-                <span class="pos-card-label">SL / TP</span>
-                <span class="pos-card-value"><span class="red">${{ "%.4f"|format(p.sl) }}</span> / <span class="green">${{ "%.4f"|format(p.tp) }}</span></span>
-            </div>
-            <div class="pos-card-row">
-                <span class="pos-card-label">Progression</span>
-                <span class="pos-card-value">{{ "%.0f"|format(p.progress) }}%</span>
-            </div>
-            <div class="pos-card-actions">
-                <button class="btn btn-close" style="flex:1" onclick="closePos('{{ p.symbol }}')">Fermer Position</button>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
     {% else %}
     <div class="empty">Aucune position ouverte</div>
     {% endif %}
 </div>
 
-<div class="grid-2">
-    <!-- OPPORTUNITES -->
-    <div class="card">
-        <div class="card-header">
-            <h2>&#127919; Meilleures Opportunites ({{ opportunities|length }})</h2>
-            <span style="font-size:0.8em;color:var(--text3)">Score &#8805; {{ min_score }} = Auto-achat</span>
-        </div>
-        {% if opportunities %}
-        <div class="table-scroll">
-            <table>
-                <thead><tr><th>Paire</th><th>Prix</th><th>Signal</th><th>Score</th><th>R/R</th><th>Volume 24h</th></tr></thead>
-                <tbody>
-                {% for opp in opportunities[:10] %}
-                <tr>
-                    <td style="font-weight:700">{{ opp.pair }}</td>
-                    <td>${{ "%.4f"|format(opp.price|default(0)) }}</td>
-                    <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal|default('N/A') }}</span></td>
-                    <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %}">{{ opp.score|default(0) }}</td>
-                    <td style="color:var(--blue)">{{ opp.rr_ratio|default('N/A') }}{% if opp.rr_ratio %}x{% endif %}</td>
-                    <td style="color:var(--text3)">${{ "%.0f"|format((opp.volume_24h|default(0)) / 1000000) }}M</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <!-- Mobile Cards View -->
-        <div class="mobile-cards">
-            {% for opp in opportunities[:10] %}
-            <div class="pos-card">
-                <div class="pos-card-header">
-                    <span class="pos-card-symbol">{{ opp.pair }}</span>
-                    <span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% elif opp.entry_signal == 'SHORT' %}b-red{% else %}b-yellow{% endif %}">{{ opp.entry_signal|default('N/A') }}</span>
-                </div>
-                <div class="pos-card-row">
-                    <span class="pos-card-label">Score</span>
-                    <span class="pos-card-value" style="color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text3){% endif %};font-weight:700;font-size:1.1em">{{ opp.score|default(0) }}</span>
-                </div>
-                <div class="pos-card-row">
-                    <span class="pos-card-label">Prix</span>
-                    <span class="pos-card-value">${{ "%.4f"|format(opp.price|default(0)) }}</span>
-                </div>
-                <div class="pos-card-row">
-                    <span class="pos-card-label">R/R</span>
-                    <span class="pos-card-value" style="color:var(--blue)">{{ opp.rr_ratio|default('N/A') }}{% if opp.rr_ratio %}x{% endif %}</span>
-                </div>
-                <div class="pos-card-row">
-                    <span class="pos-card-label">Volume 24h</span>
-                    <span class="pos-card-value">${{ "%.0f"|format((opp.volume_24h|default(0)) / 1000000) }}M</span>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="empty">Aucune opportunite detectee</div>
-        {% endif %}
-    </div>
-
-    <!-- MINI CHART PnL -->
-    <div class="card">
-        <div class="card-header">
-            <h2>&#128200; Evolution PnL</h2>
-            <span class="badge b-{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(perf.total_pnl) }}$</span>
-        </div>
-        <div class="chart-container" style="height:200px;">
-            <canvas id="miniPnlChart"></canvas>
-        </div>
-    </div>
-</div>
-
-<!-- BOT LOG -->
 <div class="card">
     <div class="card-header">
-        <h2>&#129302; Journal du Bot</h2>
+        <h2>Journal du bot</h2>
         <span style="font-size:0.8em;color:var(--text3)">{{ bot_log|length }} evenements</span>
     </div>
     <div class="log">
@@ -524,630 +376,79 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         </div>
         {% endfor %}
         {% else %}
-        <div class="empty">En attente d'activite...</div>
+        <div class="empty">En attente...</div>
         {% endif %}
     </div>
-    <!-- Quick Indicators -->
-    <div class="indicators">
-        <div class="ind"><span class="ind-label">Sentiment:</span><span class="ind-value">{{ mkt.sentiment }}</span></div>
-        <div class="ind"><span class="ind-label">RSI moy:</span><span class="ind-value">{{ mkt.avg_rsi }}</span></div>
-        <div class="ind"><span class="ind-label">Bullish:</span><span class="ind-value green">{{ mkt.total_bullish }}</span></div>
-        <div class="ind"><span class="ind-label">Bearish:</span><span class="ind-value red">{{ mkt.total_bearish }}</span></div>
-        <div class="ind" id="fear-greed-display"><span class="ind-label">Fear/Greed:</span><span class="ind-value" id="fg-val">--</span></div>
-        <div class="ind"><span class="ind-label">Crash Protection:</span><span class="ind-value {% if crash.trading_allowed %}green{% else %}red{% endif %}">{% if crash.trading_allowed %}OK{% else %}ACTIF{% endif %}</span></div>
-    </div>
 </div>
 
 </div>
 
-<!-- ==================== TAB: CHARTS ==================== -->
-<div id="tab-charts" class="tab-content">
-
-<div class="chart-row">
-    <div class="card">
+<!-- ==================== ONGLET 2: BOT D'ARBITRAGE ==================== -->
+<div id="tab-arbitrage" class="tab-content" style="display:none">
+    <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
-            <h2>&#128200; Courbe d'Equite (PnL Cumule)</h2>
+            <h2>Qu'est-ce que le bot d'arbitrage ?</h2>
         </div>
-        <div class="chart-container" style="height:350px;">
-            <canvas id="equityChart"></canvas>
+        <div style="padding:20px;color:var(--text2);line-height:1.6;">
+            <p><strong>Principe :</strong> le bot compare les prix d'un meme actif (ex. ETH/USDT) sur plusieurs exchanges (Binance, KuCoin, etc.). Quand l'ecart de prix (spread) depasse un seuil (ex. 0,5 %), il y a une opportunite d'arbitrage : <em>acheter la ou c'est le moins cher, vendre la ou c'est le plus cher</em>.</p>
+            <p><strong>Rentabilite :</strong> le seuil doit etre superieur aux frais des deux cotes pour degager un gain net. En mode paper trading, le bot simule ces operations sans ordres reels.</p>
+            <p><strong>Lancement :</strong> le bot d'arbitrage est optionnel et se lance a part (<code>python -m src.arbitrage_strategy</code>) apres avoir configure vos cles API CEX dans le fichier. Les logs ci-dessous s'affichent quand le bot arbitrage est utilise et envoie ses evenements au dashboard.</p>
         </div>
     </div>
     <div class="card">
         <div class="card-header">
-            <h2>&#127919; Repartition Win/Loss</h2>
+            <h2>Logs arbitrage</h2>
         </div>
-        <div class="chart-container" style="height:350px;">
-            <canvas id="winLossChart"></canvas>
-        </div>
-    </div>
-</div>
-
-<div class="chart-row-equal">
-    <div class="card">
-        <div class="card-header">
-            <h2>&#128202; PnL par Jour</h2>
-        </div>
-        <div class="chart-container" style="height:300px;">
-            <canvas id="dailyPnlChart"></canvas>
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-header">
-            <h2>&#128178; Performance par Paire</h2>
-        </div>
-        <div class="chart-container" style="height:300px;">
-            <canvas id="pairPerfChart"></canvas>
-        </div>
-    </div>
-</div>
-
-<div class="chart-row-equal">
-    <div class="card">
-        <div class="card-header">
-            <h2>&#128197; Distribution des Trades par Heure</h2>
-        </div>
-        <div class="chart-container" style="height:250px;">
-            <canvas id="hourlyChart"></canvas>
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-header">
-            <h2>&#127919; Performance LONG vs SHORT</h2>
-        </div>
-        <div class="chart-container" style="height:250px;">
-            <canvas id="directionChart"></canvas>
-        </div>
-    </div>
-</div>
-
-</div>
-
-<!-- ==================== TAB: STATISTICS ==================== -->
-<div id="tab-stats" class="tab-content">
-
-<div class="stats">
-    <div class="stat s-green">
-        <div class="stat-label">Total Gains</div>
-        <div class="stat-value green">${{ "%.2f"|format(stats.total_gains) }}</div>
-        <div class="stat-sub">{{ stats.winning_count }} trades</div>
-    </div>
-    <div class="stat s-red">
-        <div class="stat-label">Total Pertes</div>
-        <div class="stat-value red">${{ "%.2f"|format(stats.total_losses) }}</div>
-        <div class="stat-sub">{{ stats.losing_count }} trades</div>
-    </div>
-    <div class="stat s-blue">
-        <div class="stat-label">Gain Moyen</div>
-        <div class="stat-value blue">${{ "%.2f"|format(stats.avg_win) }}</div>
-        <div class="stat-sub">Par trade gagnant</div>
-    </div>
-    <div class="stat s-yellow">
-        <div class="stat-label">Perte Moyenne</div>
-        <div class="stat-value yellow">${{ "%.2f"|format(stats.avg_loss) }}</div>
-        <div class="stat-sub">Par trade perdant</div>
-    </div>
-    <div class="stat s-purple">
-        <div class="stat-label">Meilleur Trade</div>
-        <div class="stat-value green">${{ "%.2f"|format(stats.best_trade) }}</div>
-        <div class="stat-sub">{{ stats.best_trade_pair }}</div>
-    </div>
-    <div class="stat s-cyan">
-        <div class="stat-label">Pire Trade</div>
-        <div class="stat-value red">${{ "%.2f"|format(stats.worst_trade) }}</div>
-        <div class="stat-sub">{{ stats.worst_trade_pair }}</div>
-    </div>
-</div>
-
-<div class="grid-3">
-    <div class="card">
-        <div class="card-header"><h2>&#128201; Metriques de Risque</h2></div>
-        <div class="stats-detail">
-            <div class="detail-item">
-                <span class="detail-label">Max Drawdown</span>
-                <span class="detail-value red">{{ "%.2f"|format(stats.max_drawdown) }}%</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Profit Factor</span>
-                <span class="detail-value {% if stats.profit_factor >= 1.5 %}green{% elif stats.profit_factor >= 1 %}yellow{% else %}red{% endif %}">{{ "%.2f"|format(stats.profit_factor) }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Ratio Reward/Risk</span>
-                <span class="detail-value blue">{{ "%.2f"|format(stats.avg_rr) }}x</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Expectancy</span>
-                <span class="detail-value {% if stats.expectancy >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(stats.expectancy) }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Consecutive Wins Max</span>
-                <span class="detail-value green">{{ stats.max_consecutive_wins }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Consecutive Losses Max</span>
-                <span class="detail-value red">{{ stats.max_consecutive_losses }}</span>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header"><h2>&#128336; Metriques Temporelles</h2></div>
-        <div class="stats-detail">
-            <div class="detail-item">
-                <span class="detail-label">Duree Moyenne Trade</span>
-                <span class="detail-value">{{ stats.avg_duration }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Trade le plus court</span>
-                <span class="detail-value">{{ stats.min_duration }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Trade le plus long</span>
-                <span class="detail-value">{{ stats.max_duration }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Trades par jour (moy)</span>
-                <span class="detail-value">{{ "%.1f"|format(stats.trades_per_day) }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Meilleure heure</span>
-                <span class="detail-value green">{{ stats.best_hour }}h</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Pire heure</span>
-                <span class="detail-value red">{{ stats.worst_hour }}h</span>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header"><h2>&#128176; Performance par Direction</h2></div>
-        <div class="stats-detail">
-            <div class="detail-item">
-                <span class="detail-label">LONG - Win Rate</span>
-                <span class="detail-value green">{{ "%.1f"|format(stats.long_winrate) }}%</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">LONG - PnL Total</span>
-                <span class="detail-value {% if stats.long_pnl >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(stats.long_pnl) }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">LONG - Trades</span>
-                <span class="detail-value">{{ stats.long_count }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">SHORT - Win Rate</span>
-                <span class="detail-value red">{{ "%.1f"|format(stats.short_winrate) }}%</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">SHORT - PnL Total</span>
-                <span class="detail-value {% if stats.short_pnl >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(stats.short_pnl) }}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">SHORT - Trades</span>
-                <span class="detail-value">{{ stats.short_count }}</span>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Top Pairs -->
-<div class="card">
-    <div class="card-header">
-        <h2>&#127942; Top 10 Paires les Plus Rentables</h2>
-    </div>
-    <div class="table-scroll">
-        <table>
-            <thead><tr><th>Paire</th><th>Trades</th><th>Win Rate</th><th>PnL Total</th><th>PnL Moyen</th><th>Meilleur</th><th>Pire</th></tr></thead>
-            <tbody>
-            {% for pair in stats.top_pairs[:10] %}
-            <tr>
-                <td style="font-weight:700">{{ pair.symbol }}</td>
-                <td>{{ pair.count }}</td>
-                <td class="{% if pair.winrate >= 60 %}green{% elif pair.winrate >= 40 %}yellow{% else %}red{% endif %}">{{ "%.1f"|format(pair.winrate) }}%</td>
-                <td class="{% if pair.pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(pair.pnl) }}$</td>
-                <td>{{ "%+.2f"|format(pair.avg_pnl) }}$</td>
-                <td class="green">+{{ "%.2f"|format(pair.best) }}$</td>
-                <td class="red">{{ "%.2f"|format(pair.worst) }}$</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-</div>
-
-<!-- ==================== TAB: HISTORY ==================== -->
-<div id="tab-history" class="tab-content">
-
-<div class="card">
-    <div class="card-header">
-        <h2>&#128220; Historique Complet des Trades</h2>
-        <span class="badge b-blue">{{ history|length }} trades</span>
-    </div>
-    
-    <!-- Filters -->
-    <div class="filters">
-        <div class="filter-group">
-            <label>Direction:</label>
-            <select id="filter-direction" onchange="filterHistory()">
-                <option value="">Toutes</option>
-                <option value="LONG">LONG</option>
-                <option value="SHORT">SHORT</option>
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>Resultat:</label>
-            <select id="filter-result" onchange="filterHistory()">
-                <option value="">Tous</option>
-                <option value="win">Gagnants</option>
-                <option value="loss">Perdants</option>
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>Paire:</label>
-            <select id="filter-pair" onchange="filterHistory()">
-                <option value="">Toutes</option>
-                {% for pair in all_pairs %}
-                <option value="{{ pair }}">{{ pair }}</option>
+        <div class="log">
+            {% if arbitrage_logs %}
+                {% for log in arbitrage_logs|reverse %}
+                <div class="log-line">
+                    <span class="log-time">{{ log.time }}</span>
+                    <span class="log-level l-{{ log.level|upper }}">{{ log.level }}</span>
+                    <span class="log-msg">{{ log.msg }}</span>
+                </div>
                 {% endfor %}
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>Periode:</label>
-            <select id="filter-period" onchange="filterHistory()">
-                <option value="">Tout</option>
-                <option value="today">Aujourd'hui</option>
-                <option value="week">Cette semaine</option>
-                <option value="month">Ce mois</option>
-            </select>
+            {% else %}
+                <div class="empty">Aucun log arbitrage. Lancez le bot d'arbitrage pour voir les evenements ici.</div>
+            {% endif %}
         </div>
     </div>
-    
-    {% if history %}
-    <div class="table-scroll">
-        <table id="history-table">
-            <thead><tr>
-                <th onclick="sortTable(0)">Date</th>
-                <th onclick="sortTable(1)">Paire</th>
-                <th onclick="sortTable(2)">Direction</th>
-                <th onclick="sortTable(3)">Entree</th>
-                <th onclick="sortTable(4)">Sortie</th>
-                <th onclick="sortTable(5)">Taille</th>
-                <th onclick="sortTable(6)">PnL $</th>
-                <th onclick="sortTable(7)">PnL %</th>
-                <th onclick="sortTable(8)">Duree</th>
-                <th>Raison</th>
-            </tr></thead>
-            <tbody>
-            {% for t in history %}
-            <tr data-direction="{{ t.direction|default('LONG') }}" data-result="{% if t.pnl|default(0) >= 0 %}win{% else %}loss{% endif %}" data-pair="{{ t.symbol|default('') }}" data-date="{{ t.date|default('') }}">
-                <td style="color:var(--text3);font-size:0.85em">{{ t.time|default('N/A') }}</td>
-                <td style="font-weight:700">{{ t.symbol|default('N/A') }}</td>
-                <td><span class="badge {% if t.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ t.direction|default('N/A') }}</span></td>
-                <td>${{ "%.4f"|format(t.entry_price|default(0)) }}</td>
-                <td>${{ "%.4f"|format(t.exit_price|default(0)) }}</td>
-                <td>${{ "%.0f"|format(t.amount|default(0)) }}</td>
-                <td class="{% if t.pnl|default(0) >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(t.pnl|default(0)) }}$</td>
-                <td class="{% if t.pnl_percent|default(0) >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(t.pnl_percent|default(0)) }}%</td>
-                <td style="color:var(--text3)">{{ t.duration|default('N/A') }}</td>
-                <td style="font-size:0.85em;color:var(--text3)">{{ t.exit_reason|default('N/A') }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="empty">Aucun trade dans l'historique</div>
-    {% endif %}
-</div>
-
 </div>
 
 <!-- FOOTER -->
 <div style="text-align:center;padding:20px;color:var(--text3);font-size:0.8em;">
-    Crypto Trading Bot PRO v2.1 &#8226; Tous modules actifs (ML, On-Chain, Kelly, Macro, Social, Journal AI)
+    Bot SHORT grandes baisses + Bot arbitrage (optionnel) &#8226; Paper trading
 </div>
 
 </div>
 
 <script>
-// Tab switching
 function showTab(tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(tc => {
         tc.classList.remove('active');
         tc.style.display = 'none';
     });
-    document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
-    const tabContent = document.getElementById(`tab-${tabId}`);
-    tabContent.classList.add('active');
-    tabContent.style.display = '';
-    // Initialize charts when switching to charts tab
-    if (tabId === 'charts') initCharts();
+    var btn = document.querySelector('[onclick="showTab(\'' + tabId + '\')"]');
+    if (btn) btn.classList.add('active');
+    var tabContent = document.getElementById('tab-' + tabId);
+    if (tabContent) {
+        tabContent.classList.add('active');
+        tabContent.style.display = 'block';
+    }
 }
 
-// Close position
 function closePos(symbol) {
     if (confirm('Fermer la position ' + symbol + ' ?')) {
         fetch('/api/close/' + symbol, {method: 'POST'})
             .then(r => r.json())
             .then(d => {
-                if(d.success) {
-                    alert('Position ' + symbol + ' fermée avec succès!');
-                    location.reload();
-                } else {
-                    alert('Erreur: ' + (d.error || 'Echec de la fermeture'));
-                }
+                if(d.success) { alert('Position fermee.'); location.reload(); }
+                else { alert('Erreur: ' + (d.error || 'Echec')); }
             })
-            .catch(err => alert('Erreur réseau: ' + err));
+            .catch(err => alert('Erreur reseau: ' + err));
     }
 }
-
-// History filtering
-function filterHistory() {
-    const direction = document.getElementById('filter-direction').value;
-    const result = document.getElementById('filter-result').value;
-    const pair = document.getElementById('filter-pair').value;
-    const period = document.getElementById('filter-period').value;
-    
-    const rows = document.querySelectorAll('#history-table tbody tr');
-    rows.forEach(row => {
-        let show = true;
-        if (direction && row.dataset.direction !== direction) show = false;
-        if (result && row.dataset.result !== result) show = false;
-        if (pair && row.dataset.pair !== pair) show = false;
-        // Period filtering would need date comparison
-        row.style.display = show ? '' : 'none';
-    });
-}
-
-// Table sorting
-let sortDir = 1;
-function sortTable(col) {
-    const table = document.getElementById('history-table');
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-    
-    rows.sort((a, b) => {
-        let aVal = a.cells[col].textContent;
-        let bVal = b.cells[col].textContent;
-        
-        // Try numeric sort
-        const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
-        const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
-        
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-            return (aNum - bNum) * sortDir;
-        }
-        return aVal.localeCompare(bVal) * sortDir;
-    });
-    
-    sortDir *= -1;
-    const tbody = table.querySelector('tbody');
-    rows.forEach(row => tbody.appendChild(row));
-}
-
-// Chart colors
-const chartColors = {
-    green: 'rgba(16, 185, 129, 1)',
-    greenBg: 'rgba(16, 185, 129, 0.2)',
-    red: 'rgba(239, 68, 68, 1)',
-    redBg: 'rgba(239, 68, 68, 0.2)',
-    blue: 'rgba(59, 130, 246, 1)',
-    blueBg: 'rgba(59, 130, 246, 0.2)',
-    yellow: 'rgba(245, 158, 11, 1)',
-    purple: 'rgba(139, 92, 246, 1)',
-    cyan: 'rgba(6, 182, 212, 1)',
-    gray: 'rgba(107, 114, 128, 1)'
-};
-
-// Charts data from server
-const chartData = {{ chart_data | safe }};
-
-// Initialize all charts
-function initCharts() {
-    // Equity Chart
-    const equityCtx = document.getElementById('equityChart');
-    if (equityCtx && !equityCtx.chart) {
-        equityCtx.chart = new Chart(equityCtx.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: chartData.equity.labels,
-                datasets: [{
-                    label: 'PnL Cumule',
-                    data: chartData.equity.data,
-                    borderColor: chartColors.blue,
-                    backgroundColor: chartColors.blueBg,
-                    fill: true,
-                    tension: 0.3
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } }
-                }
-            }
-        });
-    }
-    
-    // Win/Loss Donut
-    const winLossCtx = document.getElementById('winLossChart');
-    if (winLossCtx && !winLossCtx.chart) {
-        winLossCtx.chart = new Chart(winLossCtx.getContext('2d'), {
-            type: 'doughnut',
-            data: {
-                labels: ['Gagnants', 'Perdants'],
-                datasets: [{
-                    data: [chartData.winLoss.wins, chartData.winLoss.losses],
-                    backgroundColor: [chartColors.green, chartColors.red],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { color: '#9ca3af' } }
-                },
-                cutout: '60%'
-            }
-        });
-    }
-    
-    // Daily PnL Bar Chart
-    const dailyCtx = document.getElementById('dailyPnlChart');
-    if (dailyCtx && !dailyCtx.chart) {
-        dailyCtx.chart = new Chart(dailyCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: chartData.daily.labels,
-                datasets: [{
-                    label: 'PnL Journalier',
-                    data: chartData.daily.data,
-                    backgroundColor: chartData.daily.data.map(v => v >= 0 ? chartColors.green : chartColors.red)
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#6b7280' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } }
-                }
-            }
-        });
-    }
-    
-    // Pair Performance
-    const pairCtx = document.getElementById('pairPerfChart');
-    if (pairCtx && !pairCtx.chart) {
-        pairCtx.chart = new Chart(pairCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: chartData.pairs.labels,
-                datasets: [{
-                    label: 'PnL',
-                    data: chartData.pairs.data,
-                    backgroundColor: chartData.pairs.data.map(v => v >= 0 ? chartColors.green : chartColors.red)
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } },
-                    y: { grid: { display: false }, ticks: { color: '#6b7280' } }
-                }
-            }
-        });
-    }
-    
-    // Hourly Distribution
-    const hourlyCtx = document.getElementById('hourlyChart');
-    if (hourlyCtx && !hourlyCtx.chart) {
-        hourlyCtx.chart = new Chart(hourlyCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: chartData.hourly.labels,
-                datasets: [{
-                    label: 'Trades',
-                    data: chartData.hourly.data,
-                    backgroundColor: chartColors.blueBg,
-                    borderColor: chartColors.blue,
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#6b7280' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } }
-                }
-            }
-        });
-    }
-    
-    // Direction Performance
-    const dirCtx = document.getElementById('directionChart');
-    if (dirCtx && !dirCtx.chart) {
-        dirCtx.chart = new Chart(dirCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: ['LONG', 'SHORT'],
-                datasets: [
-                    {
-                        label: 'Gagnants',
-                        data: chartData.direction.wins,
-                        backgroundColor: chartColors.green
-                    },
-                    {
-                        label: 'Perdants',
-                        data: chartData.direction.losses,
-                        backgroundColor: chartColors.red
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af' } } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#6b7280' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } }
-                }
-            }
-        });
-    }
-}
-
-// Mini PnL Chart on dashboard
-const miniPnlCtx = document.getElementById('miniPnlChart');
-if (miniPnlCtx) {
-    new Chart(miniPnlCtx.getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: chartData.equity.labels.slice(-20),
-            datasets: [{
-                data: chartData.equity.data.slice(-20),
-                borderColor: chartData.equity.data[chartData.equity.data.length-1] >= 0 ? chartColors.green : chartColors.red,
-                backgroundColor: chartData.equity.data[chartData.equity.data.length-1] >= 0 ? chartColors.greenBg : chartColors.redBg,
-                fill: true,
-                tension: 0.3,
-                pointRadius: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { display: false },
-                y: { display: false }
-            }
-        }
-    });
-}
-
-// Fetch Fear & Greed
-fetch('/api/social/fear_greed')
-    .then(r => r.json())
-    .then(data => {
-        if(data.value) {
-            const el = document.getElementById('fg-val');
-            el.textContent = data.value + ' (' + data.classification + ')';
-            el.style.color = data.value <= 30 ? 'var(--red)' : (data.value >= 70 ? 'var(--green)' : 'var(--yellow)');
-        }
-    })
-    .catch(() => {});
 </script>
 </body>
 </html>
