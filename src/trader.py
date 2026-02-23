@@ -14,11 +14,12 @@ import os
 from datetime import datetime
 from reversal_protection import ReversalProtector
 
+# Racine du projet (pour chemins absolus en production)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class PaperTrader:
     def __init__(self, initial_balance=100):
-        self.balance_file  = 'paper_wallet.json'
-        self.trades_file   = 'paper_trades.json'
         self.protector = ReversalProtector()  # Protection contre reversals
         self.short_leverage = 1.0  # Levier désactivé (positions short)
         self.long_leverage = 1.0   # Levier désactivé (positions long)
@@ -41,6 +42,10 @@ class PaperTrader:
         self.cooldown_enabled = True
         self.cooldown_minutes = 10  # Aligner sur la config globale (10 min)
         self.recent_trades = {}  # {symbol: last_trade_timestamp}
+
+        # Fichiers dans la racine du projet (production: cwd peut être ailleurs)
+        self.balance_file = os.path.join(_PROJECT_ROOT, 'paper_wallet.json')
+        self.trades_file = os.path.join(_PROJECT_ROOT, 'paper_trades.json')
 
         # Chargement ou création du portefeuille
         if os.path.exists(self.balance_file):

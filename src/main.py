@@ -56,8 +56,10 @@ TREND_15M_MUST_BEARISH = True  # Ne short que si tendance 15m baissière
 POSITION_PCT_BALANCE   = 0.20  # Taille position = 20% du solde max
 MIN_POSITION_USDT      = 10    # Minimum 10 USDT par short
 
-# Limite de paires pour le scan (20 = test rapide, None = toutes les paires)
-SCAN_PAIRS_LIMIT = 20
+# Production: limite de paires (env SCAN_PAIRS_LIMIT vide ou absent = toutes les paires)
+_scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
+SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '60'))
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -204,7 +206,9 @@ shared_data = {
         'summary': '',
         'updated': None
     },
-    'arbitrage_logs': [],       # Logs arbitrage (partagé avec arbitrage_strategy si utilisé)
+    'arbitrage_logs': [],       # Logs arbitrage
+    'arbitrage_paper_balance': 100.0,   # Capital paper 100 € (bot arbitrage)
+    'arbitrage_paper_trades': [],       # Derniers trades paper arbitrage
 }
 
 app = Flask(__name__)
@@ -442,6 +446,8 @@ def dashboard():
         all_pairs=all_pairs,
         crash=crash,
         arbitrage_logs=shared_data.get('arbitrage_logs', []),
+        arbitrage_paper_balance=shared_data.get('arbitrage_paper_balance', 100),
+        arbitrage_paper_trades=shared_data.get('arbitrage_paper_trades', []),
     )
 
 
@@ -512,7 +518,12 @@ def close_position_route(symbol):
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'scan_count': shared_data['scan_count']}), 200
+    """Health check pour load balancers et monitoring (production)."""
+    return jsonify({
+        'status': 'ok',
+        'scan_count': shared_data['scan_count'],
+        'is_scanning': shared_data.get('is_scanning', False),
+    }), 200
 
 
 @app.route('/api/crash_status')

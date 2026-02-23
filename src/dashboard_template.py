@@ -297,9 +297,9 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="stats">
     <div class="stat s-blue">
-        <div class="stat-label">Capital</div>
+        <div class="stat-label">Capital (paper)</div>
         <div class="stat-value blue">${{ "%.2f"|format(total_capital) }}</div>
-        <div class="stat-sub">Dispo: ${{ "%.2f"|format(balance) }}</div>
+        <div class="stat-sub">Dispo: ${{ "%.2f"|format(balance) }} — Capital de test: 100 €</div>
     </div>
     <div class="stat s-{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">
         <div class="stat-label">PnL latent</div>
@@ -385,16 +385,61 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <!-- ==================== ONGLET 2: BOT D'ARBITRAGE ==================== -->
 <div id="tab-arbitrage" class="tab-content" style="display:none">
+    <div class="stats" style="margin-bottom:20px;">
+        <div class="stat s-cyan">
+            <div class="stat-label">Capital paper (bot arbitrage)</div>
+            <div class="stat-value">{{ "%.2f"|format(arbitrage_paper_balance|default(100)) }} €</div>
+            <div class="stat-sub">Initial: 100 € — gains simulés sur chaque opportunité</div>
+        </div>
+        <div class="stat s-blue">
+            <div class="stat-label">Trades paper simulés</div>
+            <div class="stat-value">{{ arbitrage_paper_trades|default([])|length }}</div>
+            <div class="stat-sub">Dernières opérations d'arbitrage simulées</div>
+        </div>
+    </div>
     <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
             <h2>Qu'est-ce que le bot d'arbitrage ?</h2>
         </div>
         <div style="padding:20px;color:var(--text2);line-height:1.6;">
             <p><strong>Principe :</strong> le bot compare les prix d'un meme actif (ex. ETH/USDT) sur plusieurs exchanges (Binance, KuCoin, etc.). Quand l'ecart de prix (spread) depasse un seuil (ex. 0,5 %), il y a une opportunite d'arbitrage : <em>acheter la ou c'est le moins cher, vendre la ou c'est le plus cher</em>.</p>
-            <p><strong>Rentabilite :</strong> le seuil doit etre superieur aux frais des deux cotes pour degager un gain net. En mode paper trading, le bot simule ces operations sans ordres reels.</p>
-            <p><strong>Lancement :</strong> le bot d'arbitrage est optionnel et se lance a part (<code>python -m src.arbitrage_strategy</code>) apres avoir configure vos cles API CEX dans le fichier. Les logs ci-dessous s'affichent quand le bot arbitrage est utilise et envoie ses evenements au dashboard.</p>
+            <p><strong>Rentabilite :</strong> le seuil doit etre superieur aux frais des deux cotes pour degager un gain net. En mode paper trading, le bot simule ces operations avec un capital de <strong>100 €</strong> (fichier <code>paper_arbitrage_wallet.json</code>).</p>
+            <p><strong>Lancement :</strong> le bot d'arbitrage tourne avec l'app (<code>python run.py</code>). Les logs ci-dessous s'affichent en temps reel.</p>
         </div>
     </div>
+    {% if arbitrage_paper_trades %}
+    <div class="card" style="margin-bottom:20px;">
+        <div class="card-header">
+            <h2>Derniers trades paper arbitrage</h2>
+        </div>
+        <div style="padding:16px;overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.85em;">
+                <thead>
+                    <tr style="color:var(--text3);border-bottom:1px solid var(--border);">
+                        <th style="text-align:left;padding:8px;">Heure</th>
+                        <th style="text-align:left;padding:8px;">Achat</th>
+                        <th style="text-align:left;padding:8px;">Vente</th>
+                        <th style="text-align:right;padding:8px;">Spread %</th>
+                        <th style="text-align:right;padding:8px;">Profit €</th>
+                        <th style="text-align:right;padding:8px;">Solde</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for t in (arbitrage_paper_trades|default([]))[-15:]|reverse %}
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:8px;">{{ t.time }}</td>
+                        <td style="padding:8px;">{{ t.buy_ex }}</td>
+                        <td style="padding:8px;">{{ t.sell_ex }}</td>
+                        <td style="text-align:right;padding:8px;">{{ t.spread_pct }}%</td>
+                        <td style="text-align:right;padding:8px;color:var(--green);">+{{ t.profit_usdt }}</td>
+                        <td style="text-align:right;padding:8px;">{{ t.balance_after }} €</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
     <div class="card">
         <div class="card-header">
             <h2>Logs arbitrage</h2>

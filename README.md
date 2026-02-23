@@ -42,26 +42,44 @@ Pour le bot Arbitrage (optionnel): `pip install ccxt web3`.
 
 ## Utilisation
 
-### Tester le scanner (recommandé pour un premier run)
+### Tester le scanner (mode développement)
 
-Le scanner est prêt à être testé en **paper trading** avec une limite de **20 paires** par cycle pour un résultat rapide (~30–60 s par scan).
+Pour un test rapide avec **20 paires** par cycle :
 
 ```bash
-pip install -r requirements.txt
+set SCAN_PAIRS_LIMIT=20
 python run.py
 ```
+
+Sans `SCAN_PAIRS_LIMIT` (ou vide), le scanner utilise **toutes** les paires (production).
 
 - **Dashboard:** http://localhost:8080  
 - **Onglet Bot de trading:** capital, PnL, positions, journal du scanner.  
 - **Onglet Bot d’arbitrage:** logs arbitrage CEX (si `ccxt` installé).
 
-Pour scanner **toutes** les paires (plus long), dans `src/main.py` mettez `SCAN_PAIRS_LIMIT = None`.
+### Production
 
-### Production (Gunicorn / Railway)
+Déploiement avec **Gunicorn** (Railway, Heroku, VPS). Par défaut : scan complet, paper trading activé.
 
 ```bash
-gunicorn --bind 0.0.0.0:$PORT wsgi:application
+pip install -r requirements.txt
+gunicorn --bind 0.0.0.0:$PORT --workers 1 wsgi:application
 ```
+
+**Variables d'environnement (optionnel):**
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `PORT` | 8080 | Port du serveur |
+| `ENV` | development | `production` pour afficher le mode dans les logs |
+| `PAPER_TRADING` | true | `true` = simulation, pas d'ordres réels |
+| `SCAN_PAIRS_LIMIT` | (vide = toutes) | Limiter à N paires (ex: 20 pour test) |
+| `SCAN_INTERVAL` | 60 | Secondes entre chaque scan |
+| `ARBITRAGE_SYMBOL` | BTC/USDT | Paire pour le bot arbitrage |
+| `ARBITRAGE_THRESHOLD_PCT` | 0.3 | Seuil de spread (%) |
+| `ARBITRAGE_POLL_SEC` | 45 | Secondes entre chaque scan arbitrage |
+
+**Health check** (load balancers, monitoring) : `GET /health` → `200` et `{"status":"ok", ...}`.
 
 ## Structure (fichiers principaux)
 
