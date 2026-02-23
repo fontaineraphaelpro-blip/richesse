@@ -363,8 +363,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Journal du bot</h2>
-        <span style="font-size:0.8em;color:var(--text3)">{{ bot_log|length }} evenements</span>
+        <h2>Historique du bot trading</h2>
+        <span style="font-size:0.8em;color:var(--text3)">Scans, signaux, ouvertures/fermetures — {{ bot_log|length }} evenements</span>
     </div>
     <div class="log">
         {% if bot_log %}
@@ -376,9 +376,43 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         </div>
         {% endfor %}
         {% else %}
-        <div class="empty">En attente...</div>
+        <div class="empty">En attente du premier scan...</div>
         {% endif %}
     </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Historique des trades fermes (bot trading)</h2>
+        <span style="font-size:0.8em;color:var(--text3)">{{ history|length }} trades</span>
+    </div>
+    {% if history %}
+    <div class="table-scroll">
+        <table>
+            <thead><tr>
+                <th>Date / Heure</th><th>Paire</th><th>Type</th><th>Entree</th><th>Sortie</th>
+                <th>Montant</th><th>PnL</th><th>Duree</th><th>Raison</th>
+            </tr></thead>
+            <tbody>
+            {% for h in history[:30] %}
+            <tr>
+                <td style="color:var(--text3);font-size:0.85em">{{ h.time }}</td>
+                <td style="font-weight:600;color:var(--blue)">{{ h.symbol }}</td>
+                <td><span class="badge {% if h.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ h.direction }}</span></td>
+                <td>${{ "%.4f"|format(h.entry_price) }}</td>
+                <td>${{ "%.4f"|format(h.exit_price) }}</td>
+                <td>${{ "%.0f"|format(h.amount) }}</td>
+                <td class="{% if h.pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:600">{{ "%+.2f"|format(h.pnl) }}$</td>
+                <td style="font-size:0.85em;color:var(--text3)">{{ h.duration }}</td>
+                <td style="font-size:0.85em;color:var(--text3)">{{ h.exit_reason }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">Aucun trade ferme pour l'instant.</div>
+    {% endif %}
 </div>
 
 </div>
@@ -410,7 +444,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     {% if arbitrage_paper_trades %}
     <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
-            <h2>Derniers trades paper arbitrage</h2>
+            <h2>Historique des trades paper (bot arbitrage)</h2>
+            <span style="font-size:0.8em;color:var(--text3)">{{ arbitrage_paper_trades|length }} operations</span>
         </div>
         <div style="padding:16px;overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:0.85em;">
@@ -442,7 +477,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     {% endif %}
     <div class="card">
         <div class="card-header">
-            <h2>Logs arbitrage</h2>
+            <h2>Historique du bot arbitrage</h2>
+            <span style="font-size:0.8em;color:var(--text3)">Scans, opportunites, gains paper — {{ arbitrage_logs|length }} evenements</span>
         </div>
         <div class="log">
             {% if arbitrage_logs %}
@@ -454,7 +490,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="empty">Aucun log arbitrage. Lancez le bot d'arbitrage pour voir les evenements ici.</div>
+                <div class="empty">En attente du premier scan arbitrage...</div>
             {% endif %}
         </div>
     </div>
