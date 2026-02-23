@@ -338,3 +338,4 @@ def calculate_fibonacci_levels(df: pd.DataFrame, lookback: int = 50) -> Dict:
         'nearest_fib': nearest['fibonacci'] if nearest else None
     }
 
+

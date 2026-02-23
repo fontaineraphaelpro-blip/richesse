@@ -292,6 +292,28 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     <button class="tab" onclick="showTab('charts')">&#128202; Graphiques</button>
     <button class="tab" onclick="showTab('stats')">&#128201; Statistiques</button>
     <button class="tab" onclick="showTab('history')">&#128220; Historique</button>
+    <button class="tab" onclick="showTab('arbitrage')">&#129689; Arbitrage</button>
+<!-- ==================== TAB: ARBITRAGE ==================== -->
+<div id="tab-arbitrage" class="tab-content" style="display:none">
+    <div class="card">
+        <div class="card-header">
+            <h2>&#129689; Transactions Arbitrage</h2>
+        </div>
+        <div class="log">
+            {% if arbitrage_logs %}
+                {% for log in arbitrage_logs|reverse %}
+                <div class="log-line">
+                    <span class="log-time">{{ log.time }}</span>
+                    <span class="log-level l-{{ log.level|upper }}">{{ log.level }}</span>
+                    <span class="log-msg">{{ log.msg }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty">Aucune transaction arbitrage enregistrée.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
 </div>
 
 <!-- ==================== TAB: DASHBOARD ==================== -->
@@ -833,10 +855,14 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 // Tab switching
 function showTab(tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => {
+        tc.classList.remove('active');
+        tc.style.display = 'none';
+    });
     document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
-    document.getElementById(`tab-${tabId}`).classList.add('active');
-    
+    const tabContent = document.getElementById(`tab-${tabId}`);
+    tabContent.classList.add('active');
+    tabContent.style.display = '';
     // Initialize charts when switching to charts tab
     if (tabId === 'charts') initCharts();
 }

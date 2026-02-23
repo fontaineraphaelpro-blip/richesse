@@ -402,6 +402,11 @@ def dashboard():
     all_pairs = get_all_pairs_from_history(all_trades)
     crash = get_crash_status()
     
+    # Importer arbitrage_logs depuis wsgi.py
+    try:
+        from wsgi import arbitrage_logs
+    except ImportError:
+        arbitrage_logs = []
     return render_template_string(
         get_enhanced_dashboard(),
         balance=balance,
@@ -424,6 +429,7 @@ def dashboard():
         chart_data=json.dumps(chart_data),
         all_pairs=all_pairs,
         crash=crash,
+        arbitrage_logs=arbitrage_logs,
     )
 
 
