@@ -9,6 +9,13 @@ import time
 import logging
 import ccxt
 from web3 import Web3
+from datetime import datetime
+
+# Pour journaliser dans l'interface web
+try:
+    from wsgi import arbitrage_logs
+except ImportError:
+    arbitrage_logs = None
 
 class MultiExchangeArbitrageBot:
     def __init__(self, cex_configs, dex_configs, symbol, threshold=0.002, trade_amount=0.1, paper_trading=True):
@@ -86,10 +93,22 @@ class MultiExchangeArbitrageBot:
             return buy_ex, sell_ex, spread
         return None, None, spread
 
+    def log_web(self, level, msg):
+        if arbitrage_logs is not None:
+            arbitrage_logs.append({
+                'time': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                'level': level,
+                'msg': msg
+            })
+
     def execute_arbitrage(self, buy_ex, sell_ex):
-        self.logger.info(f"Arbitrage: Acheter sur {buy_ex}, vendre sur {sell_ex} (montant: {self.trade_amount} {self.symbol})")
+        log_msg = f"Arbitrage: Acheter sur {buy_ex}, vendre sur {sell_ex} (montant: {self.trade_amount} {self.symbol})"
+        self.logger.info(log_msg)
+        self.log_web('INFO', log_msg)
         if self.paper_trading:
-            self.logger.info(f"[PAPER] Simuler achat sur {buy_ex}, vente sur {sell_ex}")
+            sim_msg = f"[PAPER] Simuler achat sur {buy_ex}, vente sur {sell_ex}"
+            self.logger.info(sim_msg)
+            self.log_web('INFO', sim_msg)
         else:
             # À compléter: placer les ordres réels sur les exchanges concernés
             pass
@@ -97,18 +116,25 @@ class MultiExchangeArbitrageBot:
     def start(self, poll_interval=5):
         self.running = True
         self.logger.info("Multi-exchange arbitrage bot started.")
+        self.log_web('INFO', "Multi-exchange arbitrage bot started.")
         while self.running:
             try:
                 all_prices = self.scan_all()
                 buy_ex, sell_ex, spread = self.find_arbitrage(all_prices)
                 if buy_ex and sell_ex:
-                    self.logger.info(f"Arbitrage détecté! Spread: {spread*100:.2f}% entre {buy_ex} et {sell_ex}")
+                    msg = f"Arbitrage détecté! Spread: {spread*100:.2f}% entre {buy_ex} et {sell_ex}"
+                    self.logger.info(msg)
+                    self.log_web('INFO', msg)
                     self.execute_arbitrage(buy_ex, sell_ex)
                 else:
-                    self.logger.debug(f"Aucune opportunité. Spread max: {spread*100:.2f}%")
+                    debug_msg = f"Aucune opportunité. Spread max: {spread*100:.2f}%"
+                    self.logger.debug(debug_msg)
+                    self.log_web('DEBUG', debug_msg)
                 time.sleep(poll_interval)
             except Exception as e:
-                self.logger.error(f"Erreur: {e}")
+                err_msg = f"Erreur: {e}"
+                self.logger.error(err_msg)
+                self.log_web('ERROR', err_msg)
                 time.sleep(5)
 
     def stop(self):

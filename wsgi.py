@@ -22,8 +22,56 @@ from indicators import calculate_indicators
 from support import find_swing_low, calculate_distance_to_support
 from scorer import calculate_opportunity_score
 
-# Variable globale pour les opportunités
+# Variables globales pour les opportunités et les logs d'arbitrage
 opportunities_data = {'data': []}
+arbitrage_logs = []
+# Template HTML pour la page arbitrage
+ARBITRAGE_HTML = """
+<!DOCTYPE html>
+<html lang=\"fr\">
+<head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>Transactions Arbitrage</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #222; color: #eee; padding: 30px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #ffd700; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid #444; }
+        th { background: #333; color: #ffd700; }
+        tr:nth-child(even) { background: #292929; }
+        .log-info { color: #00e676; }
+        .log-error { color: #ff5252; }
+        .log-debug { color: #40c4ff; }
+    </style>
+</head>
+<body>
+    <div class=\"container\">
+        <h1>🪙 Transactions Arbitrage (Paper Trading)</h1>
+        <table>
+            <thead>
+                <tr><th>Date</th><th>Niveau</th><th>Message</th></tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log['time'] }}</td>
+                    <td class="log-{{ log['level'].lower() }}">{{ log['level'] }}</td>
+                    <td>{{ log['msg'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if not logs %}<p>Aucune transaction arbitrage enregistrée.</p>{% endif %}
+    </div>
+</body>
+</html>
+"""
+# Route pour afficher les transactions du bot d'arbitrage
+@app.route('/arbitrage')
+def arbitrage_logs_page():
+    return render_template_string(ARBITRAGE_HTML, logs=arbitrage_logs)
 
 # Fonction pour exécuter un scan
 def run_scanner():
