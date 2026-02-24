@@ -56,9 +56,10 @@ SCAN_INTERVAL    = 900
 MAX_POSITIONS    = 1
 MAX_CONSECUTIVE_LOSSES = 3   # Risk mgt: stop après 3 pertes pour protéger le capital
 COOLDOWN_MINUTES = 10        # Risk mgt: éviter le sur-trading
-SPREAD_MAX_PCT   = 0.30      # Qualité des bougies (0.15 trop strict → 0 opportunités sur 200 paires)
-VOLUME_RATIO_MIN = 0.80      # Volume >= 80% de la moyenne (1.0 éliminait presque toutes les paires)
-VOLATILITY_MAX   = 5.0       # Éviter les actifs trop volatils
+SPREAD_MAX_PCT   = 0.50      # Qualité des bougies (assoupli pour avoir des candidats)
+VOLUME_RATIO_MIN = 0.35      # Volume >= 35% de la moyenne (pour avoir un top 10 à chaque scan)
+VOLATILITY_MAX   = 6.0       # Éviter les actifs trop volatils
+TOP_OPPORTUNITIES_DISPLAY = 10   # Toujours afficher au moins les N meilleures (signaux + potentiels)
 TREND_15M_MUST_BEARISH = True
 TREND_1H_MUST_BEARISH = True
 TREND_1H_ALLOW_NEUTRAL = True
@@ -389,9 +390,10 @@ def run_scanner():
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
     trader = PaperTrader()
-    # Risk management: d'abord mettre à jour SL (breakeven, trailing), puis vérifier SL/TP
+    # Risk management: breakeven → trailing → TP partiel (50% à TP1, reste vers TP2) → SL/TP
     trader.check_and_apply_breakeven(real_prices)
     trader.check_and_apply_trailing_stop(real_prices)
+    trader.check_and_apply_partial_tp(real_prices)
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
     if open_pos:
@@ -471,12 +473,17 @@ def run_scanner():
         if in_cooldown:
             continue
 
-        # —— SHORT ——
         ok_15m_short = (momentum_15m == 'BEARISH') if TREND_15M_MUST_BEARISH else True
         allowed_1h = ('BEARISH', 'NEUTRAL') if TREND_1H_ALLOW_NEUTRAL else ('BEARISH',)
         ok_1h_short = (momentum_1h in allowed_1h) if TREND_1H_MUST_BEARISH else True
         ok_4h_short = (momentum_4h is None or momentum_4h in ('BEARISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
-        if ok_15m_short and ok_1h_short and ok_4h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
+        ok_15m_long = (momentum_15m in ('BULLISH', 'NEUTRAL')) if TREND_15M_LONG_BULLISH else True
+        ok_1h_long = (momentum_1h in ('BULLISH', 'NEUTRAL')) if TREND_1H_LONG_BULLISH else True
+        ok_4h_long = (momentum_4h is None or momentum_4h in ('BULLISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
+        has_short = ok_15m_short and ok_1h_short and ok_4h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
+        has_long = ok_15m_long and ok_1h_long and ok_4h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
+
+        if has_short:
             n_short_signal += 1
             stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
             if stop_loss is None:
@@ -486,6 +493,7 @@ def run_scanner():
             details = score_short_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m or 'BEARISH', momentum_1h=momentum_1h or 'BEARISH',
+                momentum_4h=momentum_4h,
                 stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
             )
             rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else details['rr_ratio']
@@ -498,13 +506,10 @@ def run_scanner():
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bearish': details.get('macd_bearish'),
+                'is_signal': True,
             })
 
-        # —— LONG ——
-        ok_15m_long = (momentum_15m in ('BULLISH', 'NEUTRAL')) if TREND_15M_LONG_BULLISH else True
-        ok_1h_long = (momentum_1h in ('BULLISH', 'NEUTRAL')) if TREND_1H_LONG_BULLISH else True
-        ok_4h_long = (momentum_4h is None or momentum_4h in ('BULLISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
-        if ok_15m_long and ok_1h_long and ok_4h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN):
+        if has_long:
             n_long_signal += 1
             stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
             if stop_loss is None:
@@ -514,6 +519,7 @@ def run_scanner():
             details = score_long_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m or 'BULLISH', momentum_1h=momentum_1h or 'BULLISH',
+                momentum_4h=momentum_4h,
                 stop_loss_pct=LONG_STOP_LOSS_PCT, take_profit_pct=LONG_TAKE_PROFIT_PCT,
             )
             rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else details['rr_ratio']
@@ -526,7 +532,61 @@ def run_scanner():
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bullish': details.get('macd_bullish'),
+                'is_signal': True,
             })
+
+        # Si aucun signal strict mais on a les données: ajouter la "meilleure potentialité" pour le top 10
+        if not has_short and not has_long:
+            details_short = score_short_opportunity(
+                indicators, spread_pct, atr_pct,
+                momentum_15m=momentum_15m or 'NEUTRAL', momentum_1h=momentum_1h or 'NEUTRAL',
+                momentum_4h=momentum_4h,
+                stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
+            )
+            details_long = score_long_opportunity(
+                indicators, spread_pct, atr_pct,
+                momentum_15m=momentum_15m or 'NEUTRAL', momentum_1h=momentum_1h or 'NEUTRAL',
+                momentum_4h=momentum_4h,
+                stop_loss_pct=LONG_STOP_LOSS_PCT, take_profit_pct=LONG_TAKE_PROFIT_PCT,
+            )
+            score_s = details_short['score'] + session_bonus
+            score_l = details_long['score'] + session_bonus
+            if score_s >= score_l and score_s > 0:
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
+                if stop_loss is None:
+                    stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+                    take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+                    sl_pct_eff = STOP_LOSS_PCT
+                rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 2.0
+                short_opportunities.append({
+                    'symbol': symbol, 'pair': symbol, 'price': price,
+                    'stop_loss': stop_loss, 'take_profit': take_profit,
+                    'sl_pct_effective': sl_pct_eff,
+                    'entry_signal': 'SHORT', 'score': score_s,
+                    'rsi': details_short['rsi'], 'volume_ratio': details_short['volume_ratio'],
+                    'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-',
+                    'spread_pct': details_short['spread_pct'], 'atr_pct': details_short['atr_pct'], 'rr_ratio': round(rr, 1),
+                    'adx': details_short.get('adx'), 'macd_bearish': details_short.get('macd_bearish'),
+                    'is_signal': False,
+                })
+            elif score_l > 0:
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
+                if stop_loss is None:
+                    stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
+                    take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                    sl_pct_eff = LONG_STOP_LOSS_PCT
+                rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 2.0
+                long_opportunities.append({
+                    'symbol': symbol, 'pair': symbol, 'price': price,
+                    'stop_loss': stop_loss, 'take_profit': take_profit,
+                    'sl_pct_effective': sl_pct_eff,
+                    'entry_signal': 'LONG', 'score': score_l,
+                    'rsi': details_long['rsi'], 'volume_ratio': details_long['volume_ratio'],
+                    'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-',
+                    'spread_pct': details_long['spread_pct'], 'atr_pct': details_long['atr_pct'], 'rr_ratio': round(rr, 1),
+                    'adx': details_long.get('adx'), 'macd_bullish': details_long.get('macd_bullish'),
+                    'is_signal': False,
+                })
 
     # Fusionner et trier par score (meilleure opportunité en premier)
     opportunities_list = list(long_opportunities) + list(short_opportunities)
@@ -539,84 +599,97 @@ def run_scanner():
         scan_num, n_pairs, n_volume_ok, n_spread_ok, n_long_signal, n_short_signal, len(opportunities_list)), 'INFO')
 
     # —— 4. Ouvrir la meilleure opportunité (LONG ou SHORT) si aucune position ouverte ——
+    # Ne prendre que les opportunités avec is_signal True (signal strict), pas les "potentielles"
     if opportunities_list and not trader.get_open_positions():
-        best = opportunities_list[0]
-        is_long = best.get('entry_signal') == 'LONG'
-        min_score = MIN_SCORE_TO_OPEN
-        if DYNAMIC_SCORE_ENABLED:
-            try:
-                fg = get_social_fear_greed()
-                if fg and not fg.get('error'):
-                    v = fg.get('value', 50)
-                    if v < 25:
-                        min_score = SCORE_BEARISH_MARKET
-                    elif v < 45:
-                        min_score = SCORE_NEUTRAL_MARKET
-                    else:
-                        min_score = SCORE_BULLISH_MARKET
-            except Exception:
-                pass
-        if best['score'] < min_score:
-            add_bot_log("Meilleure opportunité score {} < {} (min) — pas d'ouverture.".format(best['score'], min_score), 'INFO')
-        else:
-            skip_sentiment = False
-            if SENTIMENT_FILTER_ENABLED:
-                try:
-                    fg = get_social_fear_greed()
-                    if fg and not fg.get('error'):
-                        v = fg.get('value', 50)
-                        if is_long and v >= FEAR_GREED_MAX_TO_LONG:
-                            add_bot_log("Extreme Greed ({}): pas de LONG (correction probable).".format(v), 'INFO')
-                            skip_sentiment = True
-                        elif not is_long and v <= FEAR_GREED_MIN_TO_SHORT:
-                            add_bot_log("Extreme Fear ({}): pas de SHORT pour eviter rebond.".format(v), 'INFO')
-                            skip_sentiment = True
-                except Exception:
-                    pass
-            if not skip_sentiment:
-                symbol = best['symbol']
-                price = best['price']
-                stop_loss = best['stop_loss']
-                take_profit = best['take_profit']
-                balance = trader.get_usdt_balance()
-                # Risk management optimal: Kelly adapte la taille au win rate (max gains long terme)
-                if KELLY_RISK_ENABLED:
-                    kelly = position_sizer.calculate_kelly()
-                    risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, kelly))
+        best = None
+        for opp in opportunities_list:
+            if opp.get('is_signal', True):
+                best = opp
+                break
+        if best is not None:
+            rr = best.get('rr_ratio') or 0
+            if rr < MIN_RISK_REWARD:
+                add_bot_log("Meilleure opportunité R:R {:.1f} < {:.1f} — ignorée.".format(rr, MIN_RISK_REWARD), 'INFO')
+                best = next((o for o in opportunities_list if o.get('is_signal', True) and (o.get('rr_ratio') or 0) >= MIN_RISK_REWARD), None)
+            if best is not None:
+                is_long = best.get('entry_signal') == 'LONG'
+                min_score = MIN_SCORE_TO_OPEN
+                if DYNAMIC_SCORE_ENABLED:
+                    try:
+                        fg = get_social_fear_greed()
+                        if fg and not fg.get('error'):
+                            v = fg.get('value', 50)
+                            if v < 25:
+                                min_score = SCORE_BEARISH_MARKET
+                            elif v < 45:
+                                min_score = SCORE_NEUTRAL_MARKET
+                            else:
+                                min_score = SCORE_BULLISH_MARKET
+                    except Exception:
+                        pass
+                if best['score'] < min_score:
+                    add_bot_log("Meilleure opportunité score {} < {} (min) — pas d'ouverture.".format(best['score'], min_score), 'INFO')
                 else:
-                    risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
-
-                if is_long:
-                    sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
-                    pos_size = position_size_long_usdt(
-                        balance, risk_pct=risk_pct, sl_pct=sl_pct,
-                        max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
-                    )
-                    pos_size = min(pos_size, max(0, balance * 0.98))
-                    if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG'):
-                        trader.record_trade_time(symbol)
-                        ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
-                            best['rsi'], best.get('adx') or '-',
-                            'bullish' if best.get('macd_bullish') else '-',
-                            best['momentum_15m'], best['momentum_1h'])
-                        add_bot_log("LONG {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
-                        return shared_data['opportunities']
-                else:
-                    lev = trader.short_leverage
-                    sl_pct = best.get('sl_pct_effective') or STOP_LOSS_PCT
-                    pos_size = position_size_usdt(
-                        balance, risk_pct=risk_pct, sl_pct=sl_pct,
-                        leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
-                    )
-                    pos_size = min(pos_size, max(0, balance * 0.98))
-                    if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
-                        trader.record_trade_time(symbol)
-                        ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
-                            best['rsi'], best.get('adx') or '-',
-                            'bearish' if best.get('macd_bearish') else '-',
-                            best['momentum_15m'], best['momentum_1h'])
-                        add_bot_log("SHORT {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
-                        return shared_data['opportunities']
+                    skip_sentiment = False
+                    if SENTIMENT_FILTER_ENABLED:
+                        try:
+                            fg = get_social_fear_greed()
+                            if fg and not fg.get('error'):
+                                v = fg.get('value', 50)
+                                if is_long and v >= FEAR_GREED_MAX_TO_LONG:
+                                    add_bot_log("Extreme Greed ({}): pas de LONG (correction probable).".format(v), 'INFO')
+                                    skip_sentiment = True
+                                elif not is_long and v <= FEAR_GREED_MIN_TO_SHORT:
+                                    add_bot_log("Extreme Fear ({}): pas de SHORT pour eviter rebond.".format(v), 'INFO')
+                                    skip_sentiment = True
+                        except Exception:
+                            pass
+                    if not skip_sentiment:
+                        symbol = best['symbol']
+                        price = best['price']
+                        stop_loss = best['stop_loss']
+                        take_profit = best['take_profit']
+                        balance = trader.get_usdt_balance()
+                        if KELLY_RISK_ENABLED:
+                            kelly = position_sizer.calculate_kelly()
+                            risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, kelly))
+                        else:
+                            risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
+                        atr_pct = best.get('atr_pct') or 2.0
+                        size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital)
+                        if is_long:
+                            sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
+                            pos_size = position_size_long_usdt(
+                                balance, risk_pct=risk_pct, sl_pct=sl_pct,
+                                max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
+                            )
+                            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+                            take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
+                            if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
+                                trader.record_trade_time(symbol)
+                                ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
+                                    best['rsi'], best.get('adx') or '-',
+                                    'bullish' if best.get('macd_bullish') else '-',
+                                    best['momentum_15m'], best['momentum_1h'])
+                                add_bot_log("LONG {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                                return shared_data['opportunities']
+                        else:
+                            lev = trader.short_leverage
+                            sl_pct = best.get('sl_pct_effective') or STOP_LOSS_PCT
+                            pos_size = position_size_usdt(
+                                balance, risk_pct=risk_pct, sl_pct=sl_pct,
+                                leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
+                            )
+                            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+                            take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
+                            if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
+                                trader.record_trade_time(symbol)
+                                ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
+                                    best['rsi'], best.get('adx') or '-',
+                                    'bearish' if best.get('macd_bearish') else '-',
+                                    best['momentum_15m'], best['momentum_1h'])
+                                add_bot_log("SHORT {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                                return shared_data['opportunities']
 
     add_bot_log("Aucun signal LONG/SHORT retenu." if not opportunities_list else "{} opportunite(s) — aucune ouverte (solde/cooldown/sentiment).".format(len(opportunities_list)), 'INFO')
     return shared_data['opportunities']

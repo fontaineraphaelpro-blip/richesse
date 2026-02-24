@@ -238,12 +238,12 @@ class PaperTrader:
                 # Calculer le gain depuis l'entrée
                 gain_pct = ((current_price - entry_price) / entry_price) * 100
                 
-                # Activer le trailing si gain >= seuil d'activation
-                if gain_pct >= self.trailing_stop_activation_pct:
-                    # Calculer le nouveau SL trailing (distance % sous le plus haut)
-                    new_trailing_sl = highest_price * (1 - self.trailing_stop_distance_pct / 100)
-                    
-                    # Le SL ne doit JAMAIS descendre (pour LONG)
+                # Activation/distance: ATR-based si position a atr_pct, sinon fixe
+                atr_pct = pos.get('atr_pct')
+                act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
+                dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
+                if gain_pct >= act_pct:
+                    new_trailing_sl = highest_price * (1 - dist_pct / 100)
                     if new_trailing_sl > current_sl:
                         old_sl = current_sl
                         self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
@@ -262,12 +262,11 @@ class PaperTrader:
                 # Calculer le gain depuis l'entrée (pour short, gain = prix baisse)
                 gain_pct = ((entry_price - current_price) / entry_price) * 100
                 
-                # Activer le trailing si gain >= seuil d'activation
-                if gain_pct >= self.trailing_stop_activation_pct:
-                    # Calculer le nouveau SL trailing (distance % au-dessus du plus bas)
-                    new_trailing_sl = lowest_price * (1 + self.trailing_stop_distance_pct / 100)
-                    
-                    # Le SL ne doit JAMAIS monter (pour SHORT)
+                atr_pct = pos.get('atr_pct')
+                act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
+                dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
+                if gain_pct >= act_pct:
+                    new_trailing_sl = lowest_price * (1 + dist_pct / 100)
                     if new_trailing_sl < current_sl:
                         old_sl = current_sl
                         self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
@@ -475,6 +474,7 @@ class PaperTrader:
         take_profit_price: float,
         entry_trend: str = 'UNKNOWN',  # Tendance à l'ouverture
         take_profit_2: float = None,   # TP2 pour scaling out
+        atr_pct: float = None,         # ATR % pour trailing stop adaptatif
     ) -> bool:
         """Exécute un ordre d'ACHAT (position LONG)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -499,8 +499,9 @@ class PaperTrader:
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
-            'take_profit_2': take_profit_2,  # TP2 pour scaling out
-            'entry_trend': entry_trend,  # NOUVEAU: Mémoriser la tendance
+            'take_profit_2': take_profit_2,
+            'entry_trend': entry_trend,
+            'atr_pct': atr_pct,
         }
         self.save_wallet()
 
@@ -537,7 +538,9 @@ class PaperTrader:
         current_price: float,
         stop_loss_price: float,
         take_profit_price: float,
-        entry_trend: str = 'UNKNOWN',  # Tendance à l'ouverture
+        entry_trend: str = 'UNKNOWN',
+        take_profit_2: float = None,
+        atr_pct: float = None,
     ) -> bool:
         """Exécute un ordre de VENTE À DÉCOUVERT (position SHORT)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -568,8 +571,10 @@ class PaperTrader:
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
+            'take_profit_2': take_profit_2,
             'entry_trend': entry_trend,
             'leverage':    lev,
+            'atr_pct': atr_pct,
         }
         self.save_wallet()
 

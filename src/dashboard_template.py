@@ -392,7 +392,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     <div class="table-scroll">
         <table>
             <thead><tr>
-                <th>#</th><th>Sens</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
+                <th>#</th><th>Sens</th><th>Type</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
                 <th>Prix</th><th>SL</th><th>TP</th><th>R:R</th><th>Spread%</th><th>ATR%</th>
             </tr></thead>
             <tbody>
@@ -400,6 +400,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             <tr>
                 <td style="font-weight:700;color:var(--text3)">{{ loop.index }}</td>
                 <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ opp.entry_signal|default('SHORT') }}</span></td>
+                <td><span class="badge {% if opp.is_signal|default(True) %}b-blue{% else %}b-yellow{% endif %}" title="{% if opp.is_signal|default(True) %}Le bot peut ouvrir{% else %}Info seulement{% endif %}">{% if opp.is_signal|default(True) %}Signal{% else %}Potentiel{% endif %}</span></td>
                 <td style="font-weight:700;color:var(--blue)">{{ opp.symbol|default(opp.pair) }}</td>
                 <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text2){% endif %}">{{ opp.score|default(0) }} pts</td>
                 <td>{{ opp.rsi|default('-') }}</td>
@@ -571,21 +572,22 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Opportunités (LONG / SHORT) — {{ opportunities|length }} signaux</h2>
+        <h2>Top 10 des meilleures opportunités ({{ opportunities[:10]|length }} affichées)</h2>
         <a href="/api/export/trades" class="btn btn-primary" style="text-decoration:none;">Export CSV</a>
     </div>
     {% if opportunities %}
     <div class="table-scroll">
         <table>
             <thead><tr>
-                <th>#</th><th>Sens</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
+                <th>#</th><th>Sens</th><th>Type</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
                 <th>Prix</th><th>SL</th><th>TP</th><th>R:R</th><th>Spread%</th><th>ATR%</th>
             </tr></thead>
             <tbody>
-            {% for opp in opportunities %}
+            {% for opp in opportunities[:10] %}
             <tr>
                 <td style="font-weight:700;color:var(--text3)">{{ loop.index }}</td>
                 <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ opp.entry_signal|default('SHORT') }}</span></td>
+                <td><span class="badge {% if opp.is_signal|default(True) %}b-blue{% else %}b-yellow{% endif %}">{% if opp.is_signal|default(True) %}Signal{% else %}Potentiel{% endif %}</span></td>
                 <td style="font-weight:700;color:var(--blue)">{{ opp.symbol|default(opp.pair) }}</td>
                 <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text2){% endif %}">{{ opp.score|default(0) }} pts</td>
                 <td>{{ opp.rsi|default('-') }}</td>

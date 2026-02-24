@@ -105,8 +105,8 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
 
 
 def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLISH', momentum_1h='BULLISH',
-                           stop_loss_pct=1.0, take_profit_pct=2.0):
-    """Score 0-100 pour une opportunité LONG (suivi tendance: zone 45-70)."""
+                           momentum_4h=None, stop_loss_pct=1.0, take_profit_pct=2.0):
+    """Score 0-100 pour une opportunité LONG (suivi tendance: zone 45-70). 4h alignée = bonus."""
     score = 0.0
     rsi = indicators.get('rsi14') or 50
     # RSI: zone 50-65 idéale pour continuation haussière (pas rebond)
@@ -137,6 +137,10 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
         score += 15
     elif momentum_1h == 'NEUTRAL':
         score += 7
+    if momentum_4h == 'BULLISH':
+        score += 10
+    elif momentum_4h == 'NEUTRAL':
+        score += 5
 
     macd_hist = indicators.get('macd_hist')
     if macd_hist is not None and macd_hist > 0:
@@ -182,6 +186,7 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
         'volume_ratio': round(vol_ratio, 2),
         'momentum_15m': momentum_15m or '-',
         'momentum_1h': momentum_1h or '-',
+        'momentum_4h': momentum_4h or '-',
         'spread_pct': round(spread_pct, 2),
         'atr_pct': round(atr_pct, 2),
         'rr_ratio': round(rr_ratio, 1),
@@ -279,11 +284,10 @@ def position_size_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, leverage=10, max
 
 
 def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARISH', momentum_1h='BEARISH',
-                           stop_loss_pct=1.0, take_profit_pct=2.0):
+                           momentum_4h=None, stop_loss_pct=1.0, take_profit_pct=2.0):
     """
-    Calcule un score de 0 à 100 pour une opportunité SHORT (analyse technique poussée).
-    Critères: RSI, volume, MACD, ADX, Bollinger, tendances 15m/1h, spread, ATR.
-    Retourne aussi un dict avec toutes les infos pour l'affichage (ranking).
+    Calcule un score de 0 à 100 pour une opportunité SHORT.
+    Critères: RSI, volume, MACD, ADX, Bollinger, tendances 15m/1h/4h, spread, ATR.
     """
     score = 0.0
     rsi = indicators.get('rsi14')
@@ -300,7 +304,6 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
         score += 8
 
     vol_ratio = indicators.get('volume_ratio') or 0
-    # Volume: plus c'est élevé, plus la confirmation est forte → +0 à +20 pts
     if vol_ratio >= 2.0:
         score += 20
     elif vol_ratio >= 1.5:
@@ -310,14 +313,16 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     elif vol_ratio >= 1.0:
         score += 5
 
-    # Tendance 15m baissière → +15 pts
     if momentum_15m == 'BEARISH':
         score += 15
-    # Tendance 1h baissière → +15 pts ; 1h neutre → +7 pts (pour TREND_1H_ALLOW_NEUTRAL)
     if momentum_1h == 'BEARISH':
         score += 15
     elif momentum_1h == 'NEUTRAL':
         score += 7
+    if momentum_4h == 'BEARISH':
+        score += 10
+    elif momentum_4h == 'NEUTRAL':
+        score += 5
 
     # MACD bearish (momentum baissier) → +5 pts
     macd_hist = indicators.get('macd_hist')
@@ -369,6 +374,7 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
         'volume_ratio': round(vol_ratio, 2),
         'momentum_15m': momentum_15m or '-',
         'momentum_1h': momentum_1h or '-',
+        'momentum_4h': momentum_4h or '-',
         'spread_pct': round(spread_pct, 2),
         'atr_pct': round(atr_pct, 2),
         'rr_ratio': round(rr_ratio, 1),
