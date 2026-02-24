@@ -31,6 +31,7 @@ from position_sizing import position_sizer, calculate_position_size, get_positio
 from macro_events import macro_analyzer, get_macro_analysis, get_upcoming_economic_events
 from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment
 from trade_journal_ai import get_trade_journal, get_journal_stats
+from arbitrage_strategy import run_arbitrage_autonomous
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
@@ -55,8 +56,8 @@ SCAN_INTERVAL    = 900
 MAX_POSITIONS    = 1
 MAX_CONSECUTIVE_LOSSES = 3   # Risk mgt: stop après 3 pertes pour protéger le capital
 COOLDOWN_MINUTES = 10        # Risk mgt: éviter le sur-trading
-SPREAD_MAX_PCT   = 0.15      # Qualité des bougies
-VOLUME_RATIO_MIN = 1.0       # Volume >= moyenne
+SPREAD_MAX_PCT   = 0.30      # Qualité des bougies (0.15 trop strict → 0 opportunités sur 200 paires)
+VOLUME_RATIO_MIN = 0.80      # Volume >= 80% de la moyenne (1.0 éliminait presque toutes les paires)
 VOLATILITY_MAX   = 5.0       # Éviter les actifs trop volatils
 TREND_15M_MUST_BEARISH = True
 TREND_1H_MUST_BEARISH = True
@@ -1455,6 +1456,21 @@ if __name__ == '__main__':
     # Thread Scanner (daemon â€” s'arrÃªte avec le programme principal)
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
+
+    def _run_arbitrage_loop():
+        symbol = os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT')
+        threshold = float(os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3'))
+        poll_sec = int(os.environ.get('ARBITRAGE_POLL_SEC', '45'))
+        run_arbitrage_autonomous(
+            shared_data['arbitrage_logs'],
+            symbol=symbol,
+            threshold_pct=threshold,
+            poll_interval_sec=poll_sec,
+            paper_trading=True,
+            shared_data=shared_data,
+        )
+    arbitrage_thread = threading.Thread(target=_run_arbitrage_loop, daemon=True)
+    arbitrage_thread.start()
 
     port = int(os.environ.get('PORT', 8080))
     add_bot_log(f"Dashboard: http://localhost:{port}", 'INFO')
