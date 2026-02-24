@@ -33,18 +33,18 @@ class PaperTrader:
             self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
-        self.breakeven_trigger_pct = 0.5   # Break-even rapide a +0.5%
-        self.max_drawdown_pct = 10.0       # Arrêter trading si perte > 10%
-        self.initial_capital = initial_balance  # Capital de référence
+        self.breakeven_trigger_pct = 0.8   # Break-even a +0.8% (avec 10x = +8% sur marge)
+        self.max_drawdown_pct = 25.0       # Tolerance 25% drawdown (mode all-in)
+        self.initial_capital = initial_balance
         
-        # Configuration Trailing Stop Loss
+        # Trailing Stop — laisser courir les gros moves
         self.trailing_stop_enabled = True
-        self.trailing_stop_activation_pct = 1.5  # Trailing a +1.5%
-        self.trailing_stop_distance_pct = 0.7     # Distance 0.7% sous le plus haut
+        self.trailing_stop_activation_pct = 2.0  # Trailing a +2.0% prix (avec 10x = +20% marge)
+        self.trailing_stop_distance_pct = 0.5     # Distance 0.5% (serre pour locker les gains)
         
-        # Configuration Take Profit Partiel
-        self.partial_tp_enabled = True
-        self.partial_tp_ratio = 0.5  # Prendre 50% à TP1
+        # Partial TP DESACTIVE — all-in = laisser courir au TP complet
+        self.partial_tp_enabled = False
+        self.partial_tp_ratio = 0.0
         
         # Cooldown après trade
         self.cooldown_enabled = True
@@ -192,11 +192,11 @@ class PaperTrader:
                 sl_is_below_entry = current_sl > entry_price
             
             if gain_pct >= self.breakeven_trigger_pct and sl_is_below_entry:
-                # SL -> entry + 0.25% = vrai profit garanti
+                # SL -> entry + 0.3% = profit garanti (avec 10x = +3% sur marge)
                 if direction == 'LONG':
-                    be_price = entry_price * 1.0025
+                    be_price = entry_price * 1.003
                 else:
-                    be_price = entry_price * 0.9975
+                    be_price = entry_price * 0.997
                 self.wallet['positions'][symbol]['stop_loss'] = be_price
                 self.wallet['positions'][symbol]['breakeven_active'] = True
                 modified_count += 1

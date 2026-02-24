@@ -20,15 +20,15 @@ from short_crash_strategy import (
     compute_sl_tp_from_chart,
 )
 
-VOLUME_RATIO_MIN = 1.2       # Volume >= 120% de la moyenne
+VOLUME_RATIO_MIN = 1.5       # Volume >= 150%
 STOP_LOSS_PCT = 1.5
-TAKE_PROFIT_PCT = 1.5         # TP = SL (R:R 1:1 pour 60% WR)
+TAKE_PROFIT_PCT = 3.0         # TP 3% = gros target (R:R 2:1)
 LONG_STOP_LOSS_PCT = 1.5
-LONG_TAKE_PROFIT_PCT = 1.5
-MIN_SCORE_TO_OPEN = 70        # Score strict (backtest single-TF = moins strict que live)
-MIN_ADX = 22                  # ADX 22+ = tendance confirmee
+LONG_TAKE_PROFIT_PCT = 3.0
+MIN_SCORE_TO_OPEN = 75        # Score strict (backtest single-TF = moins strict que live)
+MIN_ADX = 22
 INITIAL_CAPITAL = 100.0
-POSITION_PCT = 25
+POSITION_PCT = 90              # ALL-IN: 90% du capital par trade
 SLIPPAGE_PCT = 0.05
 SAMPLE_EVERY = 4
 LOOKBACK = 250
