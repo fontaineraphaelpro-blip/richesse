@@ -24,8 +24,7 @@ from flask import Flask, render_template_string, jsonify, request, Response
 #   adaptive_strategy/analyze_and_adapt/get_adaptive_strategy
 from trader import PaperTrader
 from data_fetcher import fetch_multiple_pairs
-from dashboard_template import get_enhanced_dashboard
-from dashboard_stats import calculate_advanced_stats, calculate_chart_data, format_history_for_display, get_all_pairs_from_history
+from minimal_dashboard import get_minimal_dashboard_html
 from indicators import calculate_indicators
 from crash_protection import crash_protector, get_crash_status
 from news_analyzer import news_analyzer, get_market_sentiment
@@ -60,7 +59,7 @@ LONG_TAKE_PROFIT_PCT = 1.8
 SCAN_INTERVAL    = 300
 SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
-MAX_POSITIONS    = 2           # 2 positions max
+MAX_POSITIONS    = 4           # 4 positions max (multiplier les trades gagnants)
 MAX_CONSECUTIVE_LOSSES = 2
 COOLDOWN_MINUTES = 10          # 10 min entre trades
 SPREAD_MAX_PCT   = 0.10
@@ -88,7 +87,7 @@ SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 15.0   # Tolerance 15% (levier 10x)
 
-MIN_SCORE_TO_OPEN = 78          # Score 78+ = bons setups (equilibre qualite/quantite)
+MIN_SCORE_TO_OPEN = 62          # Score 62+ = opportunités adaptatives (multi-indicateurs)
 SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -101,7 +100,7 @@ KELLY_RISK_MAX_PCT = 0.08      # Maximum 8% (levier 10x)
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '300'))  # 5 min par défaut
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '90'))   # 90s H24 day trader pro
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -116,11 +115,11 @@ PARTIAL_TP_RATIO = 0.5       # Prendre 0% Ã  TP1
 VOLUME_FILTER_ENABLED = True
 MIN_VOLUME_RATIO = 1.2       # Volume doit Ãªtre 1.2x la moyenne
 
-# Heures de Trading Optimales (UTC)
-TRADING_HOURS_ENABLED = True   # ACTIVE = trader uniquement sessions liquides
-TRADING_START_HOUR = 8         # 8h UTC = ouverture Europe
-TRADING_END_HOUR = 22          # 22h UTC = fermeture US
-AVOID_WEEKENDS = True
+# Heures de Trading — DAY TRADER PRO 24/7
+TRADING_HOURS_ENABLED = False  # DÉSACTIVÉ = trade H24 (crypto ne dort jamais)
+TRADING_START_HOUR = 8         # (ignoré si TRADING_HOURS_ENABLED=False)
+TRADING_END_HOUR = 22          # (ignoré si TRADING_HOURS_ENABLED=False)
+AVOID_WEEKENDS = False         # Crypto trade 7j/7
 
 # Score Dynamique selon Marche
 DYNAMIC_SCORE_ENABLED = True
@@ -438,10 +437,9 @@ def run_scanner():
       5. Sinon passer à la paire suivante; si aucune opportunité, retourner [].
     """
     from short_crash_strategy import (
-        signal_short_big_drop, position_size_usdt, score_short_opportunity,
-        signal_long_buy_dip, score_long_opportunity, position_size_long_usdt,
-        compute_sl_tp_from_chart,
+        position_size_usdt, position_size_long_usdt, compute_sl_tp_from_chart,
     )
+    from adaptive_scorer import score_adaptive
     from indicators import calculate_indicators
     from data_fetcher import fetch_multiple_pairs, get_top_pairs, fetch_multi_timeframe, fetch_order_flow, fetch_orderbook_depth
 
@@ -474,18 +472,15 @@ def run_scanner():
     shared_data['last_prices'] = real_prices
     shared_data['last_indicators'] = {}
 
-    # —— 1b. Filtre BTC: skip si BTC trop erratique ——
+    # —— 1b. BTC contexte (info seulement, pas de blocage) ——
     btc_regime = 'UNKNOWN'
     btc_df = data.get('BTCUSDT')
     if btc_df is not None:
         btc_ind = calculate_indicators(btc_df)
         if btc_ind:
             btc_regime = btc_ind.get('market_regime', 'UNKNOWN')
-            btc_atr_pct = btc_ind.get('atr_percent') or 0
             btc_adx = btc_ind.get('adx') or 0
-            if btc_regime == 'VOLATILE' or btc_regime == 'RANGING':
-                add_bot_log("BTC {} (ADX {:.0f}, ATR {:.1f}%): PAS DE TRADE (60% WR mode).".format(btc_regime, btc_adx, btc_atr_pct), 'WARN')
-                return []
+            add_bot_log("BTC {} (ADX {:.0f}) — scan adaptatif actif.".format(btc_regime, btc_adx), 'INFO')
 
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
@@ -528,7 +523,16 @@ def run_scanner():
         add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
         return []
 
-    # —— 3. Parcourir les paires, collecter opportunités LONG et SHORT ——
+    # —— 3. Fear & Greed (une fois par scan) ——
+    fear_greed_val = None
+    try:
+        fg = get_social_fear_greed()
+        if fg and not fg.get('error'):
+            fear_greed_val = fg.get('value')
+    except Exception:
+        pass
+
+    # —— 4. Parcourir les paires, collecter opportunités LONG et SHORT ——
     long_opportunities = []
     short_opportunities = []
     n_pairs = len(data)
@@ -570,24 +574,18 @@ def run_scanner():
         if atr_pct > VOLATILITY_MAX:
             continue
 
-        # Filtre ADX: skip les marches faibles (ADX < 22 = pas de tendance)
-        adx = indicators.get('adx')
-        if adx is not None and adx < 22:
-            continue
-
-        # Filtre regime: UNIQUEMENT TRENDING (skip VOLATILE et RANGING)
-        regime = indicators.get('market_regime', 'UNKNOWN')
-        if regime != 'TRENDING':
-            continue
-
-        # Recuperer tendances 15m, 1h et optionnellement 4h
+        # Recuperer tendances 5m, 15m, 1h et optionnellement 4h (multi-TF day trader pro)
+        momentum_5m = None
         momentum_15m = None
         momentum_1h = None
         momentum_4h = None
-        timeframes = ['15m', '1h']
+        timeframes = ['5m', '15m', '1h']
         if TREND_4H_ENABLED:
             timeframes.append('4h')
         tf_data = fetch_multi_timeframe(symbol, timeframes)
+        if tf_data.get('5m') is not None:
+            tf_ind_5m = calculate_indicators(tf_data['5m'])
+            momentum_5m = tf_ind_5m.get('price_momentum') if tf_ind_5m else None
         if tf_data.get('15m') is not None:
             tf_ind = calculate_indicators(tf_data['15m'])
             momentum_15m = tf_ind.get('price_momentum') if tf_ind else None
@@ -602,180 +600,93 @@ def run_scanner():
         if not price or price <= 0:
             continue
 
-        # Filtre proximite EMA21: entry optimale = pres de l'EMA
-        ema21 = indicators.get('ema21')
-        if ema21 and ema21 > 0:
-            ema_dist_pct = abs(price - ema21) / ema21 * 100
-            if ema_dist_pct > 2.0:
-                continue  # >2% de l'EMA = trop loin, WR chute
-
         in_cooldown, _ = trader.is_in_cooldown(symbol)
         if in_cooldown:
             continue
 
-        # Multi-TF alignment score (pas filtre binaire)
-        tf_score_long = 0
-        tf_score_short = 0
-        if momentum_15m == 'BULLISH': tf_score_long += 2
-        elif momentum_15m == 'BEARISH': tf_score_long -= 1
-        if momentum_1h == 'BULLISH': tf_score_long += 2
-        elif momentum_1h == 'BEARISH': tf_score_long -= 1
-        if momentum_4h == 'BULLISH': tf_score_long += 2
-        elif momentum_4h == 'NEUTRAL': tf_score_long += 1
+        # Score adaptatif: combine RSI, MACD, ADX, Bollinger, Ichimoku, Stoch, VWAP, OBV, MFI, regime...
+        score_long, score_short, regime = score_adaptive(
+            indicators, momentum_15m or 'NEUTRAL', momentum_1h or 'NEUTRAL', momentum_4h,
+            spread_pct, atr_pct,
+            momentum_5m=momentum_5m,
+            fear_greed=fear_greed_val,
+        )
+        final_long = score_long + session_bonus
+        final_short = score_short + session_bonus
 
-        if momentum_15m == 'BEARISH': tf_score_short += 2
-        elif momentum_15m == 'BULLISH': tf_score_short -= 1
-        if momentum_1h == 'BEARISH': tf_score_short += 2
-        elif momentum_1h == 'BULLISH': tf_score_short -= 1
-        if momentum_4h == 'BEARISH': tf_score_short += 2
-        elif momentum_4h == 'NEUTRAL': tf_score_short += 1
-
-        # MACD hard filter: histogramme doit confirmer la direction
-        macd_hist = indicators.get('macd_hist')
-        macd_long_ok = macd_hist is not None and macd_hist > 0
-        macd_short_ok = macd_hist is not None and macd_hist < 0
-
-        # Signal si: multi-TF >= 5 (3 TF toutes alignees) + MACD + signal technique
-        has_short = tf_score_short >= 5 and macd_short_ok and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
-        has_long = tf_score_long >= 5 and macd_long_ok and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
-
-        # Confluence counter: bonus confirmations Ichimoku + Stoch cross + RSI divergence
-        confluence = 0
-        tenkan = indicators.get('tenkan')
-        kijun = indicators.get('kijun')
-        stoch_k = indicators.get('stoch_k')
-        stoch_d = indicators.get('stoch_d')
-        stoch_k_prev = indicators.get('stoch_k_prev')
-        stoch_d_prev = indicators.get('stoch_d_prev')
-
-        if has_short:
-            # Confluence SHORT
-            if tenkan is not None and kijun is not None and tenkan < kijun:
-                confluence += 1
-            if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
-                if stoch_k < stoch_d and stoch_k_prev >= stoch_d_prev:
-                    confluence += 2  # fresh crossover = tres fort
-            if indicators.get('rsi_bearish_divergence'):
-                confluence += 1
-
-            n_short_signal += 1
-            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
-            if stop_loss is None:
-                stop_loss = price * (1 + STOP_LOSS_PCT / 100)
-                take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
-                sl_pct_eff = STOP_LOSS_PCT
-            details = score_short_opportunity(
-                indicators, spread_pct, atr_pct,
-                momentum_15m=momentum_15m or 'BEARISH', momentum_1h=momentum_1h or 'BEARISH',
-                momentum_4h=momentum_4h,
-                stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
-            )
-            rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else details['rr_ratio']
-            short_opportunities.append({
-                'symbol': symbol, 'pair': symbol, 'price': price,
-                'stop_loss': stop_loss, 'take_profit': take_profit,
-                'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'SHORT', 'score': details['score'] + session_bonus + confluence * 3,
-                'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
-                'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
-                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
-                'adx': details.get('adx'), 'macd_bearish': details.get('macd_bearish'),
-                'is_signal': True, 'confluence': confluence,
-            })
-
-        if has_long:
-            # Confluence LONG
-            if tenkan is not None and kijun is not None and tenkan > kijun:
-                confluence += 1
-            if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
-                if stoch_k > stoch_d and stoch_k_prev <= stoch_d_prev:
-                    confluence += 2
-            if indicators.get('rsi_bullish_divergence'):
-                confluence += 1
-
+        # LONG si score suffisant
+        if final_long >= MIN_SCORE_TO_OPEN:
             n_long_signal += 1
             stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
             if stop_loss is None:
                 stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
                 take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
                 sl_pct_eff = LONG_STOP_LOSS_PCT
-            details = score_long_opportunity(
-                indicators, spread_pct, atr_pct,
-                momentum_15m=momentum_15m or 'BULLISH', momentum_1h=momentum_1h or 'BULLISH',
-                momentum_4h=momentum_4h,
-                stop_loss_pct=LONG_STOP_LOSS_PCT, take_profit_pct=LONG_TAKE_PROFIT_PCT,
-            )
-            rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else details['rr_ratio']
+            rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
             long_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
                 'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'LONG', 'score': details['score'] + session_bonus + confluence * 3,
-                'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
-                'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
-                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
-                'adx': details.get('adx'), 'macd_bullish': details.get('macd_bullish'),
-                'is_signal': True, 'confluence': confluence,
+                'entry_signal': 'LONG', 'score': final_long,
+                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
+                'is_signal': True, 'regime': regime, 'indicators': indicators,
             })
 
-        # Si aucun signal strict mais on a les données: ajouter la "meilleure potentialité" pour le top 10
-        if not has_short and not has_long:
-            details_short = score_short_opportunity(
-                indicators, spread_pct, atr_pct,
-                momentum_15m=momentum_15m or 'NEUTRAL', momentum_1h=momentum_1h or 'NEUTRAL',
-                momentum_4h=momentum_4h,
-                stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
-            )
-            details_long = score_long_opportunity(
-                indicators, spread_pct, atr_pct,
-                momentum_15m=momentum_15m or 'NEUTRAL', momentum_1h=momentum_1h or 'NEUTRAL',
-                momentum_4h=momentum_4h,
-                stop_loss_pct=LONG_STOP_LOSS_PCT, take_profit_pct=LONG_TAKE_PROFIT_PCT,
-            )
-            score_s = details_short['score'] + session_bonus
-            score_l = details_long['score'] + session_bonus
-            if score_s >= score_l and score_s > 0:
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
-                if stop_loss is None:
-                    stop_loss = price * (1 + STOP_LOSS_PCT / 100)
-                    take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
-                    sl_pct_eff = STOP_LOSS_PCT
-                rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 2.0
-                short_opportunities.append({
-                    'symbol': symbol, 'pair': symbol, 'price': price,
-                    'stop_loss': stop_loss, 'take_profit': take_profit,
-                    'sl_pct_effective': sl_pct_eff,
-                    'entry_signal': 'SHORT', 'score': score_s,
-                    'rsi': details_short['rsi'], 'volume_ratio': details_short['volume_ratio'],
-                    'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-',
-                    'spread_pct': details_short['spread_pct'], 'atr_pct': details_short['atr_pct'], 'rr_ratio': round(rr, 1),
-                    'adx': details_short.get('adx'), 'macd_bearish': details_short.get('macd_bearish'),
-                    'is_signal': False,
-                })
-            elif score_l > 0:
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
-                if stop_loss is None:
-                    stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
-                    take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
-                    sl_pct_eff = LONG_STOP_LOSS_PCT
-                rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 2.0
-                long_opportunities.append({
-                    'symbol': symbol, 'pair': symbol, 'price': price,
-                    'stop_loss': stop_loss, 'take_profit': take_profit,
-                    'sl_pct_effective': sl_pct_eff,
-                    'entry_signal': 'LONG', 'score': score_l,
-                    'rsi': details_long['rsi'], 'volume_ratio': details_long['volume_ratio'],
-                    'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-',
-                    'spread_pct': details_long['spread_pct'], 'atr_pct': details_long['atr_pct'], 'rr_ratio': round(rr, 1),
-                    'adx': details_long.get('adx'), 'macd_bullish': details_long.get('macd_bullish'),
-                    'is_signal': False,
-                })
+        # SHORT si score suffisant
+        if final_short >= MIN_SCORE_TO_OPEN:
+            n_short_signal += 1
+            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
+            if stop_loss is None:
+                stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+                take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+                sl_pct_eff = STOP_LOSS_PCT
+            rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
+            short_opportunities.append({
+                'symbol': symbol, 'pair': symbol, 'price': price,
+                'stop_loss': stop_loss, 'take_profit': take_profit,
+                'sl_pct_effective': sl_pct_eff,
+                'entry_signal': 'SHORT', 'score': final_short,
+                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
+                'is_signal': True, 'regime': regime, 'indicators': indicators,
+            })
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
         continue
 
     # Fusionner et trier par score (meilleure opportunité en premier)
     opportunities_list = list(long_opportunities) + list(short_opportunities)
+    opportunities_list.sort(key=lambda x: x['score'], reverse=True)
+
+    # Confluence bonus: order flow + depth pour top 20 (day trader pro)
+    TOP_FOR_CONFLUENCE = 20
+    for opp in opportunities_list[:TOP_FOR_CONFLUENCE]:
+        try:
+            sym = opp['symbol']
+            ind = opp.get('indicators') or shared_data.get('last_indicators', {}).get(sym, {})
+            if not ind:
+                continue
+            of = fetch_order_flow(sym)
+            depth = fetch_orderbook_depth(sym)
+            m15 = opp.get('momentum_15m') if isinstance(opp.get('momentum_15m'), str) else 'NEUTRAL'
+            m1h = opp.get('momentum_1h') if isinstance(opp.get('momentum_1h'), str) else 'NEUTRAL'
+            m4h = opp.get('momentum_4h') if isinstance(opp.get('momentum_4h'), str) else None
+            m5 = opp.get('momentum_5m')
+            score_l, score_s, _ = score_adaptive(
+                ind, m15, m1h, m4h,
+                opp.get('spread_pct', 0.05), opp.get('atr_pct', 2),
+                momentum_5m=m5, order_flow=of, depth_imbalance=depth.get('depth_imbalance'),
+                fear_greed=fear_greed_val,
+            )
+            is_long = opp.get('entry_signal') == 'LONG'
+            opp['score'] = (score_l + session_bonus) if is_long else (score_s + session_bonus)
+        except Exception:
+            pass
     opportunities_list.sort(key=lambda x: x['score'], reverse=True)
     shared_data['opportunities'] = opportunities_list[:30]
 
@@ -788,7 +699,7 @@ def run_scanner():
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
 
-    MAX_PORTFOLIO_EXPOSURE = 0.75  # Max 75% deploye (2 pos x 35%)
+    MAX_PORTFOLIO_EXPOSURE = 0.85  # Max 85% deploye (4 pos x 35%)
     deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
     available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
     if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
@@ -800,16 +711,22 @@ def run_scanner():
     btc_score_penalty = 5 if btc_regime == 'VOLATILE' else 0
 
     if opportunities_list and len(current_open) < MAX_POSITIONS:
-        # Chercher: 1) signal strict avec bon R:R, 2) sinon meilleur potentiel avec score+R:R OK
+        # Meilleure opportunite: score max, R:R OK, pas deja ouverte
         best = None
         for opp in opportunities_list:
             if opp['symbol'] in already_open_symbols:
                 continue
-            if opp.get('is_signal', False) and (opp.get('rr_ratio') or 0) >= MIN_RISK_REWARD:
+            rr = opp.get('rr_ratio') or 0
+            if rr >= MIN_RISK_REWARD:
                 best = opp
                 break
-        # MODE SNIPER: on n'ouvre QUE sur signal strict (is_signal=True)
-        # Pas de fallback sur "meilleur potentiel" = zero trade mediocre
+        if best is None:
+            for opp in opportunities_list:
+                if opp['symbol'] in already_open_symbols:
+                    continue
+                if (opp.get('rr_ratio') or 0) >= 1.0:
+                    best = opp
+                    break
 
         if best is not None:
             is_long = best.get('entry_signal') == 'LONG'
@@ -853,29 +770,14 @@ def run_scanner():
                     stop_loss = best['stop_loss']
                     take_profit = best['take_profit']
 
-                    # Order flow + depth confirmation (seulement sur le best)
+                    # Dernier filtre: order flow ne doit pas contredire fortement
                     try:
                         of = fetch_order_flow(symbol)
-                        of_pressure = of.get('pressure', 'NEUTRAL')
-                        if is_long and of_pressure == 'SELL':
-                            best['score'] -= 5
-                        elif is_long and of_pressure == 'BUY':
-                            best['score'] += 5
-                        elif not is_long and of_pressure == 'BUY':
-                            best['score'] -= 5
-                        elif not is_long and of_pressure == 'SELL':
-                            best['score'] += 5
-                        depth = fetch_orderbook_depth(symbol)
-                        di = depth.get('depth_imbalance', 0)
-                        if is_long and di > 0.2:
-                            best['score'] += 3
-                        elif not is_long and di < -0.2:
-                            best['score'] += 3
-                        wall = depth.get('wall_detected')
-                        if wall == 'BID_WALL' and is_long:
-                            best['score'] += 3
-                        elif wall == 'ASK_WALL' and not is_long:
-                            best['score'] += 3
+                        pressure = of.get('pressure', 'NEUTRAL')
+                        if is_long and pressure == 'SELL':
+                            best['score'] -= 8
+                        elif not is_long and pressure == 'BUY':
+                            best['score'] -= 8
                     except Exception:
                         pass
 
@@ -962,15 +864,11 @@ def run_scanner():
 def dashboard():
     """Dashboard principal â€” rendu cÃ´tÃ© serveur."""
     trader = PaperTrader()
+    update_performance_stats(trader)
     balance = trader.get_usdt_balance()
-    all_trades = trader.get_trades_history()
     open_positions = trader.get_open_positions()
-    
-    history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
-    
     positions_view = []
     total_unrealized_pnl = 0
-
     for symbol, pos_data in open_positions.items():
         entry = pos_data['entry_price']
         current = shared_data['last_prices'].get(symbol, entry)
@@ -1013,89 +911,22 @@ def dashboard():
             'leverage':    pos_data.get('leverage', 1),
         })
 
-    perf = shared_data['performance']
-    mkt = shared_data['market_stats']
-    
-    # Capital total = Solde USDT + valeur des positions
     total_invested = sum(p['amount'] for p in positions_view)
     total_capital = balance + total_invested + total_unrealized_pnl
-    total_fees_usdt = trader.get_total_fees_usdt()
-    daily_drawdown_pct = trader.get_daily_drawdown_pct(total_capital)
-    risk_pct_capital = RISK_PCT_CAPITAL * 100  # pour affichage (ex: 1%)
-
-    # Statut trading pour l'utilisateur (pourquoi le bot ouvre ou n'ouvre pas)
-    open_positions = trader.get_open_positions()
-    sales = [t for t in all_trades if 'VENTE' in t.get('type', '')]
-    last_3_sales = sales[:3]
-    if open_positions:
-        bot_status = 'POSITION_OUVERTE'
-        bot_status_reason = 'Une position est ouverte — pas de nouveau trade avant fermeture.'
-    elif daily_drawdown_pct >= MAX_DAILY_DRAWDOWN_PCT:
-        bot_status = 'PAUSE_DRAWDOWN'
-        bot_status_reason = f'Drawdown du jour {daily_drawdown_pct:.1f}% ≥ {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.'
-    elif len(last_3_sales) >= MAX_CONSECUTIVE_LOSSES and all(t.get('pnl', 0) < 0 for t in last_3_sales):
-        bot_status = 'PAUSE_3_PERTES'
-        bot_status_reason = f'{MAX_CONSECUTIVE_LOSSES} pertes consécutives — trading suspendu (reprise manuelle si besoin).'
-    elif shared_data['is_scanning']:
-        bot_status = 'SCAN_EN_COURS'
-        bot_status_reason = 'Scan des paires en cours…'
-    else:
-        bot_status = 'ACTIF'
-        bot_status_reason = 'Le bot peut ouvrir un SHORT sur la meilleure opportunité au prochain cycle.'
-
-    # Config affichée à l'utilisateur
-    scan_pairs_display = str(SCAN_PAIRS_LIMIT) + ' paires' if SCAN_PAIRS_LIMIT else 'Toutes les paires'
-    scan_interval_display = f"{SCAN_INTERVAL // 60} min" if SCAN_INTERVAL >= 60 else f"{SCAN_INTERVAL} s"
-    rr_ratio = TAKE_PROFIT_PCT / STOP_LOSS_PCT if STOP_LOSS_PCT else 0
-    levier_display = int(trader.long_leverage)  # 10x LONG et SHORT
-
-    # Calculer les stats avancees et donnees de graphiques
-    stats = calculate_advanced_stats(all_trades)
-    chart_data = calculate_chart_data(all_trades)
-    formatted_history = format_history_for_display(all_trades)
-    all_pairs = get_all_pairs_from_history(all_trades)
-    crash = get_crash_status()
+    perf = shared_data.get('performance') or {'total_trades': 0, 'winning_trades': 0, 'total_pnl': 0, 'win_rate': 0}
 
     return render_template_string(
-        get_enhanced_dashboard(),
+        get_minimal_dashboard_html(),
         balance=balance,
         total_capital=total_capital,
         positions=positions_view,
         total_unrealized_pnl=total_unrealized_pnl,
-        history=formatted_history,
         opportunities=shared_data['opportunities'],
-        all_scanned=shared_data['all_scanned'][:200],
         is_scanning=shared_data['is_scanning'],
         last_update=shared_data['last_update'],
         scan_count=shared_data['scan_count'],
         bot_log=shared_data['bot_log'],
         perf=perf,
-        mkt=mkt,
-        min_score=None,  # Plus de score minimum pour micro scalp
-        timeframe=TIMEFRAME,
-        trade_amount=FIXED_TRADE_AMOUNT,  # Micro scalp: montant fixe ou None
-        stats=stats,
-        chart_data=json.dumps(chart_data),
-        all_pairs=all_pairs,
-        crash=crash,
-        total_fees_usdt=total_fees_usdt,
-        daily_drawdown_pct=daily_drawdown_pct,
-        risk_pct_capital=risk_pct_capital,
-        bot_status=bot_status,
-        bot_status_reason=bot_status_reason,
-        stop_loss_pct=STOP_LOSS_PCT,
-        take_profit_pct=TAKE_PROFIT_PCT,
-        long_stop_loss_pct=LONG_STOP_LOSS_PCT,
-        long_take_profit_pct=LONG_TAKE_PROFIT_PCT,
-        rr_ratio=rr_ratio,
-        scan_interval=SCAN_INTERVAL,
-        scan_interval_display=scan_interval_display,
-        scan_pairs_display=scan_pairs_display,
-        levier_display=levier_display,
-        max_daily_drawdown_pct=MAX_DAILY_DRAWDOWN_PCT,
-        sentiment_display=shared_data.get('sentiment_display') or {},
-        min_score_to_open=MIN_SCORE_TO_OPEN,
-        sentiment_filter_enabled=SENTIMENT_FILTER_ENABLED,
     )
 
 
@@ -1773,21 +1604,21 @@ fetch('/api/social/fear_greed')
 # BOUCLE PRINCIPALE (THREAD BACKGROUND)
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-AVOID_WEEKENDS = True
+AVOID_WEEKENDS = False  # Day trader pro H24: crypto trade 7j/7
 
 def _get_scan_interval():
-    """Intervalle adaptatif: 3 min en session US/EU, 10 min la nuit, 5 min sinon."""
+    """Day trader pro H24: 90s en session, 5 min la nuit (volumes plus faibles), 90s sinon."""
     utc_hour = datetime.utcnow().hour
     if SESSION_BONUS_ENABLED and SESSION_BONUS_UTC_START <= utc_hour < SESSION_BONUS_UTC_END:
-        return SCAN_INTERVAL_SESSION
+        return SCAN_INTERVAL_SESSION  # 90s
     elif utc_hour < 6 or utc_hour >= 23:
-        return SCAN_INTERVAL_NIGHT
-    return SCAN_INTERVAL
+        return SCAN_INTERVAL_NIGHT  # 900s
+    return SCAN_INTERVAL  # 90s
 
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("CIBLE 30%/mois | Lev 10x | Score>={} | R:R>={} | 45% pos | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
+    add_bot_log("Day Trader Pro H24 | Score>={} | R:R>={} | Max {} pos | 7j/7".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, MAX_POSITIONS), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:
