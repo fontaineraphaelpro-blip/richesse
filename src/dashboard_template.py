@@ -132,8 +132,6 @@ tr:hover td { background: rgba(37,99,235,0.03); }
 [data-tooltip] { position: relative; cursor: help; }
 [data-tooltip]:hover::after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg3); color: var(--text); padding: 5px 10px; border-radius: 6px; font-size: 0.78em; white-space: nowrap; z-index: 100; }
 
-/* Auto refresh indicator */
-.refresh-bar { position: fixed; top: 0; left: 0; height: 2px; background: var(--accent); z-index: 1000; transition: width 1s linear; }
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
@@ -166,7 +164,6 @@ tr:hover td { background: rgba(37,99,235,0.03); }
 </style>
 </head>
 <body>
-<div id="refresh-bar" class="refresh-bar" style="width:0%"></div>
 <div class="app">
 
 <!-- HEADER -->
@@ -637,17 +634,7 @@ function closePos(symbol) {
     }
 })();
 
-// Auto-refresh every 60s
-var refreshInterval = 60;
-var refreshCounter = 0;
-setInterval(function() {
-    refreshCounter++;
-    var pct = Math.min(100, (refreshCounter / refreshInterval) * 100);
-    document.getElementById('refresh-bar').style.width = pct + '%';
-    if (refreshCounter >= refreshInterval) {
-        location.reload();
-    }
-}, 1000);
+setInterval(function() { location.reload(); }, 60000);
 </script>
 </body>
 </html>
