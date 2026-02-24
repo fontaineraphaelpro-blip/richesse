@@ -10,28 +10,27 @@ import json
 from datetime import datetime
 from flask import Flask, render_template_string, jsonify, request
 
-# Import des modules internes
+# Import des modules internes (seulement ceux utilisés par le flux principal + API dashboard)
+# Retirés (jamais utilisés dans main): validate_signal_multi_timeframe, find_swing_low, find_resistance,
+#   trade_filters, calculate_opportunity_score, check_for_crash, is_crash_mode, get_fear_greed (news),
+#   should_trade_with_intel, log_trade_result, get_onchain_signal_adjustment, update_position_stats,
+#   check_macro_events, get_sentiment_modifier, record_entry, record_exit, journal_should_trade,
+#   get_trade_modifier, fundamental_analyzer/get_fundamental_*, advanced_ta/get_advanced_*,
+#   adaptive_strategy/analyze_and_adapt/get_adaptive_strategy
 from trader import PaperTrader
-from data_fetcher import fetch_multiple_pairs, validate_signal_multi_timeframe
+from data_fetcher import fetch_multiple_pairs
 from dashboard_template import get_enhanced_dashboard
 from dashboard_stats import calculate_advanced_stats, calculate_chart_data, format_history_for_display, get_all_pairs_from_history
 from indicators import calculate_indicators
-from scorer import calculate_opportunity_score
-from support import find_swing_low
-from scalping_signals import find_resistance
-from trade_filters import trade_filters
-from crash_protection import crash_protector, check_for_crash, is_crash_mode, get_crash_status
-from news_analyzer import news_analyzer, get_market_sentiment, get_fear_greed
-from market_intelligence import market_intel, get_market_intelligence, should_trade_with_intel
-from ml_predictor import ml_predictor, get_ml_prediction, log_trade_result
-from onchain_analyzer import onchain_analyzer, get_onchain_analysis, get_onchain_signal_adjustment
-from position_sizing import position_sizer, calculate_position_size, update_position_stats, get_position_recommendations
-from macro_events import macro_analyzer, get_macro_analysis, check_macro_events, get_upcoming_economic_events
-from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment, get_sentiment_modifier
-from trade_journal_ai import get_trade_journal, record_entry, record_exit, get_journal_stats, should_trade as journal_should_trade, get_trade_modifier
-from fundamental_analysis import fundamental_analyzer, get_fundamental_score, should_trade_fundamentally, get_fundamental_modifier
-from advanced_technical_analysis import advanced_ta, get_advanced_technical_analysis, get_technical_score_adjustment
-from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive_strategy
+from crash_protection import crash_protector, get_crash_status
+from news_analyzer import news_analyzer, get_market_sentiment
+from market_intelligence import market_intel, get_market_intelligence
+from ml_predictor import ml_predictor, get_ml_prediction
+from onchain_analyzer import onchain_analyzer, get_onchain_analysis
+from position_sizing import position_sizer, calculate_position_size, get_position_recommendations
+from macro_events import macro_analyzer, get_macro_analysis, get_upcoming_economic_events
+from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment
+from trade_journal_ai import get_trade_journal, get_journal_stats
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
@@ -40,11 +39,11 @@ from adaptive_strategy import adaptive_strategy, analyze_and_adapt, get_adaptive
 # STRATÉGIE SHORT UNIQUEMENT — Grandes baisses
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'   # Bougies 15 min (détecter les vraies baisses)
-CANDLE_LIMIT     = 100     # Nombre de bougies par paire
+CANDLE_LIMIT     = 200     # Au moins 200 bougies (requis par indicators.py pour SMA200/calculs)
 # Pour un SHORT: SL au-dessus du prix, TP en dessous
 STOP_LOSS_PCT    = 1.0     # Stop loss au-dessus de l'entrée (%)
 TAKE_PROFIT_PCT  = 2.0     # Take profit en dessous de l'entrée (%) → R:R = 2
-SCAN_INTERVAL    = 60      # Secondes entre chaque scan
+SCAN_INTERVAL    = 900     # Secondes entre chaque scan (15 min)
 MAX_POSITIONS    = 1       # Une seule position à la fois
 MAX_CONSECUTIVE_LOSSES = 3 # Arrêt après 3 pertes d'affilée
 COOLDOWN_MINUTES = 15      # Pause après chaque trade (min)
@@ -53,13 +52,16 @@ SPREAD_MAX_PCT   = 0.15    # Écart max bougie
 VOLUME_RATIO_MIN = 1.0     # Volume au moins égal à la moyenne
 VOLATILITY_MAX   = 5.0     # ATR % max
 TREND_15M_MUST_BEARISH = True  # Ne short que si tendance 15m baissière
-POSITION_PCT_BALANCE   = 0.20  # Taille position = 20% du solde max
+TREND_1H_MUST_BEARISH = True   # Confirmation tendance 1h baissière (meilleure qualité)
+POSITION_PCT_BALANCE   = 0.20  # Plafond marge = 20% du solde
+RISK_PCT_CAPITAL       = 0.01  # Risque max 1% du capital par trade (sizing)
 MIN_POSITION_USDT      = 10    # Minimum 10 USDT par short
+MAX_DAILY_DRAWDOWN_PCT = 5.0   # Pause si perte du jour >= 5%
 
-# Production: limite de paires (env SCAN_PAIRS_LIMIT vide ou absent = toutes les paires)
+# Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '60'))
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '900'))
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -209,6 +211,7 @@ shared_data = {
     'arbitrage_logs': [],       # Logs arbitrage
     'arbitrage_paper_balance': 100.0,   # Capital paper 100 € (bot arbitrage)
     'arbitrage_paper_trades': [],       # Derniers trades paper arbitrage
+    'sentiment_display': None,  # Sentiment marché & réseaux (Fear & Greed, Reddit, trending)
 }
 
 app = Flask(__name__)
@@ -226,7 +229,71 @@ def add_bot_log(msg: str, level: str = 'INFO'):
     }
     shared_data['bot_log'].insert(0, entry)
     shared_data['bot_log'] = shared_data['bot_log'][:30]  # Garder les 30 derniers
-    print(f"[{entry['time']}][{level}] {msg}")
+    level_pad = level.ljust(5)
+    print("  [{}] [{}] {}".format(entry['time'], level_pad, msg))
+
+
+def fetch_sentiment_for_dashboard():
+    """
+    Agrège le sentiment marché et réseaux pour le dashboard (lecture seule).
+    Fear & Greed, Reddit, trending coins, news. Ne bloque pas le trading.
+    """
+    out = {
+        'updated': datetime.now().strftime('%H:%M'),
+        'fear_greed': None,
+        'reddit': None,
+        'trending': None,
+        'news': None,
+    }
+    try:
+        fg = get_social_fear_greed()
+        if fg and not fg.get('error'):
+            out['fear_greed'] = {
+                'value': fg.get('value', 50),
+                'classification': fg.get('classification', 'Neutral'),
+                'signal': fg.get('signal', 'neutral'),
+                'trend_direction': fg.get('trend_direction', 'stable'),
+                'avg_7d': fg.get('avg_7d'),
+            }
+    except Exception:
+        pass
+    try:
+        social = get_social_analyzer()
+        reddit = social.get_reddit_sentiment('BTC')
+        if reddit and not reddit.get('error'):
+            out['reddit'] = {
+                'sentiment_score': reddit.get('sentiment_score', 0),
+                'signal': reddit.get('signal', 'neutral'),
+                'bullish_percent': reddit.get('bullish_percent'),
+                'bearish_percent': reddit.get('bearish_percent'),
+                'neutral_percent': reddit.get('neutral_percent'),
+                'top_mentions': reddit.get('top_mentions', {}) or {},
+                'total_posts': reddit.get('total_posts_analyzed', 0),
+            }
+    except Exception:
+        pass
+    try:
+        social = get_social_analyzer()
+        trending = social.get_trending_coins()
+        if trending and trending.get('trending_coins'):
+            out['trending'] = [
+                {'name': c.get('name'), 'symbol': (c.get('symbol') or '').upper(), 'rank': c.get('market_cap_rank')}
+                for c in trending['trending_coins'][:8]
+            ]
+    except Exception:
+        pass
+    try:
+        news = news_analyzer.get_news_sentiment_score()
+        if news is not None:
+            out['news'] = {
+                'score': news.get('score', 0),
+                'bullish': news.get('bullish', 0),
+                'bearish': news.get('bearish', 0),
+                'neutral': news.get('neutral', 0),
+            }
+    except Exception:
+        pass
+    return out
 
 
 def update_performance_stats(trader: PaperTrader):
@@ -261,7 +328,7 @@ def run_scanner():
       4. Si signal LONG (RSI survendu + Bollinger basse + volume): calculer taille de position pour 1€ de gain, placer l’ordre et sortir.
       5. Sinon passer à la paire suivante; si aucune opportunité, retourner [].
     """
-    from short_crash_strategy import signal_short_big_drop, position_size_usdt
+    from short_crash_strategy import signal_short_big_drop, position_size_usdt, score_short_opportunity
     from indicators import calculate_indicators
     from data_fetcher import fetch_multiple_pairs, get_top_pairs
 
@@ -290,6 +357,13 @@ def run_scanner():
         add_bot_log("Déjà une position ouverte, attente fermeture/cooldown.", 'INFO')
         return []
 
+    total_capital = trader.get_total_capital(real_prices)
+    trader.update_daily_start_if_new_day(total_capital)
+    daily_dd = trader.get_daily_drawdown_pct(total_capital)
+    if daily_dd >= MAX_DAILY_DRAWDOWN_PCT:
+        add_bot_log(f"Pause: drawdown jour {daily_dd:.1f}% >= {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.", 'WARN')
+        return []
+
     # Vérifier les 3 DERNIÈRES ventes (trades fermés): si toutes en perte → stop
     recent = trader.get_trades_history()
     sales = [t for t in recent if 'VENTE' in t.get('type', '')]
@@ -298,7 +372,9 @@ def run_scanner():
         add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
         return []
 
-    # —— 3. Parcourir les paires et chercher un signal SHORT (grande baisse) ——
+    # —— 3. Parcourir les paires, collecter toutes les opportunités SHORT et les scorer ——
+    opportunities_list = []
+
     for symbol, df in data.items():
         indicators = calculate_indicators(df)
         shared_data['last_indicators'][symbol] = indicators
@@ -308,47 +384,102 @@ def run_scanner():
         spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
         if spread_pct > SPREAD_MAX_PCT:
             continue
-        if (indicators.get('atr_percent') or 0) > VOLATILITY_MAX:
+        atr_pct = indicators.get('atr_percent') or 0
+        if atr_pct > VOLATILITY_MAX:
             continue
 
-        # Tendance 15m baissière requise pour short les grandes baisses
+        momentum_15m = None
         if TREND_15M_MUST_BEARISH:
             from data_fetcher import fetch_multi_timeframe
             tf_data = fetch_multi_timeframe(symbol, ['15m'])
             if tf_data.get('15m') is not None:
                 tf_ind = calculate_indicators(tf_data['15m'])
-                if tf_ind.get('price_momentum') != 'BEARISH':
+                momentum_15m = tf_ind.get('price_momentum')
+                if momentum_15m != 'BEARISH':
                     continue
+            else:
+                continue
+        else:
+            momentum_15m = 'BEARISH'
+
+        momentum_1h = None
+        if TREND_1H_MUST_BEARISH:
+            from data_fetcher import fetch_multi_timeframe
+            tf_data_1h = fetch_multi_timeframe(symbol, ['1h'])
+            if tf_data_1h.get('1h') is not None:
+                tf_ind_1h = calculate_indicators(tf_data_1h['1h'])
+                momentum_1h = tf_ind_1h.get('price_momentum')
+                if momentum_1h != 'BEARISH':
+                    continue
+            else:
+                continue
+        else:
+            momentum_1h = 'BEARISH'
 
         if not signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
             continue
 
         in_cooldown, cooldown_rem = trader.is_in_cooldown(symbol)
         if in_cooldown:
-            add_bot_log(f"{symbol} en cooldown ({cooldown_rem:.1f} min)", 'INFO')
             continue
 
         price = indicators.get('current_price')
         if not price or price <= 0:
             continue
-        balance = trader.get_usdt_balance()
-        pos_size = position_size_usdt(balance, max_pct_balance=POSITION_PCT_BALANCE)
-        pos_size = min(pos_size, max(0, balance * 0.98))
-        if pos_size < MIN_POSITION_USDT:
-            add_bot_log(f"Solde insuffisant pour {symbol} (min {MIN_POSITION_USDT} USDT)", 'INFO')
-            continue
 
-        # SHORT: SL au-dessus, TP en dessous
         stop_loss = price * (1 + STOP_LOSS_PCT / 100)
         take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+        details = score_short_opportunity(
+            indicators, spread_pct, atr_pct,
+            momentum_15m=momentum_15m, momentum_1h=momentum_1h,
+            stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
+        )
+        opportunities_list.append({
+            'symbol': symbol,
+            'pair': symbol,
+            'price': price,
+            'stop_loss': stop_loss,
+            'take_profit': take_profit,
+            'entry_signal': 'SHORT',
+            'score': details['score'],
+            'rsi': details['rsi'],
+            'volume_ratio': details['volume_ratio'],
+            'momentum_15m': details['momentum_15m'],
+            'momentum_1h': details['momentum_1h'],
+            'spread_pct': details['spread_pct'],
+            'atr_pct': details['atr_pct'],
+            'rr_ratio': details['rr_ratio'],
+        })
 
-        if trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
+    # Trier par score décroissant et stocker pour le dashboard
+    opportunities_list.sort(key=lambda x: x['score'], reverse=True)
+    shared_data['opportunities'] = opportunities_list[:30]
+
+    # —— 4. Ouvrir la meilleure opportunité si aucune position ouverte ——
+    if opportunities_list and not trader.get_open_positions():
+        best = opportunities_list[0]
+        symbol = best['symbol']
+        price = best['price']
+        stop_loss = best['stop_loss']
+        take_profit = best['take_profit']
+        balance = trader.get_usdt_balance()
+        lev = trader.short_leverage
+        pos_size = position_size_usdt(
+            balance,
+            risk_pct=RISK_PCT_CAPITAL,
+            sl_pct=STOP_LOSS_PCT,
+            leverage=lev,
+            max_pct_balance=POSITION_PCT_BALANCE,
+            min_usdt=MIN_POSITION_USDT,
+        )
+        pos_size = min(pos_size, max(0, balance * 0.98))
+        if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
             trader.record_trade_time(symbol)
-            add_bot_log(f"SHORT {symbol} @ {price:.4f} | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
-            return [{'pair': symbol, 'signal': 'SHORT', 'price': price}]
+            add_bot_log(f"SHORT {symbol} @ {price:.4f} | Score {best['score']} pts | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
+            return shared_data['opportunities']
 
-    add_bot_log("Aucun signal grande baisse (SHORT) détecté.", 'INFO')
-    return []
+    add_bot_log("Aucun signal grande baisse (SHORT) détecté." if not opportunities_list else f"{len(opportunities_list)} opportunité(s) — aucune ouverte (solde/cooldown).", 'INFO')
+    return shared_data['opportunities']
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -416,7 +547,41 @@ def dashboard():
     # Capital total = Solde USDT + valeur des positions
     total_invested = sum(p['amount'] for p in positions_view)
     total_capital = balance + total_invested + total_unrealized_pnl
-    
+    total_fees_usdt = trader.get_total_fees_usdt()
+    daily_drawdown_pct = trader.get_daily_drawdown_pct(total_capital)
+    risk_pct_capital = RISK_PCT_CAPITAL * 100  # pour affichage (ex: 1%)
+
+    # Statut trading pour l'utilisateur (pourquoi le bot ouvre ou n'ouvre pas)
+    open_positions = trader.get_open_positions()
+    sales = [t for t in all_trades if 'VENTE' in t.get('type', '')]
+    last_3_sales = sales[:3]
+    if open_positions:
+        bot_status = 'POSITION_OUVERTE'
+        bot_status_reason = 'Une position est ouverte — pas de nouveau trade avant fermeture.'
+    elif daily_dd >= MAX_DAILY_DRAWDOWN_PCT:
+        bot_status = 'PAUSE_DRAWDOWN'
+        bot_status_reason = f'Drawdown du jour {daily_drawdown_pct:.1f}% ≥ {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.'
+    elif len(last_3_sales) >= MAX_CONSECUTIVE_LOSSES and all(t.get('pnl', 0) < 0 for t in last_3_sales):
+        bot_status = 'PAUSE_3_PERTES'
+        bot_status_reason = f'{MAX_CONSECUTIVE_LOSSES} pertes consécutives — trading suspendu (reprise manuelle si besoin).'
+    elif shared_data['is_scanning']:
+        bot_status = 'SCAN_EN_COURS'
+        bot_status_reason = 'Scan des paires en cours…'
+    else:
+        bot_status = 'ACTIF'
+        bot_status_reason = 'Le bot peut ouvrir un SHORT sur la meilleure opportunité au prochain cycle.'
+
+    # Config affichée à l'utilisateur
+    scan_pairs_display = str(SCAN_PAIRS_LIMIT) + ' paires' if SCAN_PAIRS_LIMIT else 'Toutes les paires'
+    scan_interval_display = f"{SCAN_INTERVAL // 60} min" if SCAN_INTERVAL >= 60 else f"{SCAN_INTERVAL} s"
+    rr_ratio = TAKE_PROFIT_PCT / STOP_LOSS_PCT if STOP_LOSS_PCT else 0
+    levier_display = int(trader.short_leverage)
+
+    # Config arbitrage (depuis env ou défaut)
+    arbitrage_symbol = os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT')
+    arbitrage_threshold_pct = os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3')
+    arbitrage_poll_sec = os.environ.get('ARBITRAGE_POLL_SEC', '45')
+
     # Calculer les stats avancees et donnees de graphiques
     stats = calculate_advanced_stats(all_trades)
     chart_data = calculate_chart_data(all_trades)
@@ -449,6 +614,23 @@ def dashboard():
         arbitrage_logs=shared_data.get('arbitrage_logs', []),
         arbitrage_paper_balance=shared_data.get('arbitrage_paper_balance', 100),
         arbitrage_paper_trades=shared_data.get('arbitrage_paper_trades', []),
+        total_fees_usdt=total_fees_usdt,
+        daily_drawdown_pct=daily_drawdown_pct,
+        risk_pct_capital=risk_pct_capital,
+        bot_status=bot_status,
+        bot_status_reason=bot_status_reason,
+        stop_loss_pct=STOP_LOSS_PCT,
+        take_profit_pct=TAKE_PROFIT_PCT,
+        rr_ratio=rr_ratio,
+        scan_interval=SCAN_INTERVAL,
+        scan_interval_display=scan_interval_display,
+        scan_pairs_display=scan_pairs_display,
+        levier_display=levier_display,
+        max_daily_drawdown_pct=MAX_DAILY_DRAWDOWN_PCT,
+        arbitrage_symbol=arbitrage_symbol,
+        arbitrage_threshold_pct=arbitrage_threshold_pct,
+        arbitrage_poll_sec=arbitrage_poll_sec,
+        sentiment_display=shared_data.get('sentiment_display') or {},
     )
 
 
@@ -1099,6 +1281,11 @@ def run_loop():
     """Boucle infinie qui lance le scanner pÃ©riodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
     while True:
+        # Mise à jour du sentiment marché & réseaux (pour le dashboard)
+        try:
+            shared_data['sentiment_display'] = fetch_sentiment_for_dashboard()
+        except Exception as e:
+            add_bot_log(f"Sentiment: {str(e)[:60]}", 'WARN')
         shared_data['is_scanning'] = True
         try:
             shared_data['opportunities'] = run_scanner()
@@ -1108,7 +1295,9 @@ def run_loop():
         finally:
             shared_data['is_scanning'] = False
 
-        add_bot_log(f"Pause {SCAN_INTERVAL} s - prochain scan: {datetime.now().strftime('%H:%M')}", 'INFO')
+        pause_str = "{} min".format(SCAN_INTERVAL // 60) if SCAN_INTERVAL >= 60 else "{} s".format(SCAN_INTERVAL)
+        next_scan = datetime.now()
+        add_bot_log("Pause {} — prochain scan a {}".format(pause_str, next_scan.strftime('%H:%M')), 'INFO')
         time.sleep(SCAN_INTERVAL)
 
 

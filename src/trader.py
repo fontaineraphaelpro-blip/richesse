@@ -23,6 +23,8 @@ class PaperTrader:
         self.protector = ReversalProtector()  # Protection contre reversals
         self.short_leverage = 10.0  # Levier 10x sur les positions SHORT
         self.long_leverage = 1.0   # Levier désactivé (positions long)
+        # Frais simulés 0.05% par côté (open/close)
+        self.fee_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
@@ -52,15 +54,22 @@ class PaperTrader:
             try:
                 with open(self.balance_file, 'r') as f:
                     self.wallet = json.load(f)
-                # Migration: s'assurer que les nouveaux champs existent
                 if 'positions' not in self.wallet:
                     self.wallet['positions'] = {}
                 if 'initial_capital' not in self.wallet:
                     self.wallet['initial_capital'] = 100
+                if 'total_fees_usdt' not in self.wallet:
+                    self.wallet['total_fees_usdt'] = 0.0
+                if 'daily_start_balance' not in self.wallet:
+                    self.wallet['daily_start_balance'] = float(self.wallet.get('USDT', 100))
+                if 'daily_start_date' not in self.wallet:
+                    self.wallet['daily_start_date'] = datetime.now().strftime('%Y-%m-%d')
             except (json.JSONDecodeError, Exception):
-                self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
+                self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100, 'total_fees_usdt': 0.0,
+                               'daily_start_balance': 100, 'daily_start_date': datetime.now().strftime('%Y-%m-%d')}
         else:
-            self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
+            self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100, 'total_fees_usdt': 0.0,
+                           'daily_start_balance': 100, 'daily_start_date': datetime.now().strftime('%Y-%m-%d')}
             self.save_wallet()
 
     # ─────────────────────────────────────────────────────────
@@ -107,6 +116,24 @@ class PaperTrader:
             except Exception:
                 return []
         return []
+
+    def get_total_fees_usdt(self) -> float:
+        return float(self.wallet.get('total_fees_usdt', 0))
+
+    def update_daily_start_if_new_day(self, total_capital: float):
+        """Réinitialise le solde de référence du jour si on change de jour."""
+        today = datetime.now().strftime('%Y-%m-%d')
+        if self.wallet.get('daily_start_date') != today:
+            self.wallet['daily_start_date'] = today
+            self.wallet['daily_start_balance'] = total_capital
+            self.save_wallet()
+
+    def get_daily_drawdown_pct(self, total_capital: float) -> float:
+        """Drawdown du jour en % (positif = perte)."""
+        start = float(self.wallet.get('daily_start_balance', total_capital))
+        if start <= 0:
+            return 0.0
+        return ((start - total_capital) / start) * 100
 
     def get_stats(self) -> dict:
         """Calcule les stats de performance depuis l'historique."""
@@ -512,7 +539,14 @@ class PaperTrader:
         # Marge = amount_usdt, notional = marge × levier, quantité = notional / prix
         lev = self.short_leverage
         quantity = (amount_usdt * lev) / current_price
-        self.wallet['USDT'] -= amount_usdt
+        notional = amount_usdt * lev
+        fee_open = notional * self.fee_pct
+        total_lock = amount_usdt + fee_open
+        if self.wallet['USDT'] < total_lock:
+            print(f"Fonds insuffisants (marge + frais): {total_lock:.2f} USDT")
+            return False
+        self.wallet['USDT'] -= total_lock
+        self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_open
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
             'amount_usdt': amount_usdt,
@@ -564,10 +598,12 @@ class PaperTrader:
             pnl_percent = ((current_price - entry_price) / entry_price) * 100
             returned    = exit_value
         else:  # SHORT
-            # PnL short = (entry - exit) * qty (on gagne si le prix baisse)
             pnl_value   = (entry_price - current_price) * quantity
             pnl_percent = ((entry_price - current_price) / entry_price) * 100
-            returned    = entry_amount + pnl_value  # marge + gain/perte
+            exit_notional = quantity * current_price
+            fee_close = exit_notional * self.fee_pct
+            self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_close
+            returned = entry_amount + pnl_value - fee_close
 
         # Mise à jour du solde (jamais négatif)
         self.wallet['USDT'] += max(returned, 0)

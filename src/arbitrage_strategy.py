@@ -95,7 +95,7 @@ def run_arbitrage_autonomous(
         _log('ERROR', 'Au moins 2 exchanges requis. Bot arbitrage actif, réessaie au prochain cycle.')
         while True:
             time.sleep(poll_interval_sec)
-            _log('DEBUG', 'En attente de 2+ exchanges...')
+            _log('INFO', 'En attente de 2+ exchanges (redémarrez après avoir installé ccxt / corrigé les APIs)...')
 
     paper_balance, paper_trades = _load_paper_wallet()
     if shared_data is not None:
@@ -151,7 +151,7 @@ def run_arbitrage_autonomous(
                         shared_data['arbitrage_paper_trades'] = paper_trades
                     _log('INFO', f'[PAPER] +{profit} € — Solde: {paper_balance:.2f} €')
             else:
-                _log('DEBUG', f'Scan — Spread max {spread_pct:.2f}% (seuil {threshold_pct}%)')
+                _log('INFO', f'Scan — Spread max {spread_pct:.2f}% (seuil {threshold_pct}%) — pas d\'opportunité')
             if shared_data is not None:
                 shared_data['arbitrage_paper_balance'] = paper_balance
         except Exception as e:

@@ -19,35 +19,50 @@ if __name__ == '__main__':
     env = os.environ.get('ENV', 'development').lower()
     paper = os.environ.get('PAPER_TRADING', 'true').lower() in ('1', 'true', 'yes')
     port = int(os.environ.get('PORT', 8080))
+    scan_interval = int(os.environ.get('SCAN_INTERVAL', '900'))
+    arb_symbol = os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT')
+    arb_threshold = os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3')
+    arb_poll = os.environ.get('ARBITRAGE_POLL_SEC', '45')
 
     # Lancer le bot de trading (SHORT) en arrière-plan
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
-    print("  [OK] Bot 1 ACTIF — SHORT grandes baisses (scan Binance 15m)")
 
     # Lancer le bot d'arbitrage (APIs publiques)
     arbitrage_thread = threading.Thread(
         target=run_arbitrage_autonomous,
         kwargs={
             'logs_list': shared_data['arbitrage_logs'],
-            'symbol': os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT'),
-            'threshold_pct': float(os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3')),
-            'poll_interval_sec': int(os.environ.get('ARBITRAGE_POLL_SEC', '45')),
+            'symbol': arb_symbol,
+            'threshold_pct': float(arb_threshold),
+            'poll_interval_sec': int(arb_poll),
             'paper_trading': paper,
             'shared_data': shared_data,
         },
         daemon=True,
     )
     arbitrage_thread.start()
-    print("  [OK] Bot 2 ACTIF — Arbitrage CEX (Binance / KuCoin / Bybit)")
 
+    # Affichage terminal
     mode = 'PRODUCTION' if env == 'production' else 'PAPER TRADING'
-    print("\n" + "="*60)
-    print("  2 BOTS AUTONOMES — " + mode)
-    print("="*60)
-    print("  Bot 1: SHORT grandes baisses (Binance 15m)")
-    print("  Bot 2: Arbitrage CEX (Binance / KuCoin / Bybit)")
-    print("  Dashboard: http://localhost:{}".format(port))
-    print("="*60 + "\n")
+    scan_min = scan_interval // 60
+    print()
+    print("  " + "=" * 56)
+    print("  RICHESSE CRYPTO — 2 BOTS AUTONOMES")
+    print("  " + "=" * 56)
+    print("  Mode          " + mode)
+    print("  Dashboard     http://localhost:{}  (Ctrl+C pour arreter)".format(port))
+    print()
+    print("  Bot 1 — Trading SHORT (grandes baisses)")
+    print("    Timeframe 15m | Scan toutes les {} min | 1 position max".format(scan_min if scan_min else scan_interval))
+    print("    Binance USDT | SL/TP 1% / 2% | Levier 10x")
+    print()
+    print("  Bot 2 — Arbitrage CEX")
+    print("    {} | Seuil {}% | Poll {} s | Paper {}".format(arb_symbol, arb_threshold, arb_poll, "OUI" if paper else "NON"))
+    print("    Exchanges: Binance, KuCoin, Bybit")
+    print()
+    print("  Logs: [INFO] [TRADE] [WARN] ci-dessous.")
+    print("  " + "=" * 56)
+    print()
 
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
