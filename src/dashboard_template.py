@@ -11,19 +11,19 @@ def get_enhanced_dashboard():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner Crypto — Bot Trading & Arbitrage</title>
+<title>Richesse Crypto — Trading & Arbitrage</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html { overflow-x: hidden; }
 :root {
-    --bg: #0a0e17; --bg2: #111827; --bg3: #1a2332; --border: #1f2937;
-    --text: #f3f4f6; --text2: #9ca3af; --text3: #6b7280;
-    --green: #10b981; --red: #ef4444; --blue: #3b82f6; --yellow: #f59e0b;
-    --purple: #8b5cf6; --cyan: #06b6d4;
+    --bg: #0f1419; --bg2: #1a2332; --bg3: #243044; --border: #2d3a4d;
+    --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
+    --green: #3fb950; --red: #f85149; --blue: #58a6ff; --yellow: #d29922;
+    --purple: #a371f7; --cyan: #39c5cf;
 }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; width: 100%; }
-.app { max-width: 1600px; margin: 0 auto; padding: 20px; width: 100%; overflow-x: hidden; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+.app { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* Tabs Navigation */
 .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg2); padding: 6px; border-radius: 12px; border: 1px solid var(--border); }
@@ -33,29 +33,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* Header */
-.header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: var(--bg2); border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border); }
-.header h1 { font-size: 1.5em; color: var(--blue); display: flex; align-items: center; gap: 10px; }
-.header .status { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: var(--text2); }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
-.dot.scanning { background: var(--yellow); animation: pulse 1s infinite; }
-@keyframes pulse { 50% { opacity: 0.5; } }
-.version { background: var(--purple); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.7em; font-weight: 700; }
+/* Header simple */
+.header { padding: 20px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.header h1 { font-size: 1.75rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.header .status { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: var(--text2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.dot.scanning { background: var(--yellow); animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:0.4 } }
+.header .meta { color: var(--text3); font-size: 0.85rem; margin-top: 4px; }
 
-/* Stats Grid */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
-.stat { background: var(--bg2); padding: 20px; border-radius: 12px; border: 1px solid var(--border); position: relative; overflow: hidden; }
-.stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-.stat.s-blue::before { background: var(--blue); }
-.stat.s-green::before { background: var(--green); }
-.stat.s-red::before { background: var(--red); }
-.stat.s-yellow::before { background: var(--yellow); }
-.stat.s-purple::before { background: var(--purple); }
-.stat.s-cyan::before { background: var(--cyan); }
-.stat-label { font-size: 0.75em; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-.stat-value { font-size: 1.8em; font-weight: 700; }
-.stat-sub { font-size: 0.8em; color: var(--text3); margin-top: 4px; }
-.stat-icon { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 2.5em; opacity: 0.1; }
+/* Stats : 4 blocs principaux */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .stats { grid-template-columns: 1fr; } }
+.stat { background: var(--bg2); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+.stat-label { font-size: 0.8rem; color: var(--text3); margin-bottom: 6px; }
+.stat-value { font-size: 1.75rem; font-weight: 700; }
+.stat-sub { font-size: 0.8rem; color: var(--text3); margin-top: 4px; }
+.stat.s-blue .stat-value { color: var(--blue); }
+.stat.s-green .stat-value { color: var(--green); }
+.stat.s-red .stat-value { color: var(--red); }
+.stat.s-purple .stat-value { color: var(--purple); }
+.stat.s-yellow .stat-value { color: var(--yellow); }
+.stat.s-cyan .stat-value { color: var(--cyan); }
 .green { color: var(--green); }
 .red { color: var(--red); }
 .blue { color: var(--blue); }
@@ -63,15 +63,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .purple { color: var(--purple); }
 
 /* Cards */
-.card { background: var(--bg2); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; overflow: hidden; }
-.card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
-.card-header h2 { font-size: 1em; font-weight: 600; color: var(--text2); }
-.badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75em; font-weight: 600; }
-.b-green { background: rgba(16,185,129,0.1); color: var(--green); }
-.b-red { background: rgba(239,68,68,0.1); color: var(--red); }
-.b-blue { background: rgba(59,130,246,0.1); color: var(--blue); }
-.b-yellow { background: rgba(245,158,11,0.1); color: var(--yellow); }
-.b-purple { background: rgba(139,92,246,0.1); color: var(--purple); }
+.card { background: var(--bg2); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.card-header h2 { font-size: 1rem; font-weight: 600; color: var(--text); }
+.badge { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; }
+.b-green { background: rgba(63,185,80,0.15); color: var(--green); }
+.b-red { background: rgba(248,81,73,0.15); color: var(--red); }
+.b-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+.b-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.b-purple { background: rgba(163,113,247,0.15); color: var(--purple); }
+.b-cyan { background: rgba(57,197,207,0.15); color: var(--cyan); }
 
 /* Charts */
 .chart-container { padding: 20px; height: 300px; position: relative; }
@@ -275,22 +276,22 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <!-- HEADER -->
 <div class="header">
-    <div>
-        <h1>Scanner Crypto</h1>
-        <span style="font-size:0.8em;color:var(--text3)">SHORT grandes baisses &#8226; {{ timeframe|upper }} &#8226; Paper trading &#8226; Scan #{{ scan_count }}</span>
-    </div>
+    <h1>Richesse Crypto</h1>
     <div class="status">
         <div class="dot {% if is_scanning %}scanning{% endif %}"></div>
-        {% if is_scanning %}Scan en cours...{% elif bot_status == 'ACTIF' %}Actif{% elif bot_status == 'POSITION_OUVERTE' %}Position ouverte{% else %}Pause{% endif %}
-        <span style="margin-left:16px;color:var(--text3)">Derniere MAJ: {{ last_update }}</span>
-        <span style="margin-left:8px;color:var(--text3)">&#8226; Prochain scan ~{{ scan_interval_display|default('15 min') }}</span>
+        {% if is_scanning %}Scan en cours{% elif bot_status == 'ACTIF' %}Bot actif{% elif bot_status == 'POSITION_OUVERTE' %}Position ouverte{% else %}Pause{% endif %}
+        <span>·</span>
+        <span>MAJ {{ last_update }}</span>
+        <span>·</span>
+        <span>Prochain scan {{ scan_interval_display|default('15 min') }}</span>
     </div>
+    <div class="meta">Bot SHORT 15m · Paper · {{ scan_pairs_display|default('toutes paires') }}</div>
 </div>
 
-<!-- 2 ONGLETS: Bot de trading | Bot d'arbitrage -->
+<!-- ONGLETS -->
 <div class="tabs">
-    <button class="tab active" onclick="showTab('trading')">Bot de trading</button>
-    <button class="tab" onclick="showTab('arbitrage')">Bot d'arbitrage</button>
+    <button class="tab active" onclick="showTab('trading')">Trading SHORT</button>
+    <button class="tab" onclick="showTab('arbitrage')">Arbitrage</button>
 </div>
 
 <!-- ==================== ONGLET 1: BOT DE TRADING ==================== -->
@@ -298,82 +299,44 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card" style="margin-bottom:16px;">
     <div class="card-header">
-        <h2>Etat du bot &amp; config</h2>
+        <h2>État du bot</h2>
         <span class="badge {% if bot_status == 'ACTIF' or bot_status == 'SCAN_EN_COURS' %}b-green{% elif bot_status == 'POSITION_OUVERTE' %}b-blue{% else %}b-yellow{% endif %}">
-            {% if bot_status == 'ACTIF' %}Pret a trader{% elif bot_status == 'SCAN_EN_COURS' %}Scan...{% elif bot_status == 'POSITION_OUVERTE' %}Position ouverte{% elif bot_status == 'PAUSE_DRAWDOWN' %}Pause (drawdown){% elif bot_status == 'PAUSE_3_PERTES' %}Pause (3 pertes){% else %}Pause{% endif %}
+            {% if bot_status == 'ACTIF' %}Prêt{% elif bot_status == 'SCAN_EN_COURS' %}Scan...{% elif bot_status == 'POSITION_OUVERTE' %}En position{% elif bot_status == 'PAUSE_DRAWDOWN' %}Pause DD{% elif bot_status == 'PAUSE_3_PERTES' %}Pause 3 pertes{% else %}Pause{% endif %}
         </span>
     </div>
     <div style="padding:16px 20px;">
-        <p style="color:var(--text2);margin-bottom:16px;font-size:0.9em;">{{ bot_status_reason|default('') }}</p>
-        <div class="stats-detail" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-            <div class="detail-item"><span class="detail-label">Timeframe</span><span class="detail-value">{{ timeframe|upper }}</span></div>
-            <div class="detail-item"><span class="detail-label">Stop loss</span><span class="detail-value red">+{{ stop_loss_pct|default(1) }}%</span></div>
-            <div class="detail-item"><span class="detail-label">Take profit</span><span class="detail-value green">-{{ take_profit_pct|default(2) }}%</span></div>
-            <div class="detail-item"><span class="detail-label">R:R</span><span class="detail-value blue">{{ rr_ratio|default(2)|round(1) }}x</span></div>
-            <div class="detail-item"><span class="detail-label">Levier SHORT</span><span class="detail-value">{{ levier_display|default(10) }}x</span></div>
-            <div class="detail-item"><span class="detail-label">Risque max / trade</span><span class="detail-value">{{ risk_pct_capital|default(1)|int }}% capital</span></div>
-            <div class="detail-item"><span class="detail-label">Max drawdown jour</span><span class="detail-value">{{ max_daily_drawdown_pct|default(5) }}%</span></div>
-            <div class="detail-item"><span class="detail-label">Intervalle scan</span><span class="detail-value">{{ scan_interval_display|default('15 min') }}</span></div>
-            <div class="detail-item"><span class="detail-label">Paires scannees</span><span class="detail-value">{{ scan_pairs_display|default('20 paires') }}</span></div>
-            <div class="detail-item"><span class="detail-label">Frais simules</span><span class="detail-value">0,05% / cote</span></div>
-            <div class="detail-item"><span class="detail-label">Score min pour ouvrir</span><span class="detail-value">{{ min_score_to_open|default(75) }} pts</span></div>
-            <div class="detail-item"><span class="detail-label">Filtre sentiment (Extreme Fear)</span><span class="detail-value">{% if sentiment_filter_enabled %}Oui{% else %}Non{% endif %}</span></div>
+        <p style="color:var(--text2);font-size:0.9rem;margin-bottom:12px;">{{ bot_status_reason|default('') }}</p>
+        <div class="stats-detail" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+            <div class="detail-item"><span class="detail-label">SL / TP</span><span class="detail-value"><span class="red">+{{ stop_loss_pct|default(1) }}%</span> / <span class="green">-{{ take_profit_pct|default(2) }}%</span></span></div>
+            <div class="detail-item"><span class="detail-label">Score min</span><span class="detail-value">{{ min_score_to_open|default(75) }} pts</span></div>
+            <div class="detail-item"><span class="detail-label">Levier</span><span class="detail-value">{{ levier_display|default(10) }}x</span></div>
+            <div class="detail-item"><span class="detail-label">Scan</span><span class="detail-value">{{ scan_interval_display|default('15 min') }}</span></div>
+            <div class="detail-item"><span class="detail-label">Paires</span><span class="detail-value">{{ scan_pairs_display|default('toutes') }}</span></div>
         </div>
     </div>
 </div>
 
-<!-- Sentiment du marché & réseaux -->
+<!-- Sentiment (résumé compact) -->
 <div class="card" style="margin-bottom:16px;">
     <div class="card-header">
-        <h2>Sentiment du marché & réseaux</h2>
-        <span style="font-size:0.8em;color:var(--text3)">Fear & Greed, Reddit, trending, news — MAJ {{ sentiment_display.updated|default('--:--') }}</span>
+        <h2>Sentiment marché</h2>
+        <span style="font-size:0.8rem;color:var(--text3)">{{ sentiment_display.updated|default('--:--') }}</span>
     </div>
     <div style="padding:16px 20px;">
         {% if sentiment_display and (sentiment_display.fear_greed or sentiment_display.reddit or sentiment_display.trending) %}
-        <div class="stats-detail" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center;">
             {% if sentiment_display.fear_greed %}
-            <div style="background:var(--bg3);border-radius:10px;padding:14px;border:1px solid var(--border);">
-                <div style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">Fear & Greed (Alternative.me)</div>
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                    <span style="font-size:2em;font-weight:700;color:{% if sentiment_display.fear_greed.value <= 25 %}var(--green){% elif sentiment_display.fear_greed.value >= 75 %}var(--red){% else %}var(--yellow){% endif %}">{{ sentiment_display.fear_greed.value }}</span>
-                    <span style="color:var(--text2);">{{ sentiment_display.fear_greed.classification }}</span>
-                    <span class="badge {% if sentiment_display.fear_greed.signal == 'strong_buy' %}b-green{% elif sentiment_display.fear_greed.signal == 'buy' %}b-green{% elif sentiment_display.fear_greed.signal == 'strong_sell' %}b-red{% elif sentiment_display.fear_greed.signal == 'caution' %}b-yellow{% else %}b-blue{% endif %}">{{ sentiment_display.fear_greed.signal }}</span>
-                </div>
-                {% if sentiment_display.fear_greed.avg_7d is not none %}<div style="font-size:0.8em;color:var(--text3);margin-top:6px;">Moy. 7j: {{ "%.0f"|format(sentiment_display.fear_greed.avg_7d) }} — Tendance: {{ sentiment_display.fear_greed.trend_direction }}</div>{% endif %}
-            </div>
+            <div><span style="font-size:1.5rem;font-weight:700;color:{% if sentiment_display.fear_greed.value <= 25 %}var(--green){% elif sentiment_display.fear_greed.value >= 75 %}var(--red){% else %}var(--yellow){% endif %}">{{ sentiment_display.fear_greed.value }}</span> <span style="color:var(--text2);margin-left:6px;">Fear & Greed</span></div>
             {% endif %}
             {% if sentiment_display.reddit %}
-            <div style="background:var(--bg3);border-radius:10px;padding:14px;border:1px solid var(--border);">
-                <div style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">Reddit (r/cryptocurrency, r/bitcoin…)</div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <span style="font-size:1.5em;font-weight:700;color:{% if sentiment_display.reddit.sentiment_score > 20 %}var(--green){% elif sentiment_display.reddit.sentiment_score < -20 %}var(--red){% else %}var(--text2){% endif %}">{{ sentiment_display.reddit.sentiment_score }}%</span>
-                    <span class="badge {% if sentiment_display.reddit.signal == 'bullish' %}b-green{% elif sentiment_display.reddit.signal == 'bearish' %}b-red{% else %}b-blue{% endif %}">{{ sentiment_display.reddit.signal }}</span>
-                </div>
-                <div style="font-size:0.8em;color:var(--text3);margin-top:6px;">Hausse {{ sentiment_display.reddit.bullish_percent|default(0)|round(1) }}% / Baisse {{ sentiment_display.reddit.bearish_percent|default(0)|round(1) }}% — {{ sentiment_display.reddit.total_posts|default(0) }} posts</div>
-                {% if sentiment_display.reddit.top_mentions %}
-                <div style="font-size:0.75em;color:var(--text3);margin-top:8px;">Mentions: {% for sym, cnt in sentiment_display.reddit.top_mentions.items() %}{% if loop.index <= 5 %}{% if loop.index > 1 %} · {% endif %}{{ sym }} ({{ cnt }}){% endif %}{% endfor %}</div>
-                {% endif %}
-            </div>
+            <div><span style="font-weight:700;">{{ sentiment_display.reddit.sentiment_score }}%</span> <span style="color:var(--text2);margin-left:4px;">Reddit</span></div>
             {% endif %}
             {% if sentiment_display.trending %}
-            <div style="background:var(--bg3);border-radius:10px;padding:14px;border:1px solid var(--border);">
-                <div style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">Trending (CoinGecko)</div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    {% for c in sentiment_display.trending[:6] %}
-                    <span class="badge b-purple" title="{{ c.name|default('') }}">{{ c.symbol|default('-') }}{% if c.rank %}#{{ c.rank }}{% endif %}</span>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            {% if sentiment_display.news %}
-            <div style="background:var(--bg3);border-radius:10px;padding:14px;border:1px solid var(--border);">
-                <div style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">News (CryptoPanic)</div>
-                <div style="font-size:0.9em;">Score {{ sentiment_display.news.score }} — 🟢 {{ sentiment_display.news.bullish }} / 🔴 {{ sentiment_display.news.bearish }} / ⚪ {{ sentiment_display.news.neutral }}</div>
-            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">{% for c in sentiment_display.trending[:5] %}<span class="badge b-purple">{{ c.symbol|default('-') }}</span>{% endfor %}</div>
             {% endif %}
         </div>
         {% else %}
-        <p style="color:var(--text3);font-size:0.9em;">Chargement du sentiment au prochain scan (Fear & Greed, Reddit, trending).</p>
+        <p style="color:var(--text3);font-size:0.9rem;">Chargement au prochain scan.</p>
         {% endif %}
     </div>
 </div>
@@ -400,28 +363,17 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         <div class="stat-sub">{{ perf.total_trades }} trades</div>
     </div>
 </div>
-<div class="stats" style="margin-bottom:16px;">
+<div class="stats" style="margin-bottom:20px;">
     <div class="stat s-yellow">
-        <div class="stat-label">Frais cumules (simules)</div>
-        <div class="stat-value">{{ "%.2f"|format(total_fees_usdt|default(0)) }}$</div>
-        <div class="stat-sub">0,05% par cote (open/close)</div>
-    </div>
-    <div class="stat s-{% if (daily_drawdown_pct|default(0)) >= 5 %}red{% else %}cyan{% endif %}">
-        <div class="stat-label">Drawdown jour</div>
-        <div class="stat-value">{{ "%.1f"|format(daily_drawdown_pct|default(0)) }}%</div>
-        <div class="stat-sub">Pause si &gt; 5%</div>
-    </div>
-    <div class="stat s-blue">
-        <div class="stat-label">Risque / trade</div>
-        <div class="stat-value">{{ risk_pct_capital|default(1)|int }}%</div>
-        <div class="stat-sub">Du capital max par position</div>
+        <div class="stat-label">Frais · Drawdown · Risque</div>
+        <div class="stat-value" style="font-size:1rem;">{{ "%.2f"|format(total_fees_usdt|default(0)) }} $ · {{ "%.1f"|format(daily_drawdown_pct|default(0)) }}% · {{ risk_pct_capital|default(1)|int }}%</div>
     </div>
 </div>
 
 <div class="card">
     <div class="card-header">
-        <h2>Meilleures opportunites SHORT (ranking par pts)</h2>
-        <span style="font-size:0.8em;color:var(--text3)">{{ opportunities|length }} signaux — meilleur en tete, le bot ouvre la #1 si dispo</span>
+        <h2>Opportunités SHORT</h2>
+        <span style="font-size:0.85rem;color:var(--text3)">{{ opportunities|length }} signaux</span>
     </div>
     {% if opportunities %}
     <div class="table-scroll">
@@ -451,15 +403,15 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </tbody>
         </table>
     </div>
-    <div style="padding:12px 20px;background:rgba(0,0,0,0.2);border-top:1px solid var(--border);font-size:0.8em;color:var(--text3)">
-        <strong>Score:</strong> RSI bas + volume eleve + 15m/1h baissiers + spread faible + ATR modere (max 100 pts). Le bot ouvre un SHORT sur la 1re opportunite si aucune position ouverte.
-    </div>
+    <div style="padding:10px 20px;border-top:1px solid var(--border);font-size:0.8rem;color:var(--text3)">Le bot ouvre un SHORT sur la 1re opportunité (score ≥ {{ min_score_to_open|default(75) }} pts) si aucune position.</div>
     {% else %}
-    <div class="empty">Aucune opportunite SHORT pour l'instant. Prochain scan dans {{ scan_interval_display|default('15 min') }}.</div>
+    <div class="empty">Aucune opportunité. Prochain scan {{ scan_interval_display|default('15 min') }}.</div>
     {% endif %}
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <h2>Positions ouvertes</h2>
         <span class="badge b-blue">PAPER</span>
     </div>
     {% if positions %}
@@ -502,8 +454,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Historique du bot trading</h2>
-        <span style="font-size:0.8em;color:var(--text3)">Scans, signaux, ouvertures/fermetures — {{ bot_log|length }} evenements</span>
+        <h2>Journal (logs)</h2>
     </div>
     <div class="log">
         {% if bot_log %}
@@ -522,8 +473,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Historique des trades fermes (bot trading)</h2>
-        <span style="font-size:0.8em;color:var(--text3)">{{ history|length }} trades</span>
+        <h2>Trades fermés</h2>
+        <span style="font-size:0.85rem;color:var(--text3)">{{ history|length }} trades</span>
     </div>
     {% if history %}
     <div class="table-scroll">
@@ -550,54 +501,39 @@ tr:hover td { background: rgba(59,130,246,0.03); }
         </table>
     </div>
     {% else %}
-    <div class="empty">Aucun trade ferme pour l'instant.</div>
+    <div class="empty">Aucun trade fermé.</div>
     {% endif %}
 </div>
 
 </div>
 
-<!-- ==================== ONGLET 2: BOT D'ARBITRAGE ==================== -->
+<!-- ONGLET ARBITRAGE -->
 <div id="tab-arbitrage" class="tab-content" style="display:none">
     <div class="stats" style="margin-bottom:20px;">
         <div class="stat s-cyan">
-            <div class="stat-label">Capital paper (bot arbitrage)</div>
+            <div class="stat-label">Capital paper (arbitrage)</div>
             <div class="stat-value">{{ "%.2f"|format(arbitrage_paper_balance|default(100)) }} €</div>
-            <div class="stat-sub">Initial: 100 € — gains simulés sur chaque opportunité</div>
+            <div class="stat-sub">Initial 100 € · gains simulés</div>
         </div>
         <div class="stat s-blue">
-            <div class="stat-label">Trades paper simulés</div>
+            <div class="stat-label">Trades simulés</div>
             <div class="stat-value">{{ arbitrage_paper_trades|default([])|length }}</div>
-            <div class="stat-sub">Dernières opérations d'arbitrage simulées</div>
         </div>
     </div>
     <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
-            <h2>Config &amp; état du bot arbitrage</h2>
+            <h2>Config arbitrage</h2>
             <span class="badge b-cyan">PAPER</span>
         </div>
-        <div style="padding:16px 20px;">
-            <div class="stats-detail" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-                <div class="detail-item"><span class="detail-label">Symbole surveillé</span><span class="detail-value">{{ arbitrage_symbol|default('BTC/USDT') }}</span></div>
-                <div class="detail-item"><span class="detail-label">Seuil spread (min)</span><span class="detail-value">{{ arbitrage_threshold_pct|default('0.3') }}%</span></div>
-                <div class="detail-item"><span class="detail-label">Intervalle scan</span><span class="detail-value">{{ arbitrage_poll_sec|default('45') }} s</span></div>
-                <div class="detail-item"><span class="detail-label">Exchanges</span><span class="detail-value">Binance, KuCoin, Bybit</span></div>
-                <div class="detail-item"><span class="detail-label">Mode</span><span class="detail-value">Paper (simulation)</span></div>
-            </div>
-            <p style="margin-top:12px;font-size:0.85em;color:var(--text3);">Les logs ci-dessous indiquent chaque scan et les opportunités détectées. En paper, chaque opportunité ajoute un gain simulé au capital ci-dessus.</p>
-        </div>
-    </div>
-    <div class="card" style="margin-bottom:20px;">
-        <div style="padding:20px;color:var(--text2);line-height:1.6;">
-            <p><strong>Principe :</strong> le bot compare les prix d'un meme actif (ex. ETH/USDT) sur plusieurs exchanges (Binance, KuCoin, etc.). Quand l'ecart de prix (spread) depasse un seuil (ex. 0,5 %), il y a une opportunite d'arbitrage : <em>acheter la ou c'est le moins cher, vendre la ou c'est le plus cher</em>.</p>
-            <p><strong>Rentabilite :</strong> le seuil doit etre superieur aux frais des deux cotes pour degager un gain net. En mode paper trading, le bot simule ces operations avec un capital de <strong>100 €</strong> (fichier <code>paper_arbitrage_wallet.json</code>).</p>
-            <p><strong>Lancement :</strong> le bot d'arbitrage tourne avec l'app (<code>python run.py</code>). Les logs ci-dessous s'affichent en temps reel.</p>
+        <div style="padding:16px 20px;font-size:0.9rem;color:var(--text2);">
+            {{ arbitrage_symbol|default('BTC/USDT') }} · Seuil {{ arbitrage_threshold_pct|default('0.3') }}% · Scan {{ arbitrage_poll_sec|default('45') }} s · Binance, KuCoin, Bybit
         </div>
     </div>
     {% if arbitrage_paper_trades %}
     <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
-            <h2>Historique des trades paper (bot arbitrage)</h2>
-            <span style="font-size:0.8em;color:var(--text3)">{{ arbitrage_paper_trades|length }} operations</span>
+            <h2>Trades paper arbitrage</h2>
+            <span style="font-size:0.85rem;color:var(--text3)">{{ arbitrage_paper_trades|length }} ops</span>
         </div>
         <div style="padding:16px;overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:0.85em;">
@@ -629,8 +565,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     {% endif %}
     <div class="card">
         <div class="card-header">
-            <h2>Historique du bot arbitrage</h2>
-            <span style="font-size:0.8em;color:var(--text3)">Scans, opportunites, gains paper — {{ arbitrage_logs|length }} evenements</span>
+            <h2>Logs arbitrage</h2>
         </div>
         <div class="log">
             {% if arbitrage_logs %}
@@ -642,15 +577,14 @@ tr:hover td { background: rgba(59,130,246,0.03); }
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="empty">En attente du premier scan arbitrage...</div>
+                <div class="empty">En attente du premier scan.</div>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- FOOTER -->
-<div style="text-align:center;padding:20px;color:var(--text3);font-size:0.8em;">
-    Bot SHORT grandes baisses + Bot arbitrage &#8226; Paper trading &#8226; Rafraichir la page pour mettre a jour
+<div style="text-align:center;padding:24px;color:var(--text3);font-size:0.8rem;">
+    Richesse Crypto · Paper trading · Rafraîchir pour mettre à jour
 </div>
 
 </div>
