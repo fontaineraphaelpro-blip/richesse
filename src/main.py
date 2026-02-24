@@ -36,50 +36,55 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 # CONFIGURATION DU BOT
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# STRATÉGIE DAY TRADING PRO — LONG et SHORT
+# STRATÉGIE DAY TRADING PRO — RISK MANAGEMENT OPTIMAL
 # ─────────────────────────────────────────────────────────
-# Comportement type day trader pro: LONG (acheter les dips) + SHORT (vendre les rallies).
-# Scan du marché 24/7, analyse technique poussée, une seule position à la fois (LONG ou SHORT).
+# Objectif: gagner un max sur la durée en protégeant le capital.
+# • Risque par trade 2% (ou Kelly si historique) — croissance optimale sans explosion.
+# • Stop après 3 pertes d'affilée + drawdown jour 5% — protection.
+# • Cooldown 10 min + score min 68 — qualité des setups, pas de sur-trading.
+# • Sentiment Extreme Fear/Greed — éviter les pièges évidents.
+# • Taille de position plafonnée 30% — jamais tout dans un seul trade.
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
-# SHORT: SL au-dessus du prix, TP en dessous
 STOP_LOSS_PCT    = 1.0
 TAKE_PROFIT_PCT  = 2.0
-# LONG: SL en dessous du prix, TP au-dessus
 LONG_STOP_LOSS_PCT   = 1.0
 LONG_TAKE_PROFIT_PCT = 2.0
 SCAN_INTERVAL    = 900
 MAX_POSITIONS    = 1
-MAX_CONSECUTIVE_LOSSES = 3
-COOLDOWN_MINUTES = 15
-SPREAD_MAX_PCT   = 0.15
-VOLUME_RATIO_MIN = 1.0
-VOLATILITY_MAX   = 5.0
-# Filtres tendance SHORT
+MAX_CONSECUTIVE_LOSSES = 3   # Risk mgt: stop après 3 pertes pour protéger le capital
+COOLDOWN_MINUTES = 10        # Risk mgt: éviter le sur-trading
+SPREAD_MAX_PCT   = 0.15      # Qualité des bougies
+VOLUME_RATIO_MIN = 1.0       # Volume >= moyenne
+VOLATILITY_MAX   = 5.0       # Éviter les actifs trop volatils
 TREND_15M_MUST_BEARISH = True
 TREND_1H_MUST_BEARISH = True
 TREND_1H_ALLOW_NEUTRAL = True
-# Filtres tendance LONG (15m/1h haussier ou neutre)
 TREND_15M_LONG_BULLISH = True
 TREND_1H_LONG_BULLISH  = True
 TREND_1H_LONG_ALLOW_NEUTRAL = True
-POSITION_PCT_BALANCE   = 0.20
-RISK_PCT_CAPITAL       = 0.01
-RISK_PCT_SMALL_ACCOUNT = 0.015
+POSITION_PCT_BALANCE   = 0.30   # Risk mgt: max 30% du capital dans une seule position
+RISK_PCT_CAPITAL       = 0.02   # 2% par trade (optimal croissance long terme)
+RISK_PCT_SMALL_ACCOUNT = 0.02   # 2% aussi pour petit compte
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
-MAX_DAILY_DRAWDOWN_PCT = 5.0
+MAX_DAILY_DRAWDOWN_PCT = 5.0    # Risk mgt: pause si perte du jour >= 5%
 
-MIN_SCORE_TO_OPEN = 75
-SENTIMENT_FILTER_ENABLED = True
-FEAR_GREED_MIN_TO_SHORT = 22   # Pas de SHORT en Extreme Fear (rebond probable)
-FEAR_GREED_MAX_TO_LONG  = 78   # Pas de LONG en Extreme Greed (correction probable)
+MIN_SCORE_TO_OPEN = 68          # Qualité des setups pour max gains
+SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
+FEAR_GREED_MIN_TO_SHORT = 22
+FEAR_GREED_MAX_TO_LONG  = 78
+
+# Risk management: utiliser Kelly pour adapter la taille au win rate (max gains long terme)
+KELLY_RISK_ENABLED = True
+KELLY_RISK_MIN_PCT = 0.01      # Minimum 1% même si Kelly suggère moins
+KELLY_RISK_MAX_PCT = 0.03      # Maximum 3% (quarter Kelly cap)
 
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '600'))  # 10 min par défaut (scan marché 24/7)
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '600'))  # 10 min (équilibre opportunités / stabilité)
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -102,9 +107,9 @@ AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
 
 # Score Dynamique selon Marche (EQUILIBRE)
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 68    # Score min si marche haussier (plus permissif)
-SCORE_BEARISH_MARKET = 78    # Score min si marche baissier (plus strict)
-SCORE_NEUTRAL_MARKET = 72    # Score min si marche neutre
+SCORE_BULLISH_MARKET = 64    # Score min si marché haussier (bonnes opportunités LONG)
+SCORE_BEARISH_MARKET = 72    # Score min si marché baissier (qualité SHORT)
+SCORE_NEUTRAL_MARKET = 68    # Score min si marché neutre
 
 # Risk/Reward Minimum REALISTE
 MIN_RISK_REWARD = 2.0        # Rejeter si R/R < 2:1 (realiste et rentable)
@@ -360,7 +365,7 @@ def run_scanner():
     symbols = get_top_pairs()
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
-    add_bot_log("=== DAY TRADING SCAN #{} ({} paires) LONG + SHORT ===".format(scan_num, len(symbols)), 'INFO')
+    add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT — risk mgt optimal ===".format(scan_num, len(symbols)), 'INFO')
 
     # —— 1. Données marché (15m) ——
     data, real_prices = fetch_multiple_pairs(symbols, interval=TIMEFRAME, limit=CANDLE_LIMIT)
@@ -537,7 +542,12 @@ def run_scanner():
                 stop_loss = best['stop_loss']
                 take_profit = best['take_profit']
                 balance = trader.get_usdt_balance()
-                risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
+                # Risk management optimal: Kelly adapte la taille au win rate (max gains long terme)
+                if KELLY_RISK_ENABLED:
+                    kelly = position_sizer.calculate_kelly()
+                    risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, kelly))
+                else:
+                    risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
 
                 if is_long:
                     pos_size = position_size_long_usdt(
@@ -1373,7 +1383,7 @@ fetch('/api/social/fear_greed')
 def run_loop():
     """Boucle infinie qui lance le scanner pÃ©riodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("Scan marche 24/7 — Bonnes affaires: RSI, MACD, ADX, Bollinger, multi-TF 15m/1h", 'INFO')
+    add_bot_log("Risk management optimal | Kelly sizing | Scan 10 min | RSI, MACD, ADX, 15m/1h", 'INFO')
     while True:
         # Mise à jour du sentiment marché & réseaux (pour le dashboard)
         try:

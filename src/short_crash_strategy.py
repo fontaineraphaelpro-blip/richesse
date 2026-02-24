@@ -2,16 +2,12 @@
 """
 Stratégie DAY TRADING PRO — LONG et SHORT.
 
-Analyse technique poussée (multi-indicateurs) pour les deux sens:
-  - LONG: acheter les dips (momentum BULLISH, RSI rebond, MACD bullish, 15m/1h haussier ou neutre).
-  - SHORT: vendre les rallies (momentum BEARISH, RSI faible, MACD bearish, 15m/1h baissier ou neutre).
-  Tendance (ADX), volume, Bollinger, spread, ATR pour les deux.
-
-Le bot scanne le marché 24/7 et prend la meilleure opportunité (LONG ou SHORT) selon le score.
+Risk management optimal: analyse technique + filtres qualité (ADX, volume, tendance 15m/1h)
+pour maximiser les gains sur la durée tout en protégeant le capital.
 """
 
 
-# Seuil ADX minimum pour considérer qu'une tendance existe (éviter les ranges)
+# Seuil ADX minimum (risk mgt: tendance claire = meilleure qualité des setups)
 ADX_MIN_FOR_TREND = 18
 
 
