@@ -52,20 +52,20 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
-STOP_LOSS_PCT    = 1.0
-TAKE_PROFIT_PCT  = 2.0
-LONG_STOP_LOSS_PCT   = 1.0
-LONG_TAKE_PROFIT_PCT = 2.0
-SCAN_INTERVAL    = 300         # 5 min par défaut (au lieu de 10)
-SCAN_INTERVAL_SESSION = 180   # 3 min pendant session US/EU (haute volatilité)
-SCAN_INTERVAL_NIGHT = 600     # 10 min la nuit (peu de volatilité)
-MAX_POSITIONS    = 5
-MAX_CONSECUTIVE_LOSSES = 3
-COOLDOWN_MINUTES = 5          # 5 min de cooldown (au lieu de 10)
-SPREAD_MAX_PCT   = 0.15      # Spread serre = meilleure execution
-VOLUME_RATIO_MIN = 0.35      # Volume >= 35% de la moyenne (pour avoir un top 10 à chaque scan)
-VOLATILITY_MAX   = 6.0       # Éviter les actifs trop volatils
-TOP_OPPORTUNITIES_DISPLAY = 10   # Toujours afficher au moins les N meilleures (signaux + potentiels)
+STOP_LOSS_PCT    = 1.5        # SL large = moins de faux stops
+TAKE_PROFIT_PCT  = 1.5        # TP = SL (R:R 1:1 = TP accessible, profitable a 60% WR)
+LONG_STOP_LOSS_PCT   = 1.5
+LONG_TAKE_PROFIT_PCT = 1.5
+SCAN_INTERVAL    = 300
+SCAN_INTERVAL_SESSION = 120   # 2 min pendant session (sniper les meilleures entrees)
+SCAN_INTERVAL_NIGHT = 900     # 15 min la nuit (economiser les appels API)
+MAX_POSITIONS    = 2           # MAX 2 positions = ultra concentration
+MAX_CONSECUTIVE_LOSSES = 2     # Kill switch apres 2 pertes (pas 3)
+COOLDOWN_MINUTES = 10          # 10 min cooldown = eviter le revenge trading
+SPREAD_MAX_PCT   = 0.10       # Spread tres serre = meilleure execution
+VOLUME_RATIO_MIN = 1.5        # Volume >= 150% de la moyenne (momentum confirme)
+VOLATILITY_MAX   = 5.0        # Eviter volatilite extreme
+TOP_OPPORTUNITIES_DISPLAY = 10
 TREND_15M_MUST_BEARISH = True
 TREND_1H_MUST_BEARISH = True
 TREND_1H_ALLOW_NEUTRAL = True
@@ -76,19 +76,19 @@ TREND_1H_LONG_ALLOW_NEUTRAL = True
 TREND_4H_ENABLED = True
 TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
-POSITION_PCT_BALANCE   = 0.30
+POSITION_PCT_BALANCE   = 0.20   # Max 20% du capital par position (etait 30%)
 # Bonus score en session US/EU (forte volatilité) 14h-22h UTC
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
 SESSION_BONUS_UTC_END = 22
 SESSION_BONUS_PTS = 2   # Risk mgt: max 30% du capital dans une seule position
-RISK_PCT_CAPITAL       = 0.02   # 2% par trade (optimal croissance long terme)
-RISK_PCT_SMALL_ACCOUNT = 0.02   # 2% aussi pour petit compte
+RISK_PCT_CAPITAL       = 0.015  # 1.5% par trade (preservation du capital)
+RISK_PCT_SMALL_ACCOUNT = 0.02   # 2% pour petit compte (<200$)
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 5.0    # Risk mgt: pause si perte du jour >= 5%
 
-MIN_SCORE_TO_OPEN = 55          # Score min pour ouvrir (abaissé pour plus de trades)
+MIN_SCORE_TO_OPEN = 80          # Score 80+ = top 5% des setups seulement
 SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -117,19 +117,19 @@ VOLUME_FILTER_ENABLED = True
 MIN_VOLUME_RATIO = 1.2       # Volume doit Ãªtre 1.2x la moyenne
 
 # Heures de Trading Optimales (UTC)
-TRADING_HOURS_ENABLED = False  # DÉSACTIVÉ - trade 24/7
-TRADING_START_HOUR = 0         # (non utilisé)
-TRADING_END_HOUR = 24          # (non utilisé)
-AVOID_WEEKENDS = True        # Ã‰viter samedi/dimanche
+TRADING_HOURS_ENABLED = True   # ACTIVE = trader uniquement sessions liquides
+TRADING_START_HOUR = 8         # 8h UTC = ouverture Europe
+TRADING_END_HOUR = 22          # 22h UTC = fermeture US
+AVOID_WEEKENDS = True
 
-# Score Dynamique selon Marche (EQUILIBRE)
+# Score Dynamique selon Marche
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 50    # Score min si marché haussier
-SCORE_BEARISH_MARKET = 60    # Score min si marché baissier
-SCORE_NEUTRAL_MARKET = 55    # Score min si marché neutre
+SCORE_BULLISH_MARKET = 75    # Strict meme en bull
+SCORE_BEARISH_MARKET = 85    # Ultra strict en bear
+SCORE_NEUTRAL_MARKET = 80    # Strict en neutre
 
-# Risk/Reward Minimum REALISTE
-MIN_RISK_REWARD = 1.5        # R:R min 1.5:1 (réaliste pour avoir des trades)
+# Risk/Reward Minimum (1.2:1 = TP facile a atteindre = 60%+ WR)
+MIN_RISK_REWARD = 1.0        # R:R 1:1 (profitable a 60% WR: 0.6*1 - 0.4*1 = +0.2 par $ risque)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True
@@ -450,6 +450,17 @@ def run_scanner():
     shared_data['scan_count'] += 1
     scan_num = shared_data['scan_count']
 
+    # Filtre heures de trading: uniquement sessions liquides (Europe + US)
+    utc_now = datetime.utcnow()
+    if TRADING_HOURS_ENABLED:
+        h = utc_now.hour
+        if h < TRADING_START_HOUR or h >= TRADING_END_HOUR:
+            add_bot_log("Hors session ({:02d}h UTC, actif {}h-{}h) — scan en pause.".format(h, TRADING_START_HOUR, TRADING_END_HOUR), 'INFO')
+            return []
+        if AVOID_WEEKENDS and utc_now.weekday() >= 5:
+            add_bot_log("Weekend — volumes faibles, pas de trading.", 'INFO')
+            return []
+
     # Liste des paires (limité en mode test pour exécution rapide)
     symbols = get_top_pairs()
     if SCAN_PAIRS_LIMIT:
@@ -472,8 +483,10 @@ def run_scanner():
         if btc_ind:
             btc_regime = btc_ind.get('market_regime', 'UNKNOWN')
             btc_atr_pct = btc_ind.get('atr_percent') or 0
-            if btc_regime == 'VOLATILE' and btc_atr_pct > 4.0:
-                add_bot_log("BTC volatile (ATR {:.1f}%, regime {}): scan prudent.".format(btc_atr_pct, btc_regime), 'WARN')
+            btc_adx = btc_ind.get('adx') or 0
+            if btc_regime == 'VOLATILE' or btc_regime == 'RANGING':
+                add_bot_log("BTC {} (ADX {:.0f}, ATR {:.1f}%): PAS DE TRADE (60% WR mode).".format(btc_regime, btc_adx, btc_atr_pct), 'WARN')
+                return []
 
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
@@ -490,12 +503,9 @@ def run_scanner():
         trader.check_and_apply_partial_tp(real_prices)
     except Exception as e:
         add_bot_log("Erreur partial_tp: {}".format(e), 'ERROR')
+    # DCA desactive: ne pas moyenner a la baisse (capital preservation)
     try:
-        trader.check_and_apply_dca(real_prices, max_dca=2, dca_threshold_pct=-1.5)
-    except Exception as e:
-        add_bot_log("Erreur DCA: {}".format(e), 'ERROR')
-    try:
-        trader.check_time_based_exits(real_prices, max_hold_hours=48)
+        trader.check_time_based_exits(real_prices, max_hold_hours=24)
     except Exception as e:
         add_bot_log("Erreur time_exits: {}".format(e), 'ERROR')
     trader.check_positions(real_prices)
@@ -561,7 +571,17 @@ def run_scanner():
         if atr_pct > VOLATILITY_MAX:
             continue
 
-        # Récupérer tendances 15m, 1h et optionnellement 4h
+        # Filtre ADX: skip les marches faibles (ADX < 22 = pas de tendance)
+        adx = indicators.get('adx')
+        if adx is not None and adx < 22:
+            continue
+
+        # Filtre regime: UNIQUEMENT TRENDING (skip VOLATILE et RANGING)
+        regime = indicators.get('market_regime', 'UNKNOWN')
+        if regime != 'TRENDING':
+            continue
+
+        # Recuperer tendances 15m, 1h et optionnellement 4h
         momentum_15m = None
         momentum_1h = None
         momentum_4h = None
@@ -582,6 +602,13 @@ def run_scanner():
         price = indicators.get('current_price')
         if not price or price <= 0:
             continue
+
+        # Filtre proximite EMA21: entry optimale = pres de l'EMA
+        ema21 = indicators.get('ema21')
+        if ema21 and ema21 > 0:
+            ema_dist_pct = abs(price - ema21) / ema21 * 100
+            if ema_dist_pct > 2.0:
+                continue  # >2% de l'EMA = trop loin, WR chute
 
         in_cooldown, _ = trader.is_in_cooldown(symbol)
         if in_cooldown:
@@ -604,11 +631,34 @@ def run_scanner():
         if momentum_4h == 'BEARISH': tf_score_short += 2
         elif momentum_4h == 'NEUTRAL': tf_score_short += 1
 
-        # Signal si: conditions techniques OK ET multi-TF >= 3 (au moins 2 TF bien alignees)
-        has_short = tf_score_short >= 3 and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
-        has_long = tf_score_long >= 3 and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
+        # MACD hard filter: histogramme doit confirmer la direction
+        macd_hist = indicators.get('macd_hist')
+        macd_long_ok = macd_hist is not None and macd_hist > 0
+        macd_short_ok = macd_hist is not None and macd_hist < 0
+
+        # Signal si: multi-TF >= 5 (3 TF toutes alignees) + MACD + signal technique
+        has_short = tf_score_short >= 5 and macd_short_ok and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
+        has_long = tf_score_long >= 5 and macd_long_ok and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
+
+        # Confluence counter: bonus confirmations Ichimoku + Stoch cross + RSI divergence
+        confluence = 0
+        tenkan = indicators.get('tenkan')
+        kijun = indicators.get('kijun')
+        stoch_k = indicators.get('stoch_k')
+        stoch_d = indicators.get('stoch_d')
+        stoch_k_prev = indicators.get('stoch_k_prev')
+        stoch_d_prev = indicators.get('stoch_d_prev')
 
         if has_short:
+            # Confluence SHORT
+            if tenkan is not None and kijun is not None and tenkan < kijun:
+                confluence += 1
+            if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
+                if stoch_k < stoch_d and stoch_k_prev >= stoch_d_prev:
+                    confluence += 2  # fresh crossover = tres fort
+            if indicators.get('rsi_bearish_divergence'):
+                confluence += 1
+
             n_short_signal += 1
             stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
             if stop_loss is None:
@@ -626,15 +676,24 @@ def run_scanner():
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
                 'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'SHORT', 'score': details['score'] + session_bonus,
+                'entry_signal': 'SHORT', 'score': details['score'] + session_bonus + confluence * 3,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bearish': details.get('macd_bearish'),
-                'is_signal': True,
+                'is_signal': True, 'confluence': confluence,
             })
 
         if has_long:
+            # Confluence LONG
+            if tenkan is not None and kijun is not None and tenkan > kijun:
+                confluence += 1
+            if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
+                if stoch_k > stoch_d and stoch_k_prev <= stoch_d_prev:
+                    confluence += 2
+            if indicators.get('rsi_bullish_divergence'):
+                confluence += 1
+
             n_long_signal += 1
             stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
             if stop_loss is None:
@@ -652,12 +711,12 @@ def run_scanner():
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
                 'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'LONG', 'score': details['score'] + session_bonus,
+                'entry_signal': 'LONG', 'score': details['score'] + session_bonus + confluence * 3,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bullish': details.get('macd_bullish'),
-                'is_signal': True,
+                'is_signal': True, 'confluence': confluence,
             })
 
         # Si aucun signal strict mais on a les données: ajouter la "meilleure potentialité" pour le top 10
@@ -730,8 +789,8 @@ def run_scanner():
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
 
-    # Portfolio risk limit: max 80% du capital deploye
-    MAX_PORTFOLIO_EXPOSURE = 0.80
+    # Portfolio risk limit: max 60% du capital deploye (protection)
+    MAX_PORTFOLIO_EXPOSURE = 0.60
     deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
     available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
     if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
@@ -751,14 +810,8 @@ def run_scanner():
             if opp.get('is_signal', False) and (opp.get('rr_ratio') or 0) >= MIN_RISK_REWARD:
                 best = opp
                 break
-        if best is None:
-            for opp in opportunities_list:
-                if opp['symbol'] in already_open_symbols:
-                    continue
-                if (opp.get('rr_ratio') or 0) >= MIN_RISK_REWARD and opp.get('score', 0) >= MIN_SCORE_TO_OPEN:
-                    best = opp
-                    add_bot_log("Pas de signal strict — ouverture sur meilleur potentiel {} (score {}).".format(opp['symbol'], opp['score']), 'INFO')
-                    break
+        # MODE SNIPER: on n'ouvre QUE sur signal strict (is_signal=True)
+        # Pas de fallback sur "meilleur potentiel" = zero trade mediocre
 
         if best is not None:
             is_long = best.get('entry_signal') == 'LONG'
@@ -851,10 +904,11 @@ def run_scanner():
                     dd_adj = position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0
                     size_mult = atr_adj * score_adj * dd_adj * multi_pos_factor * corr_factor * slip_factor
                     if is_long:
+                        lev = trader.long_leverage
                         sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
                         pos_size = position_size_long_usdt(
                             balance, risk_pct=risk_pct, sl_pct=sl_pct,
-                            max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
+                            leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
                         )
                         pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
                         take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
@@ -898,15 +952,6 @@ def run_scanner():
     else:
         add_bot_log("{} opps, best={} score={} — bloqué par score_min/sentiment.".format(
             len(opportunities_list), best['symbol'], best['score']), 'INFO')
-
-    # Grid Trading: opportunites en range si pas assez de signaux trend
-    if len(current_open) < MAX_POSITIONS:
-        try:
-            grid_count = trader.check_grid_opportunities(real_prices, shared_data.get('last_indicators', {}))
-            if grid_count > 0:
-                add_bot_log("{} trade(s) GRID ouverts (marche en range).".format(grid_count), 'TRADE')
-        except Exception:
-            pass
 
     return shared_data['opportunities']
 
@@ -1004,7 +1049,7 @@ def dashboard():
     scan_pairs_display = str(SCAN_PAIRS_LIMIT) + ' paires' if SCAN_PAIRS_LIMIT else 'Toutes les paires'
     scan_interval_display = f"{SCAN_INTERVAL // 60} min" if SCAN_INTERVAL >= 60 else f"{SCAN_INTERVAL} s"
     rr_ratio = TAKE_PROFIT_PCT / STOP_LOSS_PCT if STOP_LOSS_PCT else 0
-    levier_display = int(trader.short_leverage)
+    levier_display = int(trader.long_leverage)  # 10x LONG et SHORT
 
     # Calculer les stats avancees et donnees de graphiques
     stats = calculate_advanced_stats(all_trades)
@@ -1744,7 +1789,7 @@ def _get_scan_interval():
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("Risk management optimal | Kelly sizing | Scan 10 min | RSI, MACD, ADX, 15m/1h", 'INFO')
+    add_bot_log("MODE SNIPER: Score>={} | R:R>={} | ADX>=20 | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:

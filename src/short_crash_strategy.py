@@ -8,105 +8,130 @@ Le bot suit la tendance et n'entre pas sur les rebonds (pas d'achat oversold, pa
 """
 
 
-# Seuil ADX minimum (tendance claire, pas de range)
-ADX_MIN_FOR_TREND = 18
-# RSI: éviter les zones de rebond (oversold = bounce long, oversold short = bounce short)
-RSI_LONG_MIN = 45   # Pas d'achat si RSI < 45 (rebond oversold)
-RSI_SHORT_MIN = 30  # Pas de short si RSI < 30 (rebond après panique)
-# Prix doit être clairement dans la tendance (pas "dip" à acheter)
-LONG_PRICE_ABOVE_EMA_PCT = 0.1   # Prix >= EMA21 * (1 + 0.1%) = dans la tendance
+# === CONFIG 60% WR ===
+ADX_MIN_FOR_TREND = 25     # ADX 25+ = tendance FORTE confirmee
+RSI_LONG_MIN = 50          # Continuation clean (RSI 50-62)
+RSI_LONG_MAX = 62          # Hard cap
+RSI_SHORT_MIN = 35         # Pas de short sous 35 (trop oversold)
+RSI_SHORT_MAX = 50         # Short zone: 35-50
+LONG_PRICE_ABOVE_EMA_PCT = 0.05   # Prix juste au-dessus EMA21 (entry optimale)
 
-# SL/TP dynamiques basés sur l'ATR (volatilité du graphique)
-ATR_SL_MULTIPLIER = 1.5   # Distance SL = ATR * 1.5
-ATR_TP_RR_RATIO = 2.0     # TP = SL_distance * 2 (R:R 2:1)
-ATR_SL_MIN_PCT = 0.5      # SL min 0.5% si ATR très faible
-ATR_SL_MAX_PCT = 5.0      # SL max 5% pour éviter des stops trop larges
+# SL/TP pour 60%+ WR: SL serre, TP proche
+ATR_SL_MULTIPLIER = 1.8    # SL = ATR * 1.8 (large = evite les faux stops)
+ATR_TP_MULTIPLIER = 1.0    # TP = ATR * 1.0 (proche = plus de wins)
+ATR_TP_RR_RATIO = None      # pas utilise, on utilise ATR_TP_MULTIPLIER directement
+ATR_SL_MIN_PCT = 0.4       # SL min 0.4%
+ATR_SL_MAX_PCT = 2.0       # SL max 2.0%
+ATR_TP_MIN_PCT = 0.3       # TP min 0.3%
+ATR_TP_MAX_PCT = 1.5       # TP max 1.5%
 
 
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):
     """
-    Calcule SL et TP à partir de la volatilité (ATR) du graphique.
-    - SL = entry ± (ATR * sl_atr_mult)
-    - TP = entry ± (ATR * sl_atr_mult * rr_ratio)
-    direction: 'LONG' | 'SHORT'
-    Returns: (stop_loss, take_profit, sl_pct_effective)
+    Calcule SL et TP independamment depuis l'ATR.
+    SL = ATR * 1.5 (plus large), TP = ATR * 1.0 (plus proche = plus de wins).
     """
     if price is None or price <= 0:
         return None, None, None
     sl_mult = sl_atr_mult if sl_atr_mult is not None else ATR_SL_MULTIPLIER
-    rr = rr_ratio if rr_ratio is not None else ATR_TP_RR_RATIO
+    tp_mult = ATR_TP_MULTIPLIER
     atr = indicators.get('atr')
     atr_pct = indicators.get('atr_percent')
     if atr is None and atr_pct is not None and atr_pct > 0:
         atr = price * (atr_pct / 100.0)
     if atr is None or atr <= 0:
         atr = price * (ATR_SL_MIN_PCT / 100.0)
+    # SL distance
     sl_distance = atr * sl_mult
-    sl_distance_pct = (sl_distance / price) * 100
-    sl_distance_pct = max(ATR_SL_MIN_PCT, min(ATR_SL_MAX_PCT, sl_distance_pct))
-    sl_distance = price * (sl_distance_pct / 100.0)
-    tp_distance = sl_distance * rr
+    sl_pct = (sl_distance / price) * 100
+    sl_pct = max(ATR_SL_MIN_PCT, min(ATR_SL_MAX_PCT, sl_pct))
+    sl_distance = price * (sl_pct / 100.0)
+    # TP distance (independant, plus proche)
+    tp_distance = atr * tp_mult
+    tp_pct = (tp_distance / price) * 100
+    tp_pct = max(ATR_TP_MIN_PCT, min(ATR_TP_MAX_PCT, tp_pct))
+    tp_distance = price * (tp_pct / 100.0)
+
     if direction == 'LONG':
         stop_loss = price - sl_distance
         take_profit = price + tp_distance
     else:
         stop_loss = price + sl_distance
         take_profit = price - tp_distance
-    sl_pct_effective = (sl_distance / price) * 100
-    return stop_loss, take_profit, sl_pct_effective
+    return stop_loss, take_profit, sl_pct
 
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
-SIGNAL_MIN_CONDITIONS = 4  # 4/7 conditions suffisent (au lieu de toutes)
+SIGNAL_MIN_CONDITIONS = 7  # 7/10 conditions = ULTRA strict pour 60% WR
 
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité LONG en SUIVI DE TENDANCE.
-    Système souple: 4/7 conditions suffisent (au lieu de 7/7).
+    Signal LONG ultra-strict: 10 conditions, 7 requises.
+    Objectif: 60%+ win rate.
     """
     conditions_met = 0
-    total_conditions = 7
-
-    # 1. Momentum haussier
-    if indicators.get('price_momentum') == 'BULLISH':
-        conditions_met += 1
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current is None or ema21 is None or current <= 0 or ema21 <= 0:
         return False
 
+    # HARD STOPS (disqualifient immediatement)
+    rsi = indicators.get('rsi14')
+    if rsi is not None and rsi >= RSI_LONG_MAX:
+        return False  # surachete = trop tard
+    adx = indicators.get('adx')
+    if adx is not None and adx < 20:
+        return False  # pas de tendance = range
+    regime = indicators.get('market_regime')
+    if regime == 'VOLATILE':
+        return False  # trop imprevisible
+
+    # 1. Momentum haussier
+    if indicators.get('price_momentum') == 'BULLISH':
+        conditions_met += 1
+
     # 2. Prix au-dessus de l'EMA21
     if current >= ema21 * (1 + LONG_PRICE_ABOVE_EMA_PCT / 100):
         conditions_met += 1
 
-    # 3. ADX >= seuil (tendance)
-    adx = indicators.get('adx')
+    # 3. ADX >= 25 (tendance forte)
     if adx is not None and adx >= ADX_MIN_FOR_TREND:
         conditions_met += 1
 
-    # 4. RSI dans la zone continuation (45-70)
-    rsi = indicators.get('rsi14')
-    if rsi is not None and RSI_LONG_MIN <= rsi < 70:
+    # 4. RSI zone continuation (50-62)
+    if rsi is not None and RSI_LONG_MIN <= rsi < RSI_LONG_MAX:
         conditions_met += 1
-    elif rsi is not None and rsi >= 70:
-        return False  # hard stop: surachete
 
     # 5. Bougie haussiere
-    is_bullish = indicators.get('open_price') is not None and current > indicators.get('open_price')
-    if is_bullish:
+    open_p = indicators.get('open_price')
+    if open_p is not None and current > open_p:
         conditions_met += 1
 
-    # 6. Volume suffisant
+    # 6. Volume au-dessus de la moyenne
     vol_ratio = indicators.get('volume_ratio')
     if vol_ratio is not None and vol_ratio >= volume_ratio_min:
         conditions_met += 1
 
-    # 7. Stochastic bullish (K > D)
+    # 7. Stochastic bullish (K > D) et pas en zone surachat
     stoch_k = indicators.get('stoch_k')
     stoch_d = indicators.get('stoch_d')
-    if stoch_k is not None and stoch_d is not None and stoch_k > stoch_d:
+    if stoch_k is not None and stoch_d is not None and stoch_k > stoch_d and stoch_k < 80:
+        conditions_met += 1
+
+    # 8. MACD histogramme positif (momentum haussier confirme)
+    macd_hist = indicators.get('macd_hist')
+    if macd_hist is not None and macd_hist > 0:
+        conditions_met += 1
+
+    # 9. Bollinger: prix entre 40% et 70% (pas oversold, pas overbought)
+    bb_pct = indicators.get('bb_percent')
+    if bb_pct is not None and 0.4 <= bb_pct <= 0.7:
+        conditions_met += 1
+
+    # 10. Marche en tendance (regime TRENDING)
+    if regime == 'TRENDING':
         conditions_met += 1
 
     return conditions_met >= SIGNAL_MIN_CONDITIONS
@@ -156,35 +181,37 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
 
     adx = indicators.get('adx')
     if adx is not None:
-        if adx >= 25:
-            score += 5
-        elif adx >= 20:
-            score += 2
+        if adx >= 35:
+            score += 10   # tendance TRES forte = gros bonus
+        elif adx >= 28:
+            score += 7
+        elif adx >= 22:
+            score += 4
 
     bb_percent = indicators.get('bb_percent')
-    if bb_percent is not None and 0.3 <= bb_percent <= 0.6:  # Ni oversold ni suracheté = tendance
+    if bb_percent is not None and 0.3 <= bb_percent <= 0.6:
         score += 3
 
     if spread_pct < 0.05:
-        score += 10
+        score += 12   # spread ultra serre = execution parfaite
+    elif spread_pct < 0.08:
+        score += 8
     elif spread_pct < 0.10:
-        score += 7
-    elif spread_pct < 0.15:
-        score += 4
+        score += 5
 
     if atr_pct is None:
         atr_pct = 2.0
-    if 1.0 <= atr_pct <= 3.0:
-        score += 10
-    elif atr_pct <= 4.0:
-        score += 5
+    if 1.0 <= atr_pct <= 2.5:
+        score += 12   # volatilite ideale pour day trading
+    elif atr_pct <= 3.5:
+        score += 6
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current and ema21 and ema21 > 0 and current > ema21:
         dist_pct = ((current - ema21) / ema21) * 100
-        if dist_pct > 0.5:
-            score += 5
+        if 0.3 < dist_pct < 2.0:
+            score += 7   # proche de l'EMA mais au-dessus = meilleur R:R
 
     # Stochastic K/D crossover bullish: K > D et K_prev <= D_prev
     stoch_k = indicators.get('stoch_k')
@@ -262,77 +289,92 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
     }
 
 
-def position_size_long_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, max_pct_balance=0.25, min_usdt=10):
+def position_size_long_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, leverage=10, max_pct_balance=0.25, min_usdt=10):
     """
-    Taille de position LONG en USDT (pas de levier).
-    Risque = risk_pct du capital. Perte si SL = position * (sl_pct/100).
-    => position = (balance * risk_pct) / (sl_pct/100)
+    Taille de position LONG (marge en USDT) avec levier.
+    Meme formule que SHORT: marge = (balance * risk_pct) / (leverage * sl_pct/100)
     """
     if balance_usdt <= 0:
         return 0.0
     risk_amount = balance_usdt * risk_pct
-    position_by_risk = risk_amount * 100 / sl_pct
-    position_by_cap = balance_usdt * max_pct_balance
-    position = min(position_by_risk, position_by_cap)
-    return max(min_usdt, min(position, balance_usdt * 0.98))
+    margin_by_risk = risk_amount * 100 / (leverage * sl_pct)
+    margin_by_cap = balance_usdt * max_pct_balance
+    margin = min(margin_by_risk, margin_by_cap)
+    return max(min_usdt, min(margin, balance_usdt * 0.98))
 
 
 # ─── SHORT (continuation baissière, pas de short sur rebond) ───────────────────
 
 def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité SHORT en SUIVI DE TENDANCE.
-    Système souple: 4/7 conditions suffisent (au lieu de 7/7).
+    Signal SHORT ultra-strict: 10 conditions, 7 requises.
+    Objectif: 60%+ win rate.
     """
     conditions_met = 0
-
-    # 1. Momentum baissier
-    if indicators.get('price_momentum') == 'BEARISH':
-        conditions_met += 1
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current is None or ema21 is None:
         return False
 
+    # HARD STOPS
+    rsi = indicators.get('rsi14')
+    if rsi is not None and rsi < RSI_SHORT_MIN:
+        return False  # oversold = rebond probable
+    rsi_prev = indicators.get('rsi14_prev')
+    if rsi_prev is not None and rsi is not None and rsi > rsi_prev + 6:
+        return False  # RSI remonte = rebond en cours
+    adx = indicators.get('adx')
+    if adx is not None and adx < 20:
+        return False
+    regime = indicators.get('market_regime')
+    if regime == 'VOLATILE':
+        return False
+
+    # 1. Momentum baissier
+    if indicators.get('price_momentum') == 'BEARISH':
+        conditions_met += 1
+
     # 2. Prix sous EMA21
     if current < ema21:
         conditions_met += 1
 
-    # 3. ADX >= seuil
-    adx = indicators.get('adx')
+    # 3. ADX >= 25 (tendance forte)
     if adx is not None and adx >= ADX_MIN_FOR_TREND:
         conditions_met += 1
 
-    # 4. RSI dans la zone continuation (30-55)
-    rsi = indicators.get('rsi14')
-    rsi_prev = indicators.get('rsi14_prev')
-    if rsi is not None and RSI_SHORT_MIN <= rsi < 55:
+    # 4. RSI zone continuation (35-50)
+    if rsi is not None and RSI_SHORT_MIN <= rsi <= RSI_SHORT_MAX:
         conditions_met += 1
-    elif rsi is not None and rsi < RSI_SHORT_MIN:
-        return False  # hard stop: oversold = rebond probable
-    # RSI remonte trop fort = rebond en cours
-    if rsi_prev is not None and rsi is not None and rsi > rsi_prev + 8:
-        return False
 
     # 5. Bougie baissiere
-    is_bearish = indicators.get('is_bearish_candle', False)
     open_p = indicators.get('open_price')
-    if open_p is not None and current is not None and open_p > 0:
-        if current < open_p:
-            is_bearish = True
-    if is_bearish:
+    if open_p is not None and current is not None and open_p > 0 and current < open_p:
         conditions_met += 1
 
-    # 6. Volume suffisant
+    # 6. Volume au-dessus de la moyenne
     vol_ratio = indicators.get('volume_ratio')
     if vol_ratio is not None and vol_ratio >= volume_ratio_min:
         conditions_met += 1
 
-    # 7. Stochastic bearish (K < D)
+    # 7. Stochastic bearish (K < D) et pas en zone survente
     stoch_k = indicators.get('stoch_k')
     stoch_d = indicators.get('stoch_d')
-    if stoch_k is not None and stoch_d is not None and stoch_k < stoch_d:
+    if stoch_k is not None and stoch_d is not None and stoch_k < stoch_d and stoch_k > 20:
+        conditions_met += 1
+
+    # 8. MACD histogramme negatif
+    macd_hist = indicators.get('macd_hist')
+    if macd_hist is not None and macd_hist < 0:
+        conditions_met += 1
+
+    # 9. Bollinger: prix entre 30% et 60% (tendance baissiere, pas de rebond)
+    bb_pct = indicators.get('bb_percent')
+    if bb_pct is not None and 0.3 <= bb_pct <= 0.6:
+        conditions_met += 1
+
+    # 10. Marche en tendance
+    if regime == 'TRENDING':
         conditions_met += 1
 
     return conditions_met >= SIGNAL_MIN_CONDITIONS
@@ -399,41 +441,39 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     if macd_hist is not None and macd_hist < 0:
         score += 5
 
-    # ADX: tendance forte = meilleure qualité de setup → +2 à +5 pts
     adx = indicators.get('adx')
     if adx is not None:
-        if adx >= 25:
-            score += 5
-        elif adx >= 20:
-            score += 2
+        if adx >= 35:
+            score += 10
+        elif adx >= 28:
+            score += 7
+        elif adx >= 22:
+            score += 4
 
-    # Bollinger: prix en zone haute (potentiel short) → +3 pts si au-dessus du milieu
     bb_percent = indicators.get('bb_percent')
     if bb_percent is not None and bb_percent >= 0.6:
         score += 3
 
-    # Spread faible = bougie propre → +0 à +10 pts (spread < 0.05% = 10, < 0.1% = 7, < 0.15% = 4)
     if spread_pct < 0.05:
-        score += 10
+        score += 12
+    elif spread_pct < 0.08:
+        score += 8
     elif spread_pct < 0.10:
-        score += 7
-    elif spread_pct < 0.15:
-        score += 4
+        score += 5
 
-    # ATR modéré (pas trop de bruit) → +0 à +10 pts (ATR 1-3% = 10, 3-4% = 5)
     if atr_pct is None:
         atr_pct = 2.0
-    if 1.0 <= atr_pct <= 3.0:
-        score += 10
-    elif atr_pct <= 4.0:
-        score += 5
+    if 1.0 <= atr_pct <= 2.5:
+        score += 12
+    elif atr_pct <= 3.5:
+        score += 6
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current and ema21 and ema21 > 0 and current < ema21:
         dist_pct = ((ema21 - current) / ema21) * 100
-        if dist_pct > 1.0:
-            score += 5
+        if 0.3 < dist_pct < 2.0:
+            score += 7
 
     # Stochastic K/D crossover bearish: K < D et K_prev >= D_prev
     stoch_k = indicators.get('stoch_k')

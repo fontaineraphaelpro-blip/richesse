@@ -21,8 +21,8 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class PaperTrader:
     def __init__(self, initial_balance=100):
         self.protector = ReversalProtector()  # Protection contre reversals
-        self.short_leverage = 10.0  # Levier 10x sur les positions SHORT
-        self.long_leverage = 1.0   # Levier désactivé (positions long)
+        self.short_leverage = 10.0  # Levier 10x SHORT
+        self.long_leverage = 10.0  # Levier 10x LONG
         # Frais simulés 0.05% par côté (open/close)
         self.fee_pct = 0.0005
         # Slippage simulé en paper (0.05% par défaut, ex: SLIPPAGE_PCT=0.1 pour 0.1%)
@@ -33,14 +33,14 @@ class PaperTrader:
             self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
-        self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
+        self.breakeven_trigger_pct = 0.5   # Break-even rapide a +0.5%
         self.max_drawdown_pct = 10.0       # Arrêter trading si perte > 10%
         self.initial_capital = initial_balance  # Capital de référence
         
         # Configuration Trailing Stop Loss
         self.trailing_stop_enabled = True
-        self.trailing_stop_activation_pct = 1.5  # Activer trailing à +1.5% de gain
-        self.trailing_stop_distance_pct = 1.0     # Distance du trailing (1% sous le plus haut)
+        self.trailing_stop_activation_pct = 1.5  # Trailing a +1.5%
+        self.trailing_stop_distance_pct = 0.7     # Distance 0.7% sous le plus haut
         
         # Configuration Take Profit Partiel
         self.partial_tp_enabled = True
@@ -191,13 +191,16 @@ class PaperTrader:
                 # Break-even: SL doit être au-dessus de entry pour SHORT
                 sl_is_below_entry = current_sl > entry_price
             
-            # Si gain >= trigger ET SL n'est pas encore à break-even
             if gain_pct >= self.breakeven_trigger_pct and sl_is_below_entry:
-                # Déplacer SL au prix d'entrée (break-even)
-                self.wallet['positions'][symbol]['stop_loss'] = entry_price
+                # SL -> entry + 0.25% = vrai profit garanti
+                if direction == 'LONG':
+                    be_price = entry_price * 1.0025
+                else:
+                    be_price = entry_price * 0.9975
+                self.wallet['positions'][symbol]['stop_loss'] = be_price
                 self.wallet['positions'][symbol]['breakeven_active'] = True
                 modified_count += 1
-                print(f"[LOCK] BREAK-EVEN {symbol}: SL déplacé à ${entry_price:.4f} (gain: +{gain_pct:.1f}%)")
+                print("[LOCK] BREAK-EVEN+ {}: SL -> {:.4f} (gain: +{:.1f}%)".format(symbol, be_price, gain_pct))
         
         if modified_count > 0:
             self.save_wallet()
@@ -650,11 +653,17 @@ class PaperTrader:
             print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
-        # Slippage simulé (entrée LONG = prix d'achat plus haut)
         entry_price = current_price * (1 + self.slippage_pct)
-        quantity = amount_usdt / entry_price
-
-        self.wallet['USDT'] -= amount_usdt
+        lev = self.long_leverage
+        quantity = (amount_usdt * lev) / entry_price
+        notional = amount_usdt * lev
+        fee_open = notional * self.fee_pct
+        total_lock = amount_usdt + fee_open
+        if self.wallet['USDT'] < total_lock:
+            print("Fonds insuffisants LONG (marge + frais): {:.2f} USDT".format(total_lock))
+            return False
+        self.wallet['USDT'] -= total_lock
+        self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_open
         self.wallet['positions'][symbol] = {
             'direction':   'LONG',
             'amount_usdt': amount_usdt,
@@ -665,6 +674,7 @@ class PaperTrader:
             'take_profit': take_profit_price,
             'take_profit_2': take_profit_2,
             'entry_trend': entry_trend,
+            'leverage':    lev,
             'atr_pct': atr_pct,
         }
         self.save_wallet()
@@ -683,11 +693,8 @@ class PaperTrader:
             'pnl_percent': 0,
         })
 
-        sl_dist_pct = abs((entry_price - stop_loss_price) / entry_price * 100)
-        tp_dist_pct = abs((take_profit_price - entry_price) / entry_price * 100)
-        position_size = amount_usdt  # Levier désactivé
-        print(f"[BUY] ACHAT  {symbol:<12} | ${entry_price:.6f} | "
-              f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
+        print("[BUY] ACHAT  {:<12} | ${:.6f} | SL:${:.6f} | TP:${:.6f} | levier {}x | marge ${:.2f} | notional ${:.2f}".format(
+            symbol, entry_price, stop_loss_price, take_profit_price, int(lev), amount_usdt, notional))
         try:
             from notifier import on_trade_opened
             on_trade_opened('LONG', symbol, entry_price, amount_usdt, stop_loss_price, take_profit_price)
@@ -783,12 +790,14 @@ class PaperTrader:
         else:
             exit_price = current_price * (1 + self.slippage_pct)  # On rachète plus haut (SHORT)
 
-        # Calcul PnL selon direction
+        # Calcul PnL selon direction (les deux utilisent le levier)
         if direction == 'LONG':
-            exit_value  = quantity * exit_price
-            pnl_value   = exit_value - entry_amount
+            pnl_value   = (exit_price - entry_price) * quantity
             pnl_percent = ((exit_price - entry_price) / entry_price) * 100
-            returned    = exit_value
+            exit_notional = quantity * exit_price
+            fee_close = exit_notional * self.fee_pct
+            self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_close
+            returned = entry_amount + pnl_value - fee_close
         else:  # SHORT
             pnl_value   = (entry_price - exit_price) * quantity
             pnl_percent = ((entry_price - exit_price) / entry_price) * 100
