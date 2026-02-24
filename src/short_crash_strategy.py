@@ -16,6 +16,45 @@ RSI_SHORT_MIN = 30  # Pas de short si RSI < 30 (rebond après panique)
 # Prix doit être clairement dans la tendance (pas "dip" à acheter)
 LONG_PRICE_ABOVE_EMA_PCT = 0.1   # Prix >= EMA21 * (1 + 0.1%) = dans la tendance
 
+# SL/TP dynamiques basés sur l'ATR (volatilité du graphique)
+ATR_SL_MULTIPLIER = 1.5   # Distance SL = ATR * 1.5
+ATR_TP_RR_RATIO = 2.0     # TP = SL_distance * 2 (R:R 2:1)
+ATR_SL_MIN_PCT = 0.5      # SL min 0.5% si ATR très faible
+ATR_SL_MAX_PCT = 5.0      # SL max 5% pour éviter des stops trop larges
+
+
+def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):
+    """
+    Calcule SL et TP à partir de la volatilité (ATR) du graphique.
+    - SL = entry ± (ATR * sl_atr_mult)
+    - TP = entry ± (ATR * sl_atr_mult * rr_ratio)
+    direction: 'LONG' | 'SHORT'
+    Returns: (stop_loss, take_profit, sl_pct_effective)
+    """
+    if price is None or price <= 0:
+        return None, None, None
+    sl_mult = sl_atr_mult if sl_atr_mult is not None else ATR_SL_MULTIPLIER
+    rr = rr_ratio if rr_ratio is not None else ATR_TP_RR_RATIO
+    atr = indicators.get('atr')
+    atr_pct = indicators.get('atr_percent')
+    if atr is None and atr_pct is not None and atr_pct > 0:
+        atr = price * (atr_pct / 100.0)
+    if atr is None or atr <= 0:
+        atr = price * (ATR_SL_MIN_PCT / 100.0)
+    sl_distance = atr * sl_mult
+    sl_distance_pct = (sl_distance / price) * 100
+    sl_distance_pct = max(ATR_SL_MIN_PCT, min(ATR_SL_MAX_PCT, sl_distance_pct))
+    sl_distance = price * (sl_distance_pct / 100.0)
+    tp_distance = sl_distance * rr
+    if direction == 'LONG':
+        stop_loss = price - sl_distance
+        take_profit = price + tp_distance
+    else:
+        stop_loss = price + sl_distance
+        take_profit = price - tp_distance
+    sl_pct_effective = (sl_distance / price) * 100
+    return stop_loss, take_profit, sl_pct_effective
+
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 

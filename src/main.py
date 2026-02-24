@@ -364,6 +364,7 @@ def run_scanner():
     from short_crash_strategy import (
         signal_short_big_drop, position_size_usdt, score_short_opportunity,
         signal_long_buy_dip, score_long_opportunity, position_size_long_usdt,
+        compute_sl_tp_from_chart,
     )
     from indicators import calculate_indicators
     from data_fetcher import fetch_multiple_pairs, get_top_pairs, fetch_multi_timeframe
@@ -477,20 +478,25 @@ def run_scanner():
         ok_4h_short = (momentum_4h is None or momentum_4h in ('BEARISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
         if ok_15m_short and ok_1h_short and ok_4h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
             n_short_signal += 1
-            stop_loss = price * (1 + STOP_LOSS_PCT / 100)
-            take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
+            if stop_loss is None:
+                stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+                take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+                sl_pct_eff = STOP_LOSS_PCT
             details = score_short_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m or 'BEARISH', momentum_1h=momentum_1h or 'BEARISH',
                 stop_loss_pct=STOP_LOSS_PCT, take_profit_pct=TAKE_PROFIT_PCT,
             )
+            rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else details['rr_ratio']
             short_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
+                'sl_pct_effective': sl_pct_eff,
                 'entry_signal': 'SHORT', 'score': details['score'] + session_bonus,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
-                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': details['rr_ratio'],
+                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bearish': details.get('macd_bearish'),
             })
 
@@ -500,20 +506,25 @@ def run_scanner():
         ok_4h_long = (momentum_4h is None or momentum_4h in ('BULLISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
         if ok_15m_long and ok_1h_long and ok_4h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN):
             n_long_signal += 1
-            stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
-            take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
+            if stop_loss is None:
+                stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
+                take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                sl_pct_eff = LONG_STOP_LOSS_PCT
             details = score_long_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m or 'BULLISH', momentum_1h=momentum_1h or 'BULLISH',
                 stop_loss_pct=LONG_STOP_LOSS_PCT, take_profit_pct=LONG_TAKE_PROFIT_PCT,
             )
+            rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else details['rr_ratio']
             long_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
+                'sl_pct_effective': sl_pct_eff,
                 'entry_signal': 'LONG', 'score': details['score'] + session_bonus,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
-                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': details['rr_ratio'],
+                'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': round(rr, 1),
                 'adx': details.get('adx'), 'macd_bullish': details.get('macd_bullish'),
             })
 
@@ -576,8 +587,9 @@ def run_scanner():
                     risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
 
                 if is_long:
+                    sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
                     pos_size = position_size_long_usdt(
-                        balance, risk_pct=risk_pct, sl_pct=LONG_STOP_LOSS_PCT,
+                        balance, risk_pct=risk_pct, sl_pct=sl_pct,
                         max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
                     )
                     pos_size = min(pos_size, max(0, balance * 0.98))
@@ -591,8 +603,9 @@ def run_scanner():
                         return shared_data['opportunities']
                 else:
                     lev = trader.short_leverage
+                    sl_pct = best.get('sl_pct_effective') or STOP_LOSS_PCT
                     pos_size = position_size_usdt(
-                        balance, risk_pct=risk_pct, sl_pct=STOP_LOSS_PCT,
+                        balance, risk_pct=risk_pct, sl_pct=sl_pct,
                         leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
                     )
                     pos_size = min(pos_size, max(0, balance * 0.98))
@@ -748,6 +761,8 @@ def dashboard():
         bot_status_reason=bot_status_reason,
         stop_loss_pct=STOP_LOSS_PCT,
         take_profit_pct=TAKE_PROFIT_PCT,
+        long_stop_loss_pct=LONG_STOP_LOSS_PCT,
+        long_take_profit_pct=LONG_TAKE_PROFIT_PCT,
         rr_ratio=rr_ratio,
         scan_interval=SCAN_INTERVAL,
         scan_interval_display=scan_interval_display,

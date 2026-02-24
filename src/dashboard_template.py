@@ -292,7 +292,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <!-- ONGLETS -->
 <div class="tabs">
-    <button class="tab active" onclick="showTab('trading')">Trading SHORT</button>
+    <button class="tab active" onclick="showTab('trading')">Bot trading</button>
+    <button class="tab" onclick="showTab('manual')">Trader moi-même</button>
     <button class="tab" onclick="showTab('arbitrage')">Arbitrage</button>
 </div>
 
@@ -383,6 +384,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 </div>
 
 <div class="card">
+    <div class="card-header">
+        <h2>Opportunités (LONG + SHORT)</h2>
         <span style="font-size:0.85rem;color:var(--text3)">{{ opportunities|length }} signaux</span>
     </div>
     {% if opportunities %}
@@ -515,6 +518,175 @@ tr:hover td { background: rgba(59,130,246,0.03); }
     {% else %}
     <div class="empty">Aucun trade fermé.</div>
     {% endif %}
+</div>
+
+</div>
+
+<!-- ONGLET TRADER MOI-MÊME -->
+<div id="tab-manual" class="tab-content" style="display:none">
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+        <h2>Vue complète pour trader à la main</h2>
+        <span class="badge b-blue">Infos en un coup d'œil</span>
+    </div>
+    <div style="padding:16px 20px;color:var(--text2);font-size:0.9rem;">
+        Sentiment, opportunités du scanner, positions, historique et paramètres — tout pour prendre tes décisions.
+    </div>
+</div>
+
+<div class="stats" style="margin-bottom:20px;">
+    <div class="stat s-blue">
+        <div class="stat-label">Capital / Équité</div>
+        <div class="stat-value">${{ "%.2f"|format(balance|default(0)) }} / ${{ "%.2f"|format(total_capital|default(0)) }}</div>
+        <div class="stat-sub">Dispo: ${{ "%.2f"|format(balance|default(0)) }} — {{ positions|length }} position(s)</div>
+    </div>
+    <div class="stat s-{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">
+        <div class="stat-label">PnL latent</div>
+        <div class="stat-value {% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(total_unrealized_pnl|default(0)) }}$</div>
+    </div>
+    <div class="stat s-{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">
+        <div class="stat-label">PnL réalisé</div>
+        <div class="stat-value {% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}">{{ "%+.2f"|format(perf.total_pnl|default(0)) }}$</div>
+        <div class="stat-sub">Win rate {{ perf.win_rate|default(0) }}% — {{ perf.total_trades|default(0) }} trades</div>
+    </div>
+    <div class="stat s-purple">
+        <div class="stat-label">Sentiment</div>
+        <div class="stat-value" style="font-size:1.1rem;">{{ (sentiment_display or {}).get('fear_greed_value') or (sentiment_display or {}).get('value') or '—' }}</div>
+        <div class="stat-sub">{{ (sentiment_display or {}).get('fear_greed_label') or (sentiment_display or {}).get('label') or 'Fear & Greed' }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Paramètres de référence (bot)</h2>
+    </div>
+    <div style="padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;font-size:0.85rem;">
+        <div class="detail-item"><span class="detail-label">SHORT SL / TP</span><span class="detail-value"><span class="red">+{{ stop_loss_pct|default(1) }}%</span> / <span class="green">-{{ take_profit_pct|default(2) }}%</span></span></div>
+        <div class="detail-item"><span class="detail-label">LONG SL / TP</span><span class="detail-value"><span class="red">-{{ long_stop_loss_pct|default(1) }}%</span> / <span class="green">+{{ long_take_profit_pct|default(2) }}%</span></span></div>
+        <div class="detail-item"><span class="detail-label">Score min</span><span class="detail-value">{{ min_score_to_open|default(68) }} pts</span></div>
+        <div class="detail-item"><span class="detail-label">Scan</span><span class="detail-value">{{ scan_interval_display|default('10 min') }}</span></div>
+        <div class="detail-item"><span class="detail-label">R:R</span><span class="detail-value">{{ rr_ratio|default(2) }}x</span></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Opportunités (LONG / SHORT) — {{ opportunities|length }} signaux</h2>
+        <a href="/api/export/trades" class="btn btn-primary" style="text-decoration:none;">Export CSV</a>
+    </div>
+    {% if opportunities %}
+    <div class="table-scroll">
+        <table>
+            <thead><tr>
+                <th>#</th><th>Sens</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
+                <th>Prix</th><th>SL</th><th>TP</th><th>R:R</th><th>Spread%</th><th>ATR%</th>
+            </tr></thead>
+            <tbody>
+            {% for opp in opportunities %}
+            <tr>
+                <td style="font-weight:700;color:var(--text3)">{{ loop.index }}</td>
+                <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ opp.entry_signal|default('SHORT') }}</span></td>
+                <td style="font-weight:700;color:var(--blue)">{{ opp.symbol|default(opp.pair) }}</td>
+                <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text2){% endif %}">{{ opp.score|default(0) }} pts</td>
+                <td>{{ opp.rsi|default('-') }}</td>
+                <td>{{ opp.volume_ratio|default('-') }}x</td>
+                <td><span class="badge {% if opp.momentum_15m == 'BEARISH' %}b-red{% elif opp.momentum_15m == 'BULLISH' %}b-green{% else %}b-yellow{% endif %}">{{ opp.momentum_15m|default('-') }}</span></td>
+                <td><span class="badge {% if opp.momentum_1h == 'BEARISH' %}b-red{% elif opp.momentum_1h == 'BULLISH' %}b-green{% else %}b-yellow{% endif %}">{{ opp.momentum_1h|default('-') }}</span></td>
+                <td>${{ "%.4f"|format(opp.price|default(0)) }}</td>
+                <td style="font-size:0.85em;color:var(--red)">${{ "%.4f"|format(opp.stop_loss|default(0)) }}</td>
+                <td style="font-size:0.85em;color:var(--green)">${{ "%.4f"|format(opp.take_profit|default(0)) }}</td>
+                <td style="color:var(--blue)">{{ opp.rr_ratio|default('-') }}x</td>
+                <td style="font-size:0.85em">{{ opp.spread_pct|default('-') }}%</td>
+                <td style="font-size:0.85em">{{ opp.atr_pct|default('-') }}%</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">Aucune opportunité pour l'instant. Prochain scan {{ scan_interval_display|default('10 min') }}.</div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Positions ouvertes</h2>
+    </div>
+    {% if positions %}
+    <div class="table-scroll">
+        <table>
+            <thead><tr>
+                <th>Paire</th><th>Type</th><th>Entree</th><th>Actuel</th><th>Marge</th><th>PnL</th><th>SL / TP</th><th>Action</th>
+            </tr></thead>
+            <tbody>
+            {% for p in positions %}
+            <tr>
+                <td style="font-weight:700;color:var(--blue)">{{ p.symbol }}</td>
+                <td><span class="badge {% if p.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ p.direction }}</span></td>
+                <td>${{ "%.4f"|format(p.entry) }}</td>
+                <td>${{ "%.4f"|format(p.current) }}</td>
+                <td>${{ "%.0f"|format(p.amount) }}</td>
+                <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}" style="font-weight:700">{{ "%+.2f"|format(p.pnl_percent) }}%</td>
+                <td style="font-size:0.85em"><span class="red">{{ "%.4f"|format(p.sl) }}</span> / <span class="green">{{ "%.4f"|format(p.tp) }}</span></td>
+                <td><button class="btn btn-close" onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">Aucune position ouverte.</div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Derniers trades fermés</h2>
+        <span style="font-size:0.85rem;color:var(--text3)">{{ history|length }} trades</span>
+    </div>
+    {% if history %}
+    <div class="table-scroll">
+        <table>
+            <thead><tr>
+                <th>Date</th><th>Paire</th><th>Type</th><th>Entree</th><th>Sortie</th><th>PnL</th><th>Raison</th>
+            </tr></thead>
+            <tbody>
+            {% for h in history[:15] %}
+            <tr>
+                <td style="font-size:0.85em;color:var(--text3)">{{ h.time }}</td>
+                <td style="font-weight:600;color:var(--blue)">{{ h.symbol }}</td>
+                <td><span class="badge {% if h.direction == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ h.direction }}</span></td>
+                <td>${{ "%.4f"|format(h.entry_price) }}</td>
+                <td>${{ "%.4f"|format(h.exit_price) }}</td>
+                <td class="{% if h.pnl >= 0 %}green{% else %}red{% endif %}" style="font-weight:600">{{ "%+.2f"|format(h.pnl) }}$</td>
+                <td style="font-size:0.85em;color:var(--text3)">{{ h.exit_reason }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">Aucun trade fermé.</div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Dernier scan</h2>
+    </div>
+    <div class="log" style="max-height:120px;">
+        {% if bot_log %}
+        {% for entry in bot_log[-5:]|reverse %}
+        <div class="log-line">
+            <span class="log-time">{{ entry.time }}</span>
+            <span class="log-level l-{{ entry.level }}">{{ entry.level }}</span>
+            <span class="log-msg">{{ entry.msg }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">En attente du premier scan.</div>
+        {% endif %}
+    </div>
 </div>
 
 </div>
