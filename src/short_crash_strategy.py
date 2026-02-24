@@ -206,6 +206,24 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
         elif tenkan > kijun:
             score += 4
 
+    # RSI divergence bullish: prix lower low, RSI higher low -> retournement
+    if indicators.get('rsi_bullish_divergence'):
+        score += 7
+
+    # Volume Profile: prix pres du POC = support fort
+    poc = indicators.get('volume_poc')
+    va_low = indicators.get('value_area_low')
+    if poc and current and va_low:
+        if current >= va_low and current <= poc * 1.01:
+            score += 5
+
+    # Regime trending = meilleur pour trend-following
+    regime = indicators.get('market_regime')
+    if regime == 'TRENDING':
+        score += 5
+    elif regime == 'RANGING':
+        score -= 3
+
     score = min(100, round(score, 1))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0
     return {
@@ -220,6 +238,7 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
         'rr_ratio': round(rr_ratio, 1),
         'adx': round(adx, 1) if adx is not None else None,
         'macd_bullish': macd_hist is not None and macd_hist > 0,
+        'regime': regime or 'UNKNOWN',
     }
 
 
@@ -416,6 +435,24 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
         elif tenkan < kijun:
             score += 4
 
+    # RSI divergence bearish: prix higher high, RSI lower high -> retournement
+    if indicators.get('rsi_bearish_divergence'):
+        score += 7
+
+    # Volume Profile: prix pres du POC par le haut = resistance
+    poc = indicators.get('volume_poc')
+    va_high = indicators.get('value_area_high')
+    if poc and current and va_high:
+        if current <= va_high and current >= poc * 0.99:
+            score += 5
+
+    # Regime trending = meilleur pour trend-following
+    regime = indicators.get('market_regime')
+    if regime == 'TRENDING':
+        score += 5
+    elif regime == 'RANGING':
+        score -= 3
+
     score = min(100, round(score, 1))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0
     return {
@@ -430,4 +467,5 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
         'rr_ratio': round(rr_ratio, 1),
         'adx': round(adx, 1) if adx is not None else None,
         'macd_bearish': macd_hist is not None and macd_hist < 0,
+        'regime': regime or 'UNKNOWN',
     }

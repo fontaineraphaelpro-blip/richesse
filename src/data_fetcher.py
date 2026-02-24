@@ -251,37 +251,42 @@ def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Tuple[
     return df, real_price
 
 
+def _fetch_one(args):
+    """Helper pour le fetch parallele."""
+    symbol, interval, limit = args
+    df, real_price = fetch_klines(symbol, interval, limit)
+    return symbol, df, real_price
+
 def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit: int = 200) -> Tuple[Dict[str, pd.DataFrame], Dict[str, float]]:
     """
-    Récupère les données pour une liste de paires.
-    Utilise la liste TOP_USDT_PAIRS par défaut si 'symbols' est None.
+    Recupere les donnees pour une liste de paires en PARALLELE (5x plus rapide).
     """
-    # Si aucune liste n'est fournie, on utilise la liste interne
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if symbols is None or len(symbols) == 0:
         symbols = TOP_USDT_PAIRS
-        
+
     data = {}
     real_prices = {}
     total = len(symbols)
     success_count = 0
-    
-    print(f"📊 Récupération des données réelles (Binance) pour {total} paires...")
-    
-    for i, symbol in enumerate(symbols, 1):
-        print(f"⏳ ({i}/{total}) Fetching {symbol}...", end='\r')
-        
-        df, real_price = fetch_klines(symbol, interval, limit)
-        
-        if df is not None and real_price is not None:
-            data[symbol] = df
-            real_prices[symbol] = real_price
-            success_count += 1
-        
-        # Petit délai pour éviter le ban IP (Rate Limit Binance)
-        time.sleep(0.15)
-    
-    print(f"\n✅ {success_count}/{total} paires récupérées avec succès.")
-    
+
+    print("Fetch parallele {} paires...".format(total))
+
+    args_list = [(s, interval, limit) for s in symbols]
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_fetch_one, args): args[0] for args in args_list}
+        for future in as_completed(futures):
+            try:
+                symbol, df, real_price = future.result()
+                if df is not None and real_price is not None:
+                    data[symbol] = df
+                    real_prices[symbol] = real_price
+                    success_count += 1
+            except Exception:
+                pass
+
+    print("{}/{} paires OK.".format(success_count, total))
     return data, real_prices
 
 def get_top_pairs() -> List[str]:

@@ -156,6 +156,118 @@ def calculate_ichimoku(df: pd.DataFrame) -> Dict:
     return {'tenkan': tenkan_sen, 'kijun': kijun_sen}
 
 
+def detect_rsi_divergence(df: pd.DataFrame, rsi: pd.Series, lookback: int = 14) -> Dict:
+    """
+    Detecte les divergences RSI (prix vs RSI).
+    Bullish: prix fait un nouveau bas mais RSI non (signal de retournement haussier).
+    Bearish: prix fait un nouveau haut mais RSI non (signal de retournement baissier).
+    """
+    if df is None or len(df) < lookback + 5 or len(rsi) < lookback + 5:
+        return {'bullish_divergence': False, 'bearish_divergence': False}
+    
+    close = df['close']
+    # Comparer les 2 derniers creux/sommets sur lookback bougies
+    recent_low = close.iloc[-lookback:].min()
+    prev_low = close.iloc[-2*lookback:-lookback].min()
+    recent_high = close.iloc[-lookback:].max()
+    prev_high = close.iloc[-2*lookback:-lookback].max()
+    
+    recent_rsi_at_low = rsi.iloc[-lookback:].min()
+    prev_rsi_at_low = rsi.iloc[-2*lookback:-lookback].min()
+    recent_rsi_at_high = rsi.iloc[-lookback:].max()
+    prev_rsi_at_high = rsi.iloc[-2*lookback:-lookback].max()
+    
+    # Bullish: prix lower low, RSI higher low
+    bullish_div = (recent_low < prev_low) and (recent_rsi_at_low > prev_rsi_at_low + 2)
+    # Bearish: prix higher high, RSI lower high
+    bearish_div = (recent_high > prev_high) and (recent_rsi_at_high < prev_rsi_at_high - 2)
+    
+    return {
+        'bullish_divergence': bool(bullish_div),
+        'bearish_divergence': bool(bearish_div),
+    }
+
+
+def calculate_volume_profile(df: pd.DataFrame, bins: int = 20, lookback: int = 100) -> Dict:
+    """
+    Calcule le Volume Profile: identifie les zones de prix avec le plus de volume (support/resistance).
+    POC = Point of Control (prix avec le plus de volume = support/resistance majeur).
+    """
+    if df is None or len(df) < lookback:
+        return {'poc': None, 'value_area_high': None, 'value_area_low': None}
+    
+    data = df.iloc[-lookback:]
+    price_min = data['low'].min()
+    price_max = data['high'].max()
+    
+    if price_max <= price_min:
+        return {'poc': None, 'value_area_high': None, 'value_area_low': None}
+    
+    bin_edges = np.linspace(price_min, price_max, bins + 1)
+    volume_at_price = np.zeros(bins)
+    
+    for _, row in data.iterrows():
+        for j in range(bins):
+            if row['low'] <= bin_edges[j+1] and row['high'] >= bin_edges[j]:
+                volume_at_price[j] += row['volume'] / max(1, int((row['high'] - row['low']) / ((price_max - price_min) / bins)))
+    
+    poc_idx = np.argmax(volume_at_price)
+    poc_price = (bin_edges[poc_idx] + bin_edges[poc_idx + 1]) / 2
+    
+    # Value Area (70% du volume)
+    total_vol = volume_at_price.sum()
+    if total_vol == 0:
+        return {'poc': poc_price, 'value_area_high': price_max, 'value_area_low': price_min}
+    
+    sorted_indices = np.argsort(volume_at_price)[::-1]
+    cumulative = 0
+    va_indices = []
+    for idx in sorted_indices:
+        cumulative += volume_at_price[idx]
+        va_indices.append(idx)
+        if cumulative >= total_vol * 0.7:
+            break
+    
+    va_low = bin_edges[min(va_indices)]
+    va_high = bin_edges[max(va_indices) + 1]
+    
+    return {
+        'poc': poc_price,
+        'value_area_high': va_high,
+        'value_area_low': va_low,
+    }
+
+
+def detect_market_regime(df: pd.DataFrame, adx: pd.Series, bb_width: pd.Series) -> str:
+    """
+    Detecte le regime de marche: TRENDING, RANGING, ou VOLATILE.
+    - TRENDING: ADX > 25 (tendance forte)
+    - RANGING: ADX < 20 et BB width faible (marche compresse)
+    - VOLATILE: BB width eleve (forte volatilite sans direction)
+    """
+    if df is None or adx is None or bb_width is None:
+        return 'UNKNOWN'
+    if len(adx) < 5 or len(bb_width) < 5:
+        return 'UNKNOWN'
+    
+    current_adx = adx.iloc[-1]
+    avg_bb_width = bb_width.iloc[-10:].mean() if len(bb_width) >= 10 else bb_width.iloc[-1]
+    
+    if pd.isna(current_adx) or pd.isna(avg_bb_width):
+        return 'UNKNOWN'
+    
+    if current_adx >= 25:
+        return 'TRENDING'
+    elif current_adx < 20 and avg_bb_width < 0.03:
+        return 'RANGING'
+    elif avg_bb_width > 0.06:
+        return 'VOLATILE'
+    elif current_adx >= 20:
+        return 'TRENDING'
+    else:
+        return 'RANGING'
+
+
 def calculate_indicators(df: pd.DataFrame) -> Dict:
     """
     Fonction MAÎTRESSE : Calcule TOUS les indicateurs et retourne un dictionnaire complet.
@@ -319,8 +431,41 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         # --- MOMENTUM CONFIRMATION (TREND FOLLOWING) ---
         'price_momentum': price_momentum,        # 'BULLISH', 'BEARISH', 'NEUTRAL'
         'momentum_strength': momentum_strength,  # 0-100
+
+        # --- RSI DIVERGENCE ---
+        'rsi_bullish_divergence': False,
+        'rsi_bearish_divergence': False,
+        
+        # --- VOLUME PROFILE ---
+        'volume_poc': None,
+        'value_area_high': None,
+        'value_area_low': None,
+        
+        # --- MARKET REGIME ---
+        'market_regime': 'UNKNOWN',
     }
     
+    # Calcul des nouvelles métriques
+    try:
+        rsi_div = detect_rsi_divergence(df, rsi14)
+        indicators['rsi_bullish_divergence'] = rsi_div['bullish_divergence']
+        indicators['rsi_bearish_divergence'] = rsi_div['bearish_divergence']
+    except Exception:
+        pass
+    
+    try:
+        vp = calculate_volume_profile(df)
+        indicators['volume_poc'] = vp['poc']
+        indicators['value_area_high'] = vp['value_area_high']
+        indicators['value_area_low'] = vp['value_area_low']
+    except Exception:
+        pass
+    
+    try:
+        indicators['market_regime'] = detect_market_regime(df, adx, bb['width'])
+    except Exception:
+        pass
+
     # Nettoyage des valeurs NaN (au cas où)
     for k, v in indicators.items():
         if isinstance(v, (float, np.float64, np.float32)) and np.isnan(v):

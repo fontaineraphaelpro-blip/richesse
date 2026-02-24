@@ -356,81 +356,122 @@ class PaperTrader:
 
     def check_and_apply_partial_tp(self, real_prices: dict):
         """
-        Vérifie si des positions ont atteint TP1 et prend des profits partiels.
-        Prend partial_tp_ratio (50%) à TP1, laisse le reste courir vers TP2.
+        TP a 3 niveaux: 25% a TP1, 50% a TP2, 25% runners (trailing serre).
         """
         if not self.partial_tp_enabled:
             return 0
-        
+
         partial_count = 0
-        
+
         for symbol, pos in list(self.wallet['positions'].items()):
             current_price = real_prices.get(symbol)
             if not current_price:
                 continue
-            
-            # Vérifier si déjà partiellement fermé
-            if pos.get('partial_tp_taken', False):
-                continue
-            
+
             direction = pos.get('direction', 'LONG')
             take_profit = pos.get('take_profit', 0)
-            take_profit_2 = pos.get('take_profit_2')  # TP2 optionnel
-            
-            # Vérifier si TP1 est atteint
+            take_profit_2 = pos.get('take_profit_2')
+            entry_price = pos['entry_price']
+            tp_level = pos.get('tp_level', 0)
+
             tp1_reached = False
+            tp2_reached = False
             if direction == 'LONG':
                 tp1_reached = current_price >= take_profit
-            else:  # SHORT
+                tp2_reached = take_profit_2 is not None and current_price >= take_profit_2
+            else:
                 tp1_reached = current_price <= take_profit
-            
-            if tp1_reached:
-                # Prendre 50% des profits
+                tp2_reached = take_profit_2 is not None and current_price <= take_profit_2
+
+            if tp2_reached and tp_level < 2:
+                # TP2: prendre 50% supplementaire (total 75% sorti)
                 quantity = pos['quantity']
-                partial_qty = quantity * self.partial_tp_ratio
+                sell_pct = 0.50 / (1.0 - 0.25 * min(tp_level, 1)) if tp_level >= 1 else 0.75
+                sell_pct = min(sell_pct, 0.90)
+                partial_qty = quantity * sell_pct
                 remaining_qty = quantity - partial_qty
-                
-                entry_price = pos['entry_price']
-                
-                # Calculer PnL partiel
+
                 if direction == 'LONG':
                     partial_pnl = (current_price - entry_price) * partial_qty
                 else:
                     partial_pnl = (entry_price - current_price) * partial_qty
-                
-                partial_value = pos['amount_usdt'] * self.partial_tp_ratio + partial_pnl
-                
-                # Mettre à jour le portefeuille
+
+                partial_value = pos['amount_usdt'] * (partial_qty / quantity) + partial_pnl
                 self.wallet['USDT'] += partial_value
                 self.wallet['positions'][symbol]['quantity'] = remaining_qty
-                self.wallet['positions'][symbol]['amount_usdt'] = pos['amount_usdt'] * (1 - self.partial_tp_ratio)
-                self.wallet['positions'][symbol]['partial_tp_taken'] = True
-                
-                # Si TP2 existe, l'utiliser comme nouveau TP
+                self.wallet['positions'][symbol]['amount_usdt'] = pos['amount_usdt'] * (remaining_qty / quantity)
+                self.wallet['positions'][symbol]['tp_level'] = 2
+                self.wallet['positions'][symbol]['stop_loss'] = entry_price + (take_profit - entry_price) * 0.5 if direction == 'LONG' else entry_price - (entry_price - take_profit) * 0.5
+                partial_count += 1
+                print("TP2 {} {:.0f}% vendu @ {:.4f} (+{:.2f}$), 25% runners".format(
+                    symbol, sell_pct * 100, current_price, partial_pnl))
+
+            elif tp1_reached and tp_level < 1:
+                # TP1: prendre 25%
+                quantity = pos['quantity']
+                partial_qty = quantity * 0.25
+                remaining_qty = quantity - partial_qty
+
+                if direction == 'LONG':
+                    partial_pnl = (current_price - entry_price) * partial_qty
+                else:
+                    partial_pnl = (entry_price - current_price) * partial_qty
+
+                partial_value = pos['amount_usdt'] * 0.25 + partial_pnl
+                self.wallet['USDT'] += partial_value
+                self.wallet['positions'][symbol]['quantity'] = remaining_qty
+                self.wallet['positions'][symbol]['amount_usdt'] = pos['amount_usdt'] * 0.75
+                self.wallet['positions'][symbol]['tp_level'] = 1
+                self.wallet['positions'][symbol]['stop_loss'] = entry_price
                 if take_profit_2:
                     self.wallet['positions'][symbol]['take_profit'] = take_profit_2
-                
-                # Déplacer SL au break-even après TP partiel
-                self.wallet['positions'][symbol]['stop_loss'] = entry_price
-                
                 partial_count += 1
-                print(f"💰 TP PARTIEL {symbol}: {self.partial_tp_ratio*100:.0f}% vendu à ${current_price:.4f} "
-                      f"| PnL: ${partial_pnl:.2f} | Reste: {remaining_qty:.6f}")
-                
-                self.log_trade({
-                    'type':        'TP PARTIEL',
-                    'symbol':      symbol,
-                    'direction':   direction,
-                    'price':       current_price,
-                    'quantity':    partial_qty,
-                    'pnl':         round(partial_pnl, 2),
-                    'time':        datetime.now().strftime('%d/%m %H:%M'),
-                })
-        
+                print("TP1 {} 25% vendu @ {:.4f} (+{:.2f}$), SL -> breakeven".format(
+                    symbol, current_price, partial_pnl))
+
         if partial_count > 0:
             self.save_wallet()
-        
         return partial_count
+
+    def check_time_based_exits(self, real_prices: dict, max_hold_hours: float = 48):
+        """
+        Ferme les positions qui stagnent trop longtemps sans atteindre le TP.
+        Si une position est ouverte depuis > max_hold_hours et le PnL est < +0.5%, on ferme.
+        """
+        from datetime import datetime, timedelta
+        closed_count = 0
+
+        for symbol, pos in list(self.wallet['positions'].items()):
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+
+            open_time_str = pos.get('open_time')
+            if not open_time_str:
+                continue
+
+            try:
+                open_time = datetime.strptime(open_time_str, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                continue
+
+            hours_open = (datetime.now() - open_time).total_seconds() / 3600
+            if hours_open < max_hold_hours:
+                continue
+
+            entry_price = pos['entry_price']
+            direction = pos.get('direction', 'LONG')
+            if direction == 'LONG':
+                pnl_pct = ((current_price - entry_price) / entry_price) * 100
+            else:
+                pnl_pct = ((entry_price - current_price) / entry_price) * 100
+
+            if pnl_pct < 0.5:
+                self.close_position(symbol, current_price,
+                    "TIME EXIT ({:.0f}h, PnL {:.2f}%)".format(hours_open, pnl_pct))
+                closed_count += 1
+
+        return closed_count
 
     # ─────────────────────────────────────────────────────────
     # COOLDOWN APRÈS TRADE

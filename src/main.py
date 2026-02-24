@@ -5,6 +5,7 @@ Version: ULTIMATE v2.0 â€” Scanner complet + Bot Swing + Paper Trading + Da
 
 import time
 import os
+import math
 import threading
 import json
 from datetime import datetime
@@ -57,7 +58,7 @@ SCAN_INTERVAL_NIGHT = 600     # 10 min la nuit (peu de volatilité)
 MAX_POSITIONS    = 5
 MAX_CONSECUTIVE_LOSSES = 3
 COOLDOWN_MINUTES = 5          # 5 min de cooldown (au lieu de 10)
-SPREAD_MAX_PCT   = 0.50      # Qualité des bougies (assoupli pour avoir des candidats)
+SPREAD_MAX_PCT   = 0.15      # Spread serre = meilleure execution
 VOLUME_RATIO_MIN = 0.35      # Volume >= 35% de la moyenne (pour avoir un top 10 à chaque scan)
 VOLATILITY_MAX   = 6.0       # Éviter les actifs trop volatils
 TOP_OPPORTUNITIES_DISPLAY = 10   # Toujours afficher au moins les N meilleures (signaux + potentiels)
@@ -127,14 +128,14 @@ SCORE_NEUTRAL_MARKET = 55    # Score min si marché neutre
 MIN_RISK_REWARD = 1.5        # R:R min 1.5:1 (réaliste pour avoir des trades)
 
 # Configuration News & Sentiment
-NEWS_ENABLED = False          # DÉSACTIVÉ - trop de bruit
-SENTIMENT_SCORE_ADJUST = False # DÉSACTIVÉ
-PAUSE_ON_EVENTS = False       # DÉSACTIVÉ
+NEWS_ENABLED = True
+SENTIMENT_SCORE_ADJUST = True
+PAUSE_ON_EVENTS = True
 
 # Configuration Machine Learning
-ML_ENABLED = False            # DÉSACTIVÉ - trop de bruit
-ML_MIN_PROBABILITY = 60       # (non utilisé)
-ML_SCORE_ADJUST = False       # DÉSACTIVÉ
+ML_ENABLED = True
+ML_MIN_PROBABILITY = 60
+ML_SCORE_ADJUST = True
 
 # Configuration On-Chain
 ONCHAIN_ENABLED = False       # DÉSACTIVÉ - trop de bruit
@@ -385,13 +386,24 @@ def run_scanner():
     shared_data['last_prices'] = real_prices
     shared_data['last_indicators'] = {}
 
+    # —— 1b. Filtre BTC: skip si BTC trop erratique ——
+    btc_regime = 'UNKNOWN'
+    btc_df = data.get('BTCUSDT')
+    if btc_df is not None:
+        btc_ind = calculate_indicators(btc_df)
+        if btc_ind:
+            btc_regime = btc_ind.get('market_regime', 'UNKNOWN')
+            btc_atr_pct = btc_ind.get('atr_percent') or 0
+            if btc_regime == 'VOLATILE' and btc_atr_pct > 4.0:
+                add_bot_log("BTC volatile (ATR {:.1f}%, regime {}): scan prudent.".format(btc_atr_pct, btc_regime), 'WARN')
+
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
     trader = PaperTrader()
-    # Risk management: breakeven → trailing → TP partiel (50% à TP1, reste vers TP2) → SL/TP
     trader.check_and_apply_breakeven(real_prices)
     trader.check_and_apply_trailing_stop(real_prices)
     trader.check_and_apply_partial_tp(real_prices)
+    trader.check_time_based_exits(real_prices, max_hold_hours=48)
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
     if len(open_pos) >= MAX_POSITIONS:
@@ -488,9 +500,9 @@ def run_scanner():
         if momentum_4h == 'BEARISH': tf_score_short += 2
         elif momentum_4h == 'NEUTRAL': tf_score_short += 1
 
-        # Signal si: conditions techniques OK ET multi-TF >= 2 (au moins 2 TF alignees)
-        has_short = tf_score_short >= 2 and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
-        has_long = tf_score_long >= 2 and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
+        # Signal si: conditions techniques OK ET multi-TF >= 3 (au moins 2 TF bien alignees)
+        has_short = tf_score_short >= 3 and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
+        has_long = tf_score_long >= 3 and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
 
         if has_short:
             n_short_signal += 1
@@ -610,6 +622,19 @@ def run_scanner():
     # —— 4. Ouvrir la meilleure opportunité ——
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
+
+    # Portfolio risk limit: max 80% du capital deploye
+    MAX_PORTFOLIO_EXPOSURE = 0.80
+    deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
+    available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
+    if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
+        add_bot_log("Portfolio exposure {:.0f}% >= {:.0f}% max — pas de nouvelle position.".format(
+            (deployed_capital / total_capital) * 100, MAX_PORTFOLIO_EXPOSURE * 100), 'INFO')
+        return shared_data['opportunities']
+
+    # BTC erratique: relever le score minimum
+    btc_score_penalty = 5 if btc_regime == 'VOLATILE' else 0
+
     if opportunities_list and len(current_open) < MAX_POSITIONS:
         # Chercher: 1) signal strict avec bon R:R, 2) sinon meilleur potentiel avec score+R:R OK
         best = None
@@ -630,7 +655,7 @@ def run_scanner():
 
         if best is not None:
             is_long = best.get('entry_signal') == 'LONG'
-            min_score = MIN_SCORE_TO_OPEN
+            min_score = MIN_SCORE_TO_OPEN + btc_score_penalty
             if DYNAMIC_SCORE_ENABLED:
                 try:
                     fg = get_social_fear_greed()
@@ -675,7 +700,7 @@ def run_scanner():
                     atr_pct = best.get('atr_pct') or 2.0
                     n_open = len(current_open)
                     # Position sizing adaptatif: reduire la taille si on a deja des positions
-                    multi_pos_factor = 1.0 / (1 + n_open * 0.3)  # 1.0 -> 0.77 -> 0.63 -> 0.53 ...
+                    multi_pos_factor = 1.0 / math.sqrt(1 + n_open)  # 1.0 -> 0.71 -> 0.58 -> 0.50
                     size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital) * multi_pos_factor
                     if is_long:
                         sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
