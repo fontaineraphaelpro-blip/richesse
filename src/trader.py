@@ -521,8 +521,7 @@ class PaperTrader:
             self.wallet['positions'][symbol]['amount_usdt'] = original_amount + dca_amount
             self.wallet['positions'][symbol]['dca_count'] = current_dca + 1
             
-            # Ajuster SL autour du nouveau prix moyen
-            atr_pct = pos.get('atr_pct', 1.5)
+            atr_pct = pos.get('atr_pct') or 1.5
             if direction == 'LONG':
                 self.wallet['positions'][symbol]['stop_loss'] = avg_price * (1 - atr_pct * 1.5 / 100)
             else:

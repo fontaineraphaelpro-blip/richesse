@@ -478,11 +478,26 @@ def run_scanner():
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
     trader = PaperTrader()
-    trader.check_and_apply_breakeven(real_prices)
-    trader.check_and_apply_trailing_stop(real_prices)
-    trader.check_and_apply_partial_tp(real_prices)
-    trader.check_and_apply_dca(real_prices, max_dca=2, dca_threshold_pct=-1.5)
-    trader.check_time_based_exits(real_prices, max_hold_hours=48)
+    try:
+        trader.check_and_apply_breakeven(real_prices)
+    except Exception as e:
+        add_bot_log("Erreur breakeven: {}".format(e), 'ERROR')
+    try:
+        trader.check_and_apply_trailing_stop(real_prices)
+    except Exception as e:
+        add_bot_log("Erreur trailing: {}".format(e), 'ERROR')
+    try:
+        trader.check_and_apply_partial_tp(real_prices)
+    except Exception as e:
+        add_bot_log("Erreur partial_tp: {}".format(e), 'ERROR')
+    try:
+        trader.check_and_apply_dca(real_prices, max_dca=2, dca_threshold_pct=-1.5)
+    except Exception as e:
+        add_bot_log("Erreur DCA: {}".format(e), 'ERROR')
+    try:
+        trader.check_time_based_exits(real_prices, max_hold_hours=48)
+    except Exception as e:
+        add_bot_log("Erreur time_exits: {}".format(e), 'ERROR')
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
     if len(open_pos) >= MAX_POSITIONS:
@@ -519,20 +534,30 @@ def run_scanner():
     session_bonus = SESSION_BONUS_PTS if in_session else 0
 
     for symbol, df in data.items():
-        indicators = calculate_indicators(df)
+      try:
+        try:
+            indicators = calculate_indicators(df)
+        except Exception:
+            indicators = {}
         shared_data['last_indicators'][symbol] = indicators
 
         if not indicators or indicators.get('volume_ratio') is None:
             n_no_indicators += 1
             continue
-        if indicators.get('volume_ratio', 0) < VOLUME_RATIO_MIN:
+        vol_r = indicators.get('volume_ratio')
+        if vol_r is None or vol_r < VOLUME_RATIO_MIN:
             continue
         n_volume_ok += 1
-        spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
+        close_val = df['close'].iloc[-1]
+        if close_val is None or close_val == 0:
+            continue
+        spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / close_val * 100
         if spread_pct > SPREAD_MAX_PCT:
             continue
         n_spread_ok += 1
         atr_pct = indicators.get('atr_percent') or 0
+        if atr_pct is None:
+            atr_pct = 0
         if atr_pct > VOLATILITY_MAX:
             continue
 
@@ -687,6 +712,9 @@ def run_scanner():
                     'adx': details_long.get('adx'), 'macd_bullish': details_long.get('macd_bullish'),
                     'is_signal': False,
                 })
+      except Exception as pair_err:
+        add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
+        continue
 
     # Fusionner et trier par score (meilleure opportunité en premier)
     opportunities_list = list(long_opportunities) + list(short_opportunities)
@@ -765,8 +793,7 @@ def run_scanner():
                                 add_bot_log("Extreme Greed ({}): pas de LONG.".format(v), 'INFO')
                                 skip_sentiment = True
                             elif not is_long and v <= FEAR_GREED_MIN_TO_SHORT:
-                                add_bot_log("Extreme Fear ({}): pas de SHORT.".format(v), 'INFO')
-                                skip_sentiment = True
+                                add_bot_log("Extreme Fear ({}) mais SHORT autorise (trend-following).".format(v), 'INFO')
                     except Exception:
                         pass
                 if not skip_sentiment:
@@ -811,14 +838,18 @@ def run_scanner():
                         risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, kelly))
                     else:
                         risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
-                    atr_pct = best.get('atr_pct') or 2.0
+                    atr_pct = best.get('atr_pct')
+                    if atr_pct is None or atr_pct == 0:
+                        atr_pct = 2.0
                     n_open = len(current_open)
                     multi_pos_factor = 1.0 / math.sqrt(1 + n_open)
-                    corr_factor = _check_correlation(symbol, current_open, shared_data.get('last_indicators', {}))
-                    # Slippage adjustment: reduire si slippage eleve
-                    avg_slip = _get_avg_slippage(symbol)
+                    corr_factor = _check_correlation(symbol, current_open, shared_data.get('last_indicators', {})) or 1.0
+                    avg_slip = _get_avg_slippage(symbol) or 0
                     slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
-                    size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital) * multi_pos_factor * corr_factor * slip_factor
+                    atr_adj = position_sizer.calculate_atr_adjustment(atr_pct) or 1.0
+                    score_adj = position_sizer.calculate_score_adjustment(best['score'], 50) or 1.0
+                    dd_adj = position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0
+                    size_mult = atr_adj * score_adj * dd_adj * multi_pos_factor * corr_factor * slip_factor
                     if is_long:
                         sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
                         pos_size = position_size_long_usdt(
@@ -1729,7 +1760,10 @@ def run_loop():
             shared_data['opportunities'] = run_scanner()
             shared_data['last_update'] = datetime.now().strftime('%H:%M:%S')
         except Exception as e:
-            add_bot_log(f"Erreur boucle: {str(e)}", 'ERROR')
+            import traceback
+            tb = traceback.format_exc()
+            print(tb)
+            add_bot_log("Erreur boucle: {} | {}".format(str(e), tb.split('\n')[-3].strip() if len(tb.split('\n')) > 3 else ''), 'ERROR')
         finally:
             shared_data['is_scanning'] = False
 
