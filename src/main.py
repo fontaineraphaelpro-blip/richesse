@@ -51,10 +51,12 @@ STOP_LOSS_PCT    = 1.0
 TAKE_PROFIT_PCT  = 2.0
 LONG_STOP_LOSS_PCT   = 1.0
 LONG_TAKE_PROFIT_PCT = 2.0
-SCAN_INTERVAL    = 900
+SCAN_INTERVAL    = 300         # 5 min par défaut (au lieu de 10)
+SCAN_INTERVAL_SESSION = 180   # 3 min pendant session US/EU (haute volatilité)
+SCAN_INTERVAL_NIGHT = 600     # 10 min la nuit (peu de volatilité)
 MAX_POSITIONS    = 5
-MAX_CONSECUTIVE_LOSSES = 3   # Risk mgt: stop après 3 pertes pour protéger le capital
-COOLDOWN_MINUTES = 10        # Risk mgt: éviter le sur-trading
+MAX_CONSECUTIVE_LOSSES = 3
+COOLDOWN_MINUTES = 5          # 5 min de cooldown (au lieu de 10)
 SPREAD_MAX_PCT   = 0.50      # Qualité des bougies (assoupli pour avoir des candidats)
 VOLUME_RATIO_MIN = 0.35      # Volume >= 35% de la moyenne (pour avoir un top 10 à chaque scan)
 VOLATILITY_MAX   = 6.0       # Éviter les actifs trop volatils
@@ -94,7 +96,7 @@ KELLY_RISK_MAX_PCT = 0.03      # Maximum 3% (quarter Kelly cap)
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '600'))  # 10 min (équilibre opportunités / stabilité)
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '300'))  # 5 min par défaut
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -469,15 +471,26 @@ def run_scanner():
         if in_cooldown:
             continue
 
-        ok_15m_short = (momentum_15m == 'BEARISH') if TREND_15M_MUST_BEARISH else True
-        allowed_1h = ('BEARISH', 'NEUTRAL') if TREND_1H_ALLOW_NEUTRAL else ('BEARISH',)
-        ok_1h_short = (momentum_1h in allowed_1h) if TREND_1H_MUST_BEARISH else True
-        ok_4h_short = (momentum_4h is None or momentum_4h in ('BEARISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
-        ok_15m_long = (momentum_15m in ('BULLISH', 'NEUTRAL')) if TREND_15M_LONG_BULLISH else True
-        ok_1h_long = (momentum_1h in ('BULLISH', 'NEUTRAL')) if TREND_1H_LONG_BULLISH else True
-        ok_4h_long = (momentum_4h is None or momentum_4h in ('BULLISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
-        has_short = ok_15m_short and ok_1h_short and ok_4h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
-        has_long = ok_15m_long and ok_1h_long and ok_4h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
+        # Multi-TF alignment score (pas filtre binaire)
+        tf_score_long = 0
+        tf_score_short = 0
+        if momentum_15m == 'BULLISH': tf_score_long += 2
+        elif momentum_15m == 'BEARISH': tf_score_long -= 1
+        if momentum_1h == 'BULLISH': tf_score_long += 2
+        elif momentum_1h == 'BEARISH': tf_score_long -= 1
+        if momentum_4h == 'BULLISH': tf_score_long += 2
+        elif momentum_4h == 'NEUTRAL': tf_score_long += 1
+
+        if momentum_15m == 'BEARISH': tf_score_short += 2
+        elif momentum_15m == 'BULLISH': tf_score_short -= 1
+        if momentum_1h == 'BEARISH': tf_score_short += 2
+        elif momentum_1h == 'BULLISH': tf_score_short -= 1
+        if momentum_4h == 'BEARISH': tf_score_short += 2
+        elif momentum_4h == 'NEUTRAL': tf_score_short += 1
+
+        # Signal si: conditions techniques OK ET multi-TF >= 2 (au moins 2 TF alignees)
+        has_short = tf_score_short >= 2 and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN)
+        has_long = tf_score_long >= 2 and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN)
 
         if has_short:
             n_short_signal += 1
@@ -660,7 +673,10 @@ def run_scanner():
                     else:
                         risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
                     atr_pct = best.get('atr_pct') or 2.0
-                    size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital)
+                    n_open = len(current_open)
+                    # Position sizing adaptatif: reduire la taille si on a deja des positions
+                    multi_pos_factor = 1.0 / (1 + n_open * 0.3)  # 1.0 -> 0.77 -> 0.63 -> 0.53 ...
+                    size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital) * multi_pos_factor
                     if is_long:
                         sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
                         pos_size = position_size_long_usdt(
@@ -1513,16 +1529,31 @@ fetch('/api/social/fear_greed')
 # BOUCLE PRINCIPALE (THREAD BACKGROUND)
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+AVOID_WEEKENDS = True
+
+def _get_scan_interval():
+    """Intervalle adaptatif: 3 min en session US/EU, 10 min la nuit, 5 min sinon."""
+    utc_hour = datetime.utcnow().hour
+    if SESSION_BONUS_ENABLED and SESSION_BONUS_UTC_START <= utc_hour < SESSION_BONUS_UTC_END:
+        return SCAN_INTERVAL_SESSION
+    elif utc_hour < 6 or utc_hour >= 23:
+        return SCAN_INTERVAL_NIGHT
+    return SCAN_INTERVAL
+
 def run_loop():
-    """Boucle infinie qui lance le scanner pÃ©riodiquement."""
+    """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
     add_bot_log("Risk management optimal | Kelly sizing | Scan 10 min | RSI, MACD, ADX, 15m/1h", 'INFO')
     while True:
-        # Mise à jour du sentiment marché & réseaux (pour le dashboard)
+        now_utc = datetime.utcnow()
+        if AVOID_WEEKENDS and now_utc.weekday() >= 5:
+            add_bot_log("Weekend: pause trading, volume trop faible.", 'INFO')
+            time.sleep(3600)
+            continue
         try:
             shared_data['sentiment_display'] = fetch_sentiment_for_dashboard()
         except Exception as e:
-            add_bot_log(f"Sentiment: {str(e)[:60]}", 'WARN')
+            add_bot_log("Sentiment: {}".format(str(e)[:60]), 'WARN')
         shared_data['is_scanning'] = True
         try:
             shared_data['opportunities'] = run_scanner()
@@ -1532,10 +1563,10 @@ def run_loop():
         finally:
             shared_data['is_scanning'] = False
 
-        pause_str = "{} min".format(SCAN_INTERVAL // 60) if SCAN_INTERVAL >= 60 else "{} s".format(SCAN_INTERVAL)
-        next_scan = datetime.now()
-        add_bot_log("Pause {} — prochain scan a {}".format(pause_str, next_scan.strftime('%H:%M')), 'INFO')
-        time.sleep(SCAN_INTERVAL)
+        interval = _get_scan_interval()
+        pause_str = "{} min".format(interval // 60) if interval >= 60 else "{} s".format(interval)
+        add_bot_log("Pause {} — prochain scan a {}".format(pause_str, datetime.now().strftime('%H:%M')), 'INFO')
+        time.sleep(interval)
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

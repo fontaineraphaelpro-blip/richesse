@@ -58,50 +58,58 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
+SIGNAL_MIN_CONDITIONS = 4  # 4/7 conditions suffisent (au lieu de toutes)
+
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité LONG en SUIVI DE TENDANCE (continuation, pas de rebond oversold).
-
-    Conditions (toutes requises):
-      1. Tendance haussière: price_momentum == 'BULLISH'.
-      2. Prix au-dessus de l'EMA21 (dans la tendance, pas en train de "dip").
-      3. ADX >= 18 (tendance présente).
-      4. RSI entre 45 et 70 (pas d'achat oversold = pas de trade rebond).
-      5. Dernière bougie haussière (close > open).
-      6. Volume >= volume_ratio_min × moyenne.
+    Détecte une opportunité LONG en SUIVI DE TENDANCE.
+    Système souple: 4/7 conditions suffisent (au lieu de 7/7).
     """
-    if indicators.get('price_momentum') != 'BULLISH':
-        return False
+    conditions_met = 0
+    total_conditions = 7
+
+    # 1. Momentum haussier
+    if indicators.get('price_momentum') == 'BULLISH':
+        conditions_met += 1
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current is None or ema21 is None or current <= 0 or ema21 <= 0:
         return False
-    # Prix clairement au-dessus de l'EMA = on suit la tendance, on n'achète pas un rebond
-    if current < ema21 * (1 + LONG_PRICE_ABOVE_EMA_PCT / 100):
-        return False
 
+    # 2. Prix au-dessus de l'EMA21
+    if current >= ema21 * (1 + LONG_PRICE_ABOVE_EMA_PCT / 100):
+        conditions_met += 1
+
+    # 3. ADX >= seuil (tendance)
     adx = indicators.get('adx')
-    if adx is not None and adx < ADX_MIN_FOR_TREND:
-        return False
+    if adx is not None and adx >= ADX_MIN_FOR_TREND:
+        conditions_met += 1
 
+    # 4. RSI dans la zone continuation (45-70)
     rsi = indicators.get('rsi14')
-    if rsi is None:
-        return False
-    if rsi >= 70:  # Surchauffé
-        return False
-    if rsi < RSI_LONG_MIN:  # Pas d'achat en zone oversold (rebond)
-        return False
+    if rsi is not None and RSI_LONG_MIN <= rsi < 70:
+        conditions_met += 1
+    elif rsi is not None and rsi >= 70:
+        return False  # hard stop: surachete
 
+    # 5. Bougie haussiere
     is_bullish = indicators.get('open_price') is not None and current > indicators.get('open_price')
-    if not is_bullish:
-        return False
+    if is_bullish:
+        conditions_met += 1
 
+    # 6. Volume suffisant
     vol_ratio = indicators.get('volume_ratio')
-    if vol_ratio is None or vol_ratio < volume_ratio_min:
-        return False
+    if vol_ratio is not None and vol_ratio >= volume_ratio_min:
+        conditions_met += 1
 
-    return True
+    # 7. Stochastic bullish (K > D)
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    if stoch_k is not None and stoch_d is not None and stoch_k > stoch_d:
+        conditions_met += 1
+
+    return conditions_met >= SIGNAL_MIN_CONDITIONS
 
 
 def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLISH', momentum_1h='BULLISH',
@@ -178,6 +186,26 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
         if dist_pct > 0.5:
             score += 5
 
+    # Stochastic K/D crossover bullish: K > D et K_prev <= D_prev
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    stoch_k_prev = indicators.get('stoch_k_prev')
+    stoch_d_prev = indicators.get('stoch_d_prev')
+    if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
+        if stoch_k > stoch_d and stoch_k_prev <= stoch_d_prev:
+            score += 8
+        elif stoch_k > stoch_d:
+            score += 4
+
+    # Ichimoku: Tenkan > Kijun = tendance haussiere confirmee
+    tenkan = indicators.get('tenkan')
+    kijun = indicators.get('kijun')
+    if tenkan is not None and kijun is not None:
+        if tenkan > kijun and current and current > tenkan:
+            score += 8
+        elif tenkan > kijun:
+            score += 4
+
     score = min(100, round(score, 1))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0
     return {
@@ -214,58 +242,61 @@ def position_size_long_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, max_pct_bal
 
 def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité SHORT en SUIVI DE TENDANCE (continuation, pas de short oversold).
-
-    Conditions (toutes requises):
-      1. Tendance baissière: price_momentum == 'BEARISH'.
-      2. Prix sous EMA21 (confirmation tendance).
-      3. ADX >= 18 (tendance présente).
-      4. RSI >= 30 (pas de short en zone rebond oversold) et RSI < 55 (pas de force acheteuse).
-      5. RSI pas en forte remontée (pas de rebond en cours): rsi <= rsi_prev + 5.
-      6. Dernière bougie baissière (close < open).
-      7. Volume >= volume_ratio_min × moyenne.
-
-    Returns:
-        True si signal SHORT valide, False sinon.
+    Détecte une opportunité SHORT en SUIVI DE TENDANCE.
+    Système souple: 4/7 conditions suffisent (au lieu de 7/7).
     """
-    if indicators.get('price_momentum') != 'BEARISH':
-        return False
+    conditions_met = 0
+
+    # 1. Momentum baissier
+    if indicators.get('price_momentum') == 'BEARISH':
+        conditions_met += 1
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
-    if current is None or ema21 is None or current >= ema21:
+    if current is None or ema21 is None:
         return False
 
+    # 2. Prix sous EMA21
+    if current < ema21:
+        conditions_met += 1
+
+    # 3. ADX >= seuil
     adx = indicators.get('adx')
-    if adx is not None and adx < ADX_MIN_FOR_TREND:
-        return False
+    if adx is not None and adx >= ADX_MIN_FOR_TREND:
+        conditions_met += 1
 
+    # 4. RSI dans la zone continuation (30-55)
     rsi = indicators.get('rsi14')
     rsi_prev = indicators.get('rsi14_prev')
-    if rsi is None:
-        return False
-    if rsi < RSI_SHORT_MIN:  # Pas de short en zone rebond (oversold)
-        return False
-    if rsi >= 55 and (rsi_prev is None or rsi >= rsi_prev):  # Pas de force acheteuse
-        return False
-    # Pas de short si RSI remonte fort (rebond en cours)
-    if rsi_prev is not None and rsi > rsi_prev + 5:
+    if rsi is not None and RSI_SHORT_MIN <= rsi < 55:
+        conditions_met += 1
+    elif rsi is not None and rsi < RSI_SHORT_MIN:
+        return False  # hard stop: oversold = rebond probable
+    # RSI remonte trop fort = rebond en cours
+    if rsi_prev is not None and rsi is not None and rsi > rsi_prev + 8:
         return False
 
-    # Bougie baissière
+    # 5. Bougie baissiere
     is_bearish = indicators.get('is_bearish_candle', False)
     open_p = indicators.get('open_price')
     if open_p is not None and current is not None and open_p > 0:
         if current < open_p:
             is_bearish = True
-    if not is_bearish:
-        return False
+    if is_bearish:
+        conditions_met += 1
 
+    # 6. Volume suffisant
     vol_ratio = indicators.get('volume_ratio')
-    if vol_ratio is None or vol_ratio < volume_ratio_min:
-        return False
+    if vol_ratio is not None and vol_ratio >= volume_ratio_min:
+        conditions_met += 1
 
-    return True
+    # 7. Stochastic bearish (K < D)
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    if stoch_k is not None and stoch_d is not None and stoch_k < stoch_d:
+        conditions_met += 1
+
+    return conditions_met >= SIGNAL_MIN_CONDITIONS
 
 
 def position_size_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, leverage=10, max_pct_balance=0.25, min_usdt=10):
@@ -358,13 +389,32 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     elif atr_pct <= 4.0:
         score += 5
 
-    # Prix sous EMA21 (déjà requis pour le signal) → +5 pts
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
     if current and ema21 and ema21 > 0 and current < ema21:
         dist_pct = ((ema21 - current) / ema21) * 100
         if dist_pct > 1.0:
-            score += 5  # bien en dessous
+            score += 5
+
+    # Stochastic K/D crossover bearish: K < D et K_prev >= D_prev
+    stoch_k = indicators.get('stoch_k')
+    stoch_d = indicators.get('stoch_d')
+    stoch_k_prev = indicators.get('stoch_k_prev')
+    stoch_d_prev = indicators.get('stoch_d_prev')
+    if all(v is not None for v in [stoch_k, stoch_d, stoch_k_prev, stoch_d_prev]):
+        if stoch_k < stoch_d and stoch_k_prev >= stoch_d_prev:
+            score += 8
+        elif stoch_k < stoch_d:
+            score += 4
+
+    # Ichimoku: Tenkan < Kijun = tendance baissiere confirmee
+    tenkan = indicators.get('tenkan')
+    kijun = indicators.get('kijun')
+    if tenkan is not None and kijun is not None:
+        if tenkan < kijun and current and current < tenkan:
+            score += 8
+        elif tenkan < kijun:
+            score += 4
 
     score = min(100, round(score, 1))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0

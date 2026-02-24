@@ -191,6 +191,10 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     adx = calculate_adx(df, 14)
     bb = calculate_bollinger_bands(close, 20, 2.0)
     
+    # 3b. ICHIMOKU (Tenkan/Kijun pour confluence)
+    # ----------------------------------------
+    ichimoku = calculate_ichimoku(df)
+
     # 4. VOLUME
     # ----------------------------------------
     volume_ma20 = calculate_sma(volume, 20)
@@ -284,6 +288,8 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         
         'stoch_k': stoch_data['k'].iloc[-1],
         'stoch_d': stoch_data['d'].iloc[-1],
+        'stoch_k_prev': stoch_data['k'].iloc[-2] if len(stoch_data['k']) >= 2 else None,
+        'stoch_d_prev': stoch_data['d'].iloc[-2] if len(stoch_data['d']) >= 2 else None,
         
         # --- VOLATILITÉ & TENDANCE ---
         'atr': atr.iloc[-1],
@@ -306,6 +312,10 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         'is_bearish_candle': patterns.get('has_bearish_pattern', False),
         'support_zones': support_zones,
         
+        # --- ICHIMOKU ---
+        'tenkan': ichimoku['tenkan'].iloc[-1] if not pd.isna(ichimoku['tenkan'].iloc[-1]) else None,
+        'kijun': ichimoku['kijun'].iloc[-1] if not pd.isna(ichimoku['kijun'].iloc[-1]) else None,
+
         # --- MOMENTUM CONFIRMATION (TREND FOLLOWING) ---
         'price_momentum': price_momentum,        # 'BULLISH', 'BEARISH', 'NEUTRAL'
         'momentum_strength': momentum_strength,  # 0-100

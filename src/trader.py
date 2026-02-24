@@ -48,7 +48,7 @@ class PaperTrader:
         
         # Cooldown après trade
         self.cooldown_enabled = True
-        self.cooldown_minutes = 10  # Aligner sur la config globale (10 min)
+        self.cooldown_minutes = 5
         self.recent_trades = {}  # {symbol: last_trade_timestamp}
 
         # Fichiers dans la racine du projet (production: cwd peut être ailleurs)
@@ -206,78 +206,79 @@ class PaperTrader:
 
     def check_and_apply_trailing_stop(self, real_prices: dict):
         """
-        Applique le Trailing Stop Loss sur toutes les positions.
-        
-        Le trailing stop suit le prix:
-        - S'active quand gain >= trailing_stop_activation_pct
-        - Maintient le SL à trailing_stop_distance_pct sous le plus haut atteint
-        - Ne descend JAMAIS (pour LONG) / ne monte JAMAIS (pour SHORT)
+        Trailing Stop a 2 paliers:
+        - Palier 1: gain >= act_pct -> trailing large (distance = dist_pct)
+        - Palier 2: gain >= 2 * act_pct -> trailing serre (distance = dist_pct * 0.5)
         """
         if not self.trailing_stop_enabled:
             return 0
-        
+
         modified_count = 0
-        
+
         for symbol, pos in self.wallet['positions'].items():
             current_price = real_prices.get(symbol)
             if not current_price:
                 continue
-            
+
             entry_price = pos['entry_price']
             direction = pos.get('direction', 'LONG')
             current_sl = pos['stop_loss']
-            
-            # Récupérer ou initialiser le plus haut/bas atteint
+            atr_pct = pos.get('atr_pct')
+            act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
+            dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
+
             if direction == 'LONG':
                 highest_price = pos.get('highest_price', entry_price)
-                # Mettre à jour le plus haut si le prix actuel est plus élevé
                 if current_price > highest_price:
                     highest_price = current_price
                     self.wallet['positions'][symbol]['highest_price'] = highest_price
-                
-                # Calculer le gain depuis l'entrée
                 gain_pct = ((current_price - entry_price) / entry_price) * 100
-                
-                # Activation/distance: ATR-based si position a atr_pct, sinon fixe
-                atr_pct = pos.get('atr_pct')
-                act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
-                dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
-                if gain_pct >= act_pct:
-                    new_trailing_sl = highest_price * (1 - dist_pct / 100)
-                    if new_trailing_sl > current_sl:
-                        old_sl = current_sl
-                        self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
-                        self.wallet['positions'][symbol]['trailing_active'] = True
-                        modified_count += 1
-                        print(f"📈 TRAILING SL {symbol}: ${old_sl:.4f} → ${new_trailing_sl:.4f} "
-                              f"(plus haut: ${highest_price:.4f}, gain: +{gain_pct:.1f}%)")
-            
-            else:  # SHORT
+
+                # Palier 2: gain >= 2x activation -> trailing serre
+                if gain_pct >= act_pct * 2:
+                    effective_dist = dist_pct * 0.5
+                    trail_level = 2
+                elif gain_pct >= act_pct:
+                    effective_dist = dist_pct
+                    trail_level = 1
+                else:
+                    continue
+
+                new_trailing_sl = highest_price * (1 - effective_dist / 100)
+                if new_trailing_sl > current_sl:
+                    self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
+                    self.wallet['positions'][symbol]['trailing_active'] = True
+                    self.wallet['positions'][symbol]['trailing_level'] = trail_level
+                    modified_count += 1
+                    print("TRAILING L{} {} SL -> {:.4f} (high: {:.4f}, +{:.1f}%)".format(
+                        trail_level, symbol, new_trailing_sl, highest_price, gain_pct))
+            else:
                 lowest_price = pos.get('lowest_price', entry_price)
-                # Mettre à jour le plus bas si le prix actuel est plus bas
                 if current_price < lowest_price:
                     lowest_price = current_price
                     self.wallet['positions'][symbol]['lowest_price'] = lowest_price
-                
-                # Calculer le gain depuis l'entrée (pour short, gain = prix baisse)
                 gain_pct = ((entry_price - current_price) / entry_price) * 100
-                
-                atr_pct = pos.get('atr_pct')
-                act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
-                dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
-                if gain_pct >= act_pct:
-                    new_trailing_sl = lowest_price * (1 + dist_pct / 100)
-                    if new_trailing_sl < current_sl:
-                        old_sl = current_sl
-                        self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
-                        self.wallet['positions'][symbol]['trailing_active'] = True
-                        modified_count += 1
-                        print(f"📉 TRAILING SL {symbol}: ${old_sl:.4f} → ${new_trailing_sl:.4f} "
-                              f"(plus bas: ${lowest_price:.4f}, gain: +{gain_pct:.1f}%)")
-        
+
+                if gain_pct >= act_pct * 2:
+                    effective_dist = dist_pct * 0.5
+                    trail_level = 2
+                elif gain_pct >= act_pct:
+                    effective_dist = dist_pct
+                    trail_level = 1
+                else:
+                    continue
+
+                new_trailing_sl = lowest_price * (1 + effective_dist / 100)
+                if new_trailing_sl < current_sl:
+                    self.wallet['positions'][symbol]['stop_loss'] = new_trailing_sl
+                    self.wallet['positions'][symbol]['trailing_active'] = True
+                    self.wallet['positions'][symbol]['trailing_level'] = trail_level
+                    modified_count += 1
+                    print("TRAILING L{} {} SL -> {:.4f} (low: {:.4f}, +{:.1f}%)".format(
+                        trail_level, symbol, new_trailing_sl, lowest_price, gain_pct))
+
         if modified_count > 0:
             self.save_wallet()
-        
         return modified_count
 
     def get_total_capital(self, real_prices: dict) -> float:
