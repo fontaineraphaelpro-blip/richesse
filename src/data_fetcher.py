@@ -9,6 +9,8 @@ import requests
 import time
 from typing import Optional, Dict, Tuple, List
 
+BASE_URL = "https://api.binance.com"
+
 # --- LISTE DES 200 PRINCIPALES PAIRES USDT (Maximum Coverage) ---
 TOP_USDT_PAIRS = [
     # Top 20 - Ultra Liquid (>$1B daily volume)
@@ -490,3 +492,100 @@ def validate_signal_multi_timeframe(symbol: str, signal: str, timeframes: List[s
         'reason': reason,
         'details': mtf
     }
+
+
+def fetch_order_flow(symbol: str, limit: int = 500) -> Dict:
+    """
+    Analyse l'order flow: ratio buy/sell des trades recents.
+    Utilise l'API Binance aggTrades.
+    """
+    try:
+        url = f"{BASE_URL}/api/v3/trades"
+        params = {'symbol': symbol, 'limit': limit}
+        resp = requests.get(url, params=params, timeout=5)
+        if resp.status_code != 200:
+            return {'buy_ratio': 0.5, 'imbalance': 0.0, 'pressure': 'NEUTRAL'}
+        
+        trades = resp.json()
+        buy_volume = 0.0
+        sell_volume = 0.0
+        
+        for t in trades:
+            qty = float(t.get('qty', 0)) * float(t.get('price', 0))
+            if t.get('isBuyerMaker', False):
+                sell_volume += qty
+            else:
+                buy_volume += qty
+        
+        total = buy_volume + sell_volume
+        if total == 0:
+            return {'buy_ratio': 0.5, 'imbalance': 0.0, 'pressure': 'NEUTRAL'}
+        
+        buy_ratio = buy_volume / total
+        imbalance = (buy_volume - sell_volume) / total
+        
+        if imbalance > 0.15:
+            pressure = 'BUY'
+        elif imbalance < -0.15:
+            pressure = 'SELL'
+        else:
+            pressure = 'NEUTRAL'
+        
+        return {
+            'buy_ratio': round(buy_ratio, 3),
+            'imbalance': round(imbalance, 3),
+            'pressure': pressure,
+        }
+    except Exception:
+        return {'buy_ratio': 0.5, 'imbalance': 0.0, 'pressure': 'NEUTRAL'}
+
+
+def fetch_orderbook_depth(symbol: str, levels: int = 20) -> Dict:
+    """
+    Analyse la profondeur du carnet d'ordres sur plusieurs niveaux.
+    Detecte les desequilibres bid/ask et les murs d'ordres.
+    """
+    try:
+        url = f"{BASE_URL}/api/v3/depth"
+        params = {'symbol': symbol, 'limit': levels}
+        resp = requests.get(url, params=params, timeout=5)
+        if resp.status_code != 200:
+            return {'bid_depth': 0, 'ask_depth': 0, 'depth_imbalance': 0, 'wall_detected': None}
+        
+        data = resp.json()
+        bids = data.get('bids', [])
+        asks = data.get('asks', [])
+        
+        bid_depth = sum(float(b[0]) * float(b[1]) for b in bids)
+        ask_depth = sum(float(a[0]) * float(a[1]) for a in asks)
+        
+        total_depth = bid_depth + ask_depth
+        if total_depth == 0:
+            return {'bid_depth': 0, 'ask_depth': 0, 'depth_imbalance': 0, 'wall_detected': None}
+        
+        depth_imbalance = (bid_depth - ask_depth) / total_depth
+        
+        wall_detected = None
+        if bids:
+            avg_bid_size = bid_depth / len(bids)
+            for b in bids:
+                size = float(b[0]) * float(b[1])
+                if size > avg_bid_size * 5:
+                    wall_detected = 'BID_WALL'
+                    break
+        if asks and wall_detected is None:
+            avg_ask_size = ask_depth / len(asks)
+            for a in asks:
+                size = float(a[0]) * float(a[1])
+                if size > avg_ask_size * 5:
+                    wall_detected = 'ASK_WALL'
+                    break
+        
+        return {
+            'bid_depth': round(bid_depth, 2),
+            'ask_depth': round(ask_depth, 2),
+            'depth_imbalance': round(depth_imbalance, 3),
+            'wall_detected': wall_detected,
+        }
+    except Exception:
+        return {'bid_depth': 0, 'ask_depth': 0, 'depth_imbalance': 0, 'wall_detected': None}

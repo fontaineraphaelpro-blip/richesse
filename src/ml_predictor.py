@@ -522,6 +522,52 @@ class MLPredictor:
 
 
 # ─────────────────────────────────────────────────────────────
+    def predict_ensemble(self, indicators: Dict, direction: str,
+                         sentiment: Dict = None, mtf_alignment: float = 0) -> Dict:
+        """
+        Prediction ensemble: 3 profils de poids pour robustesse.
+        - Profil 1: poids par defaut (momentum-focused)
+        - Profil 2: poids conservateurs (volume + tendance)
+        - Profil 3: poids agressifs (RSI + MACD heavy)
+        Resultat final = moyenne ponderee 40/30/30.
+        """
+        pred1 = self.predict_success_probability(indicators, direction, sentiment, mtf_alignment)
+        p1 = pred1['probability']
+
+        # Profil 2: conservateur (boost volume/tendance, penalise RSI)
+        saved_weights = self.weights.copy()
+        self.weights['volume_spike'] = self.weights.get('volume_spike', 15) * 1.5
+        self.weights['trend_aligned'] = self.weights.get('trend_aligned', 20) * 1.3
+        self.weights['rsi_oversold_long'] = self.weights.get('rsi_oversold_long', 15) * 0.7
+        pred2 = self.predict_success_probability(indicators, direction, sentiment, mtf_alignment)
+        p2 = pred2['probability']
+        self.weights = saved_weights.copy()
+
+        # Profil 3: agressif (boost RSI + MACD)
+        self.weights['rsi_oversold_long'] = self.weights.get('rsi_oversold_long', 15) * 1.5
+        self.weights['macd_bullish_cross'] = self.weights.get('macd_bullish_cross', 20) * 1.4
+        self.weights['volume_spike'] = self.weights.get('volume_spike', 15) * 0.8
+        pred3 = self.predict_success_probability(indicators, direction, sentiment, mtf_alignment)
+        p3 = pred3['probability']
+        self.weights = saved_weights
+
+        ensemble_prob = p1 * 0.4 + p2 * 0.3 + p3 * 0.3
+        pred1['probability'] = round(ensemble_prob, 1)
+        pred1['ensemble'] = True
+        pred1['model_scores'] = [round(p1, 1), round(p2, 1), round(p3, 1)]
+
+        if ensemble_prob >= 80:
+            pred1['recommendation'] = 'STRONG BUY'
+        elif ensemble_prob >= 70:
+            pred1['recommendation'] = 'BUY'
+        elif ensemble_prob >= 50:
+            pred1['recommendation'] = 'HOLD'
+        else:
+            pred1['recommendation'] = 'AVOID'
+
+        return pred1
+
+
 # INSTANCE GLOBALE
 # ─────────────────────────────────────────────────────────────
 ml_predictor = MLPredictor()
@@ -529,8 +575,8 @@ ml_predictor = MLPredictor()
 
 def get_ml_prediction(indicators: Dict, direction: str, 
                      sentiment: Dict = None, mtf_alignment: float = 0) -> Dict:
-    """Fonction helper pour obtenir une prédiction ML."""
-    return ml_predictor.predict_success_probability(indicators, direction, sentiment, mtf_alignment)
+    """Prediction ML ensemble (3 profils de poids)."""
+    return ml_predictor.predict_ensemble(indicators, direction, sentiment, mtf_alignment)
 
 
 def log_trade_result(symbol: str, prediction: Dict, result: str):

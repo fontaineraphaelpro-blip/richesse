@@ -224,7 +224,27 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
     elif regime == 'RANGING':
         score -= 3
 
-    score = min(100, round(score, 1))
+    # VWAP: prix sous VWAP = bon point d'entree LONG
+    vwap_dist = indicators.get('vwap_distance_pct')
+    if vwap_dist is not None:
+        if -1.0 <= vwap_dist <= 0:
+            score += 8
+        elif 0 < vwap_dist <= 0.5:
+            score += 4
+        elif vwap_dist > 2.0:
+            score -= 3
+
+    # Volatility cluster: penaliser si vol extreme
+    if indicators.get('in_vol_cluster'):
+        score -= 5
+
+    # Intraday pattern: bonus si heure historiquement bullish
+    if indicators.get('intraday_bias') == 'BULLISH':
+        score += 5
+    elif indicators.get('intraday_bias') == 'BEARISH':
+        score -= 3
+
+    score = min(100, max(0, round(score, 1)))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0
     return {
         'score': score,
@@ -453,7 +473,27 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     elif regime == 'RANGING':
         score -= 3
 
-    score = min(100, round(score, 1))
+    # VWAP: prix au-dessus du VWAP = bon point d'entree SHORT
+    vwap_dist = indicators.get('vwap_distance_pct')
+    if vwap_dist is not None:
+        if 0 <= vwap_dist <= 1.0:
+            score += 8
+        elif -0.5 <= vwap_dist < 0:
+            score += 4
+        elif vwap_dist < -2.0:
+            score -= 3
+
+    # Volatility cluster: penaliser si vol extreme
+    if indicators.get('in_vol_cluster'):
+        score -= 5
+
+    # Intraday pattern: bonus si heure historiquement bearish
+    if indicators.get('intraday_bias') == 'BEARISH':
+        score += 5
+    elif indicators.get('intraday_bias') == 'BULLISH':
+        score -= 3
+
+    score = min(100, max(0, round(score, 1)))
     rr_ratio = take_profit_pct / stop_loss_pct if stop_loss_pct else 0
     return {
         'score': score,

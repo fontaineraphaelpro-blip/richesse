@@ -350,6 +350,79 @@ def update_performance_stats(trader: PaperTrader):
 # SCANNER PRINCIPAL
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+_adaptive_state = {'min_score_adjust': 0}
+
+def _update_adaptive_params():
+    """Auto-ajuste le score min selon le winrate recent."""
+    try:
+        trader = PaperTrader()
+        history = trader.get_trades_history()
+        sales = [t for t in history if 'VENTE' in t.get('type', '')][:50]
+        if len(sales) < 10:
+            return
+        wins = sum(1 for t in sales if t.get('pnl', 0) > 0)
+        wr = wins / len(sales)
+        if wr < 0.42:
+            _adaptive_state['min_score_adjust'] = 5
+        elif wr > 0.58:
+            _adaptive_state['min_score_adjust'] = -3
+        else:
+            _adaptive_state['min_score_adjust'] = 0
+    except Exception:
+        pass
+
+def _check_correlation(symbol, open_positions, all_indicators):
+    """Penalise si trop de positions dans la meme direction."""
+    if not open_positions:
+        return 1.0
+    sym_ind = all_indicators.get(symbol, {})
+    sym_mom = sym_ind.get('price_momentum', 'NEUTRAL')
+    same_dir = sum(1 for ps in open_positions
+                   if all_indicators.get(ps, {}).get('price_momentum') == sym_mom and sym_mom != 'NEUTRAL')
+    if same_dir >= 3:
+        return 0.5
+    elif same_dir >= 2:
+        return 0.7
+    return 1.0
+
+def _check_setup_similarity(best, trader):
+    """Compare le setup actuel avec les setups passes similaires."""
+    try:
+        history = trader.get_trades_history()
+        sales = [t for t in history if 'VENTE' in t.get('type', '')][:200]
+        if len(sales) < 20:
+            return 0
+        rsi_lo, rsi_hi = best.get('rsi', 50) - 5, best.get('rsi', 50) + 5
+        similar = [t for t in sales if rsi_lo <= t.get('rsi', 50) <= rsi_hi]
+        if len(similar) < 5:
+            return 0
+        wins = sum(1 for t in similar if t.get('pnl', 0) > 0)
+        wr = wins / len(similar)
+        if wr > 0.65:
+            return 8
+        elif wr < 0.35:
+            return -8
+        return 0
+    except Exception:
+        return 0
+
+_slippage_history = {}
+
+def _get_avg_slippage(symbol):
+    """Retourne le slippage moyen pour un symbole."""
+    if symbol in _slippage_history and _slippage_history[symbol]:
+        return sum(_slippage_history[symbol]) / len(_slippage_history[symbol])
+    return 0.05
+
+def _record_slippage(symbol, slip_pct):
+    """Enregistre le slippage."""
+    if symbol not in _slippage_history:
+        _slippage_history[symbol] = []
+    _slippage_history[symbol].append(slip_pct)
+    if len(_slippage_history[symbol]) > 50:
+        _slippage_history[symbol] = _slippage_history[symbol][-50:]
+
+
 def run_scanner():
     """
     Scanner SHORT uniquement — grandes baisses.
@@ -367,8 +440,9 @@ def run_scanner():
         compute_sl_tp_from_chart,
     )
     from indicators import calculate_indicators
-    from data_fetcher import fetch_multiple_pairs, get_top_pairs, fetch_multi_timeframe
+    from data_fetcher import fetch_multiple_pairs, get_top_pairs, fetch_multi_timeframe, fetch_order_flow, fetch_orderbook_depth
 
+    _update_adaptive_params()
     shared_data['scan_count'] += 1
     scan_num = shared_data['scan_count']
 
@@ -655,7 +729,11 @@ def run_scanner():
 
         if best is not None:
             is_long = best.get('entry_signal') == 'LONG'
-            min_score = MIN_SCORE_TO_OPEN + btc_score_penalty
+            # Setup similarity bonus/malus
+            similarity_bonus = _check_setup_similarity(best, trader)
+            best['score'] += similarity_bonus
+            # Adaptive score adjustment
+            min_score = MIN_SCORE_TO_OPEN + btc_score_penalty + _adaptive_state.get('min_score_adjust', 0)
             if DYNAMIC_SCORE_ENABLED:
                 try:
                     fg = get_social_fear_greed()
@@ -691,6 +769,37 @@ def run_scanner():
                     price = best['price']
                     stop_loss = best['stop_loss']
                     take_profit = best['take_profit']
+
+                    # Order flow + depth confirmation (seulement sur le best)
+                    try:
+                        of = fetch_order_flow(symbol)
+                        of_pressure = of.get('pressure', 'NEUTRAL')
+                        if is_long and of_pressure == 'SELL':
+                            best['score'] -= 5
+                        elif is_long and of_pressure == 'BUY':
+                            best['score'] += 5
+                        elif not is_long and of_pressure == 'BUY':
+                            best['score'] -= 5
+                        elif not is_long and of_pressure == 'SELL':
+                            best['score'] += 5
+                        depth = fetch_orderbook_depth(symbol)
+                        di = depth.get('depth_imbalance', 0)
+                        if is_long and di > 0.2:
+                            best['score'] += 3
+                        elif not is_long and di < -0.2:
+                            best['score'] += 3
+                        wall = depth.get('wall_detected')
+                        if wall == 'BID_WALL' and is_long:
+                            best['score'] += 3
+                        elif wall == 'ASK_WALL' and not is_long:
+                            best['score'] += 3
+                    except Exception:
+                        pass
+
+                    if best['score'] < min_score:
+                        add_bot_log("Opp {} score {} apres order flow < {} — skip.".format(symbol, best['score'], min_score), 'INFO')
+                        return shared_data['opportunities']
+
                     balance = trader.get_usdt_balance()
                     if KELLY_RISK_ENABLED:
                         kelly = position_sizer.calculate_kelly()
@@ -699,9 +808,12 @@ def run_scanner():
                         risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
                     atr_pct = best.get('atr_pct') or 2.0
                     n_open = len(current_open)
-                    # Position sizing adaptatif: reduire la taille si on a deja des positions
-                    multi_pos_factor = 1.0 / math.sqrt(1 + n_open)  # 1.0 -> 0.71 -> 0.58 -> 0.50
-                    size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital) * multi_pos_factor
+                    multi_pos_factor = 1.0 / math.sqrt(1 + n_open)
+                    corr_factor = _check_correlation(symbol, current_open, shared_data.get('last_indicators', {}))
+                    # Slippage adjustment: reduire si slippage eleve
+                    avg_slip = _get_avg_slippage(symbol)
+                    slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
+                    size_mult = position_sizer.calculate_atr_adjustment(atr_pct) * position_sizer.calculate_score_adjustment(best['score'], 50) * position_sizer.calculate_drawdown_adjustment(total_capital) * multi_pos_factor * corr_factor * slip_factor
                     if is_long:
                         sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
                         pos_size = position_size_long_usdt(
@@ -712,11 +824,13 @@ def run_scanner():
                         take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
                         if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
                             trader.record_trade_time(symbol)
-                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
+                            _record_slippage(symbol, best.get('spread_pct', 0.05))
+                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}, OF {}".format(
                                 best['rsi'], best.get('adx') or '-',
-                                'bullish' if best.get('macd_bullish') else '-',
-                                best['momentum_15m'], best['momentum_1h'])
-                            add_bot_log("LONG {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                                'bull' if best.get('macd_bullish') else '-',
+                                best['momentum_15m'], best['momentum_1h'],
+                                'OK' if best.get('score', 0) > min_score else '-')
+                            add_bot_log("LONG {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
                             return shared_data['opportunities']
                     else:
                         lev = trader.short_leverage
@@ -729,11 +843,13 @@ def run_scanner():
                         take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
                         if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
                             trader.record_trade_time(symbol)
-                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}".format(
+                            _record_slippage(symbol, best.get('spread_pct', 0.05))
+                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}, OF {}".format(
                                 best['rsi'], best.get('adx') or '-',
-                                'bearish' if best.get('macd_bearish') else '-',
-                                best['momentum_15m'], best['momentum_1h'])
-                            add_bot_log("SHORT {} @ {:.4f} | Score {} | TA: {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                                'bear' if best.get('macd_bearish') else '-',
+                                best['momentum_15m'], best['momentum_1h'],
+                                'OK' if best.get('score', 0) > min_score else '-')
+                            add_bot_log("SHORT {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
                             return shared_data['opportunities']
 
     if not opportunities_list:

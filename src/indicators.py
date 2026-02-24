@@ -156,6 +156,84 @@ def calculate_ichimoku(df: pd.DataFrame) -> Dict:
     return {'tenkan': tenkan_sen, 'kijun': kijun_sen}
 
 
+def calculate_vwap(df: pd.DataFrame) -> pd.Series:
+    """
+    Calcule le VWAP (Volume Weighted Average Price).
+    Reference institutionnelle pour les entrees optimales.
+    """
+    if df is None or len(df) < 2:
+        return pd.Series(dtype=float)
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    cumulative_tp_vol = (typical_price * df['volume']).cumsum()
+    cumulative_vol = df['volume'].cumsum()
+    vwap = cumulative_tp_vol / cumulative_vol.replace(0, np.nan)
+    return vwap
+
+
+def detect_volatility_cluster(df: pd.DataFrame, atr: pd.Series, lookback: int = 20) -> Dict:
+    """
+    Detecte les clusters de volatilite (haute vol suit haute vol).
+    Retourne si on est dans un cluster et le ratio vs moyenne.
+    """
+    if atr is None or len(atr) < lookback + 5:
+        return {'in_cluster': False, 'vol_ratio': 1.0}
+    
+    avg_atr = atr.iloc[-lookback:].mean()
+    recent_atr = atr.iloc[-3:].mean()
+    
+    if pd.isna(avg_atr) or avg_atr == 0:
+        return {'in_cluster': False, 'vol_ratio': 1.0}
+    
+    vol_ratio = recent_atr / avg_atr
+    in_cluster = vol_ratio > 1.5
+    
+    return {
+        'in_cluster': bool(in_cluster),
+        'vol_ratio': float(vol_ratio),
+    }
+
+
+def detect_intraday_pattern(df: pd.DataFrame, lookback_days: int = 14) -> Dict:
+    """
+    Detecte les patterns intraday recurrents (heures favorables).
+    Analyse les mouvements de prix par heure UTC sur les N derniers jours.
+    """
+    if df is None or len(df) < 50:
+        return {'bullish_hours': [], 'bearish_hours': [], 'current_hour_bias': 'NEUTRAL'}
+    
+    try:
+        df_copy = df.copy()
+        if 'timestamp' in df_copy.columns:
+            df_copy['hour'] = pd.to_datetime(df_copy['timestamp'], unit='ms').dt.hour
+        else:
+            df_copy['hour'] = list(range(len(df_copy)))
+            return {'bullish_hours': [], 'bearish_hours': [], 'current_hour_bias': 'NEUTRAL'}
+        
+        df_copy['return_pct'] = df_copy['close'].pct_change() * 100
+        
+        hourly_stats = df_copy.groupby('hour')['return_pct'].agg(['mean', 'count'])
+        hourly_stats = hourly_stats[hourly_stats['count'] >= 3]
+        
+        bullish_hours = hourly_stats[hourly_stats['mean'] > 0.05].index.tolist()
+        bearish_hours = hourly_stats[hourly_stats['mean'] < -0.05].index.tolist()
+        
+        from datetime import datetime
+        current_hour = datetime.utcnow().hour
+        bias = 'NEUTRAL'
+        if current_hour in bullish_hours:
+            bias = 'BULLISH'
+        elif current_hour in bearish_hours:
+            bias = 'BEARISH'
+        
+        return {
+            'bullish_hours': bullish_hours[:5],
+            'bearish_hours': bearish_hours[:5],
+            'current_hour_bias': bias,
+        }
+    except Exception:
+        return {'bullish_hours': [], 'bearish_hours': [], 'current_hour_bias': 'NEUTRAL'}
+
+
 def detect_rsi_divergence(df: pd.DataFrame, rsi: pd.Series, lookback: int = 14) -> Dict:
     """
     Detecte les divergences RSI (prix vs RSI).
@@ -307,6 +385,9 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     # ----------------------------------------
     ichimoku = calculate_ichimoku(df)
 
+    # 3c. VWAP
+    vwap = calculate_vwap(df)
+
     # 4. VOLUME
     # ----------------------------------------
     volume_ma20 = calculate_sma(volume, 20)
@@ -443,6 +524,17 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         
         # --- MARKET REGIME ---
         'market_regime': 'UNKNOWN',
+
+        # --- VWAP ---
+        'vwap': vwap.iloc[-1] if len(vwap) > 0 and not pd.isna(vwap.iloc[-1]) else None,
+        'vwap_distance_pct': ((close.iloc[-1] - vwap.iloc[-1]) / vwap.iloc[-1] * 100) if (len(vwap) > 0 and not pd.isna(vwap.iloc[-1]) and vwap.iloc[-1] > 0) else None,
+        
+        # --- VOLATILITY CLUSTER ---
+        'in_vol_cluster': False,
+        'vol_cluster_ratio': 1.0,
+        
+        # --- INTRADAY PATTERN ---
+        'intraday_bias': 'NEUTRAL',
     }
     
     # Calcul des nouvelles métriques
@@ -463,6 +555,19 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     
     try:
         indicators['market_regime'] = detect_market_regime(df, adx, bb['width'])
+    except Exception:
+        pass
+
+    try:
+        vol_cluster = detect_volatility_cluster(df, atr)
+        indicators['in_vol_cluster'] = vol_cluster['in_cluster']
+        indicators['vol_cluster_ratio'] = vol_cluster['vol_ratio']
+    except Exception:
+        pass
+    
+    try:
+        intraday = detect_intraday_pattern(df)
+        indicators['intraday_bias'] = intraday['current_hour_bias']
     except Exception:
         pass
 
