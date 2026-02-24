@@ -106,7 +106,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur funding rates: {e}")
+            print(f"[WARN] Erreur funding rates: {e}")
         
         return {'btc_funding': 0, 'signal': 'NEUTRAL'}
     
@@ -152,7 +152,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur Open Interest: {e}")
+            print(f"[WARN] Erreur Open Interest: {e}")
         
         return {'btc_oi': 0}
     
@@ -228,7 +228,7 @@ class MarketIntelligence:
             return result
             
         except Exception as e:
-            print(f"⚠️ Erreur exchange flows: {e}")
+            print(f"[WARN] Erreur exchange flows: {e}")
         
         return {'net_flow': 'NEUTRAL', 'signal': 'NEUTRAL'}
     
@@ -271,7 +271,7 @@ class MarketIntelligence:
                 return alerts[:10]
                 
         except Exception as e:
-            print(f"⚠️ Erreur whale alerts: {e}")
+            print(f"[WARN] Erreur whale alerts: {e}")
         
         return []
     
@@ -320,7 +320,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur macro: {e}")
+            print(f"[WARN] Erreur macro: {e}")
         
         return {'btc_dominance': 50, 'dominance_signal': 'NEUTRAL'}
     
@@ -368,7 +368,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur stablecoins: {e}")
+            print(f"[WARN] Erreur stablecoins: {e}")
         
         return {'total_stablecoin_supply': 0, 'signal': 'NEUTRAL'}
     
@@ -405,7 +405,7 @@ class MarketIntelligence:
                     return result
                     
         except Exception as e:
-            print(f"⚠️ Erreur DeFi TVL: {e}")
+            print(f"[WARN] Erreur DeFi TVL: {e}")
         
         return {'total_tvl': 0, 'signal': 'NEUTRAL'}
     
@@ -459,7 +459,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur order book: {e}")
+            print(f"[WARN] Erreur order book: {e}")
         
         return {'bid_ratio': 50, 'signal': 'NEUTRAL'}
     
@@ -510,7 +510,7 @@ class MarketIntelligence:
                     return result
                     
         except Exception as e:
-            print(f"⚠️ Erreur L/S ratio: {e}")
+            print(f"[WARN] Erreur L/S ratio: {e}")
         
         return {'ratio': 1, 'signal': 'NEUTRAL'}
     
@@ -569,7 +569,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur volume analysis: {e}")
+            print(f"[WARN] Erreur volume analysis: {e}")
         
         return {'volume_ratio': 1, 'signal': 'NEUTRAL'}
     
@@ -633,7 +633,7 @@ class MarketIntelligence:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur top movers: {e}")
+            print(f"[WARN] Erreur top movers: {e}")
         
         return {'market_breadth': 50, 'breadth_signal': 'NEUTRAL'}
     
@@ -646,7 +646,7 @@ class MarketIntelligence:
         Agrège TOUTES les sources d'information.
         Retourne un rapport complet avec un biais global.
         """
-        print("🔍 Collecte intelligence marché complète...")
+        print("[SEARCH] Collecte intelligence marché complète...")
         
         # Collecter toutes les données
         funding = self.get_funding_rates()
@@ -704,19 +704,19 @@ class MarketIntelligence:
         alerts = []
         
         if funding.get('btc_funding', 0) > 0.1:
-            alerts.append("⚠️ Funding très élevé - correction possible")
+            alerts.append("[WARN] Funding très élevé - correction possible")
         if funding.get('btc_funding', 0) < -0.05:
-            alerts.append("💡 Funding négatif - short squeeze possible")
+            alerts.append("[TIP] Funding négatif - short squeeze possible")
         if ls_ratio.get('ratio', 1) > 2:
-            alerts.append("⚠️ Trop de longs ouverts - prudence")
+            alerts.append("[WARN] Trop de longs ouverts - prudence")
         if ls_ratio.get('ratio', 1) < 0.7:
-            alerts.append("💡 Beaucoup de shorts - squeeze probable")
+            alerts.append("[TIP] Beaucoup de shorts - squeeze probable")
         if volume.get('volume_ratio', 1) > 2:
-            alerts.append("📊 Volume anormalement élevé")
+            alerts.append("[CHART] Volume anormalement élevé")
         if movers.get('market_breadth', 50) > 70:
-            alerts.append("📈 Marché très haussier (>70% en hausse)")
+            alerts.append("[UP] Marché très haussier (>70% en hausse)")
         if movers.get('market_breadth', 50) < 30:
-            alerts.append("📉 Marché très baissier (<30% en hausse)")
+            alerts.append("[DOWN] Marché très baissier (<30% en hausse)")
         
         # Recommandations
         if overall_bias in ['STRONG_BULLISH', 'BULLISH']:

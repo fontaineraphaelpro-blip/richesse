@@ -1,1 +1,41 @@
-[]
+[
+    {
+        "type": "ACHAT",
+        "symbol": "WOOUSDT",
+        "direction": "LONG",
+        "price": 0.0152076,
+        "amount": 10.827937499999999,
+        "quantity": 712.0083050579973,
+        "stop_loss": 0.01501513698308356,
+        "take_profit": 0.015330331067250616,
+        "time": "24/02 15:04",
+        "pnl": 0,
+        "pnl_percent": 0
+    },
+    {
+        "type": "SHORT",
+        "symbol": "BALUSDT",
+        "direction": "SHORT",
+        "price": 0.9665165,
+        "amount": 12.75,
+        "quantity": 131.91704435464888,
+        "stop_loss": 0.9725506021427668,
+        "take_profit": 0.9515361839746317,
+        "time": "24/02 15:04",
+        "pnl": 0,
+        "pnl_percent": 0
+    },
+    {
+        "type": "ACHAT",
+        "symbol": "FLOWUSDT",
+        "direction": "LONG",
+        "price": 0.034627305,
+        "amount": 15.0,
+        "quantity": 433.18415914839466,
+        "stop_loss": 0.03425513832947181,
+        "take_profit": 0.03476927316880568,
+        "time": "24/02 15:04",
+        "pnl": 0,
+        "pnl_percent": 0
+    }
+]

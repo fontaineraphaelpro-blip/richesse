@@ -51,7 +51,7 @@ class TradeJournalAI:
             'terrible': -100   # < -2% = terrible
         }
         
-        print("📔 Trade Journal AI initialisé")
+        print("[JOURNAL] Trade Journal AI initialisé")
     
     def _load_journal(self) -> Dict:
         """Charge le journal depuis le fichier JSON."""
@@ -60,7 +60,7 @@ class TradeJournalAI:
                 with open(self.journal_path, 'r') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"⚠️ Erreur chargement journal: {e}")
+                print(f"[WARN] Erreur chargement journal: {e}")
         
         return {
             'trades': [],
@@ -84,7 +84,7 @@ class TradeJournalAI:
             with open(self.journal_path, 'w') as f:
                 json.dump(self.journal, f, indent=2, default=str)
         except Exception as e:
-            print(f"⚠️ Erreur sauvegarde journal: {e}")
+            print(f"[WARN] Erreur sauvegarde journal: {e}")
     
     # ═══════════════════════════════════════════════════════════════
     # ENREGISTREMENT DES TRADES
@@ -225,44 +225,44 @@ class TradeJournalAI:
         # Analyse de l'heure
         hour = context.get('hour', 12)
         if pnl < 0 and (hour < 7 or hour > 22):
-            lessons.append(f"❌ Éviter le trading à {hour}h (hors heures optimales)")
+            lessons.append(f"[X] Éviter le trading à {hour}h (hors heures optimales)")
         
         # Analyse du jour
         day = context.get('day_of_week', 0)
         day_names = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         if pnl < -2 and day in [5, 6]:  # Weekend
-            lessons.append(f"❌ {day_names[day]}: volatilité weekend mal gérée")
+            lessons.append(f"[X] {day_names[day]}: volatilité weekend mal gérée")
         
         # Analyse du Fear & Greed
         fg = context.get('fear_greed', 50)
         if fg and pnl < 0:
             if fg > 70 and trade.get('direction') == 'LONG':
-                lessons.append(f"❌ LONG avec Fear&Greed={fg} (greed zone)")
+                lessons.append(f"[X] LONG avec Fear&Greed={fg} (greed zone)")
             elif fg < 30 and trade.get('direction') == 'SHORT':
-                lessons.append(f"❌ SHORT avec Fear&Greed={fg} (fear zone)")
+                lessons.append(f"[X] SHORT avec Fear&Greed={fg} (fear zone)")
         
         # Analyse du score initial
         score = trade.get('initial_score', 0)
         if score < 70 and pnl < 0:
-            lessons.append(f"❌ Score {score} trop bas - augmenter seuil minimum")
+            lessons.append(f"[X] Score {score} trop bas - augmenter seuil minimum")
         
         # Analyse du SL
         if exit_reason == 'SL_HIT':
             duration = trade.get('duration_minutes', 0)
             if duration < 15:
-                lessons.append("❌ SL touché en < 15min - entrée mal timée")
+                lessons.append("[X] SL touché en < 15min - entrée mal timée")
             
             volatility = context.get('volatility')
             if volatility and volatility > 4:
-                lessons.append(f"❌ SL touché avec volatilité={volatility}% - SL trop serré")
+                lessons.append(f"[X] SL touché avec volatilité={volatility}% - SL trop serré")
         
         # Succès patterns
         if pnl > 2:
             if 9 <= hour <= 16:
-                lessons.append(f"✅ Heure optimale {hour}h confirmée")
+                lessons.append(f"[OK] Heure optimale {hour}h confirmée")
             direction = trade.get('direction', '')
             if context.get('btc_trend') == direction.lower():
-                lessons.append("✅ Trade aligné avec tendance BTC")
+                lessons.append("[OK] Trade aligné avec tendance BTC")
         
         return lessons
     
@@ -684,13 +684,13 @@ class TradeJournalAI:
         
         # Décision
         if avoid_count >= 3:
-            return (False, f"⚠️ Conditions défavorables détectées ({avoid_count} patterns d'échec)", 0.7)
+            return (False, f"[WARN] Conditions défavorables détectées ({avoid_count} patterns d'échec)", 0.7)
         elif avoid_count >= 2:
-            return (True, f"⚡ Prudence: {avoid_count} patterns de risque", 0.85)
+            return (True, f"[ZAP] Prudence: {avoid_count} patterns de risque", 0.85)
         elif prefer_count >= 2:
-            return (True, f"✅ Conditions favorables ({prefer_count} patterns de succès)", 1.15)
+            return (True, f"[OK] Conditions favorables ({prefer_count} patterns de succès)", 1.15)
         else:
-            return (True, "➡️ Conditions neutres", 1.0)
+            return (True, "[-->] Conditions neutres", 1.0)
     
     def get_trade_modifier(self, trade_context: Dict) -> float:
         """

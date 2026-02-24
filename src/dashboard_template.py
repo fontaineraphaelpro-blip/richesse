@@ -161,6 +161,26 @@ tr:hover td { background: rgba(37,99,235,0.03); }
 @media (hover: none) and (pointer: coarse) {
     .tab, .btn, th { min-height: 44px; display: flex; align-items: center; justify-content: center; }
 }
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .container { padding: 8px; }
+    .header { flex-direction: column; gap: 8px; padding: 12px; }
+    .header h1 { font-size: 1.2em; }
+    .grid-2col, .grid-2-1 { grid-template-columns: 1fr !important; }
+    .card { padding: 10px; }
+    .card-header { flex-direction: column; gap: 4px; }
+    table { font-size: 0.75em; }
+    th, td { padding: 4px 6px; }
+    .tab-btn { font-size: 0.8em; padding: 6px 10px; }
+    .stat-value { font-size: 1.2em; }
+    .badge { font-size: 0.65em; padding: 2px 6px; }
+}
+@media (max-width: 480px) {
+    .container { padding: 4px; }
+    table { display: block; overflow-x: auto; white-space: nowrap; }
+    .header h1 { font-size: 1em; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
 </style>
 </head>
 <body>

@@ -197,7 +197,7 @@ class PaperTrader:
                 self.wallet['positions'][symbol]['stop_loss'] = entry_price
                 self.wallet['positions'][symbol]['breakeven_active'] = True
                 modified_count += 1
-                print(f"🔒 BREAK-EVEN {symbol}: SL déplacé à ${entry_price:.4f} (gain: +{gain_pct:.1f}%)")
+                print(f"[LOCK] BREAK-EVEN {symbol}: SL déplacé à ${entry_price:.4f} (gain: +{gain_pct:.1f}%)")
         
         if modified_count > 0:
             self.save_wallet()
@@ -345,8 +345,8 @@ class PaperTrader:
         for symbol in positions_to_close:
             current_price = real_prices.get(symbol)
             if current_price:
-                self.close_position(symbol, current_price, f"🚨 {reason}")
-                print(f"🚨 FERMETURE URGENTE {symbol} - {reason}")
+                self.close_position(symbol, current_price, f"[ALERT] {reason}")
+                print(f"[ALERT] FERMETURE URGENTE {symbol} - {reason}")
         
         return len(positions_to_close)
 
@@ -473,6 +473,129 @@ class PaperTrader:
 
         return closed_count
 
+    def check_and_apply_dca(self, real_prices: dict, max_dca: int = 2, dca_threshold_pct: float = -1.5):
+        """
+        DCA automatique: renforce les positions perdantes si la tendance reste valide.
+        - Si PnL < dca_threshold_pct et dca_count < max_dca: ajouter 50% de la position initiale
+        - Recalculer le prix moyen d'entree
+        """
+        dca_count = 0
+        
+        for symbol, pos in list(self.wallet['positions'].items()):
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+            
+            entry_price = pos['entry_price']
+            direction = pos.get('direction', 'LONG')
+            current_dca = pos.get('dca_count', 0)
+            
+            if current_dca >= max_dca:
+                continue
+            
+            if direction == 'LONG':
+                pnl_pct = ((current_price - entry_price) / entry_price) * 100
+            else:
+                pnl_pct = ((entry_price - current_price) / entry_price) * 100
+            
+            if pnl_pct > dca_threshold_pct:
+                continue
+            
+            # DCA: ajouter 50% de la position initiale
+            original_amount = pos['amount_usdt']
+            dca_amount = original_amount * 0.5
+            balance = self.get_usdt_balance()
+            
+            if dca_amount > balance * 0.3 or dca_amount < 5:
+                continue
+            
+            # Recalculer le prix moyen
+            old_qty = pos['quantity']
+            new_qty = dca_amount / current_price
+            total_qty = old_qty + new_qty
+            avg_price = (entry_price * old_qty + current_price * new_qty) / total_qty
+            
+            self.wallet['USDT'] -= dca_amount
+            self.wallet['positions'][symbol]['entry_price'] = avg_price
+            self.wallet['positions'][symbol]['quantity'] = total_qty
+            self.wallet['positions'][symbol]['amount_usdt'] = original_amount + dca_amount
+            self.wallet['positions'][symbol]['dca_count'] = current_dca + 1
+            
+            # Ajuster SL autour du nouveau prix moyen
+            atr_pct = pos.get('atr_pct', 1.5)
+            if direction == 'LONG':
+                self.wallet['positions'][symbol]['stop_loss'] = avg_price * (1 - atr_pct * 1.5 / 100)
+            else:
+                self.wallet['positions'][symbol]['stop_loss'] = avg_price * (1 + atr_pct * 1.5 / 100)
+            
+            dca_count += 1
+            print("DCA #{} {} @ {:.4f} (+{:.2f}$), avg price {:.4f}".format(
+                current_dca + 1, symbol, current_price, dca_amount, avg_price))
+        
+        if dca_count > 0:
+            self.save_wallet()
+        return dca_count
+
+    def check_grid_opportunities(self, real_prices: dict, indicators_dict: dict):
+        """
+        Grid Trading: place des ordres dans un range detecte.
+        Si le marche est en RANGING, achete en bas du range et vend en haut.
+        """
+        grid_trades = 0
+        
+        for symbol, ind in indicators_dict.items():
+            if not ind:
+                continue
+            
+            regime = ind.get('market_regime')
+            if regime != 'RANGING':
+                continue
+            
+            current_price = real_prices.get(symbol)
+            if not current_price:
+                continue
+            
+            # Deja en position sur ce symbole?
+            if symbol in self.wallet.get('positions', {}):
+                continue
+            
+            bb_lower = ind.get('bb_lower')
+            bb_upper = ind.get('bb_upper')
+            bb_percent = ind.get('bb_percent')
+            
+            if bb_lower is None or bb_upper is None or bb_percent is None:
+                continue
+            
+            balance = self.get_usdt_balance()
+            grid_size = min(balance * 0.15, 30)  # 15% du capital, max 30$
+            
+            if grid_size < 10:
+                continue
+            
+            # Achat en bas du range (bb_percent < 0.2)
+            if bb_percent < 0.2:
+                sl = bb_lower * 0.99
+                tp = bb_upper * 0.98
+                if tp > current_price and sl < current_price:
+                    if self.place_buy_order(symbol, grid_size, current_price, sl, tp, entry_trend='GRID_LONG'):
+                        self.wallet['positions'][symbol]['grid_trade'] = True
+                        grid_trades += 1
+                        print("GRID LONG {} @ {:.4f} (range {:.4f}-{:.4f})".format(
+                            symbol, current_price, bb_lower, bb_upper))
+            
+            # Vente en haut du range (bb_percent > 0.8) - uniquement si short possible
+            elif bb_percent > 0.8:
+                sl = bb_upper * 1.01
+                tp = bb_lower * 1.02
+                if tp < current_price and sl > current_price:
+                    if self.place_short_order(symbol, grid_size, current_price, sl, tp, entry_trend='GRID_SHORT'):
+                        self.wallet['positions'][symbol]['grid_trade'] = True
+                        grid_trades += 1
+                        print("GRID SHORT {} @ {:.4f} (range {:.4f}-{:.4f})".format(
+                            symbol, current_price, bb_lower, bb_upper))
+        
+        return grid_trades
+
     # ─────────────────────────────────────────────────────────
     # COOLDOWN APRÈS TRADE
     # ─────────────────────────────────────────────────────────
@@ -520,12 +643,12 @@ class PaperTrader:
     ) -> bool:
         """Exécute un ordre d'ACHAT (position LONG)."""
         if self.wallet['USDT'] < amount_usdt:
-            print(f"❌ Fonds insuffisants pour {symbol} "
+            print(f"[X] Fonds insuffisants pour {symbol} "
                   f"(Requis: {amount_usdt:.2f}, Dispo: {self.wallet['USDT']:.2f})")
             return False
 
         if symbol in self.wallet['positions']:
-            print(f"⚠️ Position déjà ouverte sur {symbol}")
+            print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
         # Slippage simulé (entrée LONG = prix d'achat plus haut)
@@ -564,7 +687,7 @@ class PaperTrader:
         sl_dist_pct = abs((entry_price - stop_loss_price) / entry_price * 100)
         tp_dist_pct = abs((take_profit_price - entry_price) / entry_price * 100)
         position_size = amount_usdt  # Levier désactivé
-        print(f"🛒 ACHAT  {symbol:<12} | ${entry_price:.6f} | "
+        print(f"[BUY] ACHAT  {symbol:<12} | ${entry_price:.6f} | "
               f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
         try:
             from notifier import on_trade_opened
@@ -586,11 +709,11 @@ class PaperTrader:
     ) -> bool:
         """Exécute un ordre de VENTE À DÉCOUVERT (position SHORT)."""
         if self.wallet['USDT'] < amount_usdt:
-            print(f"❌ Fonds insuffisants pour short {symbol}")
+            print(f"[X] Fonds insuffisants pour short {symbol}")
             return False
 
         if symbol in self.wallet['positions']:
-            print(f"⚠️ Position déjà ouverte sur {symbol}")
+            print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
         # Slippage simulé (entrée SHORT = prix de vente plus bas)
@@ -639,7 +762,7 @@ class PaperTrader:
         except Exception:
             pass
         notional = amount_usdt * self.short_leverage
-        print(f"📉 SHORT  {symbol:<12} | ${entry_price:.6f} | "
+        print(f"[DOWN] SHORT  {symbol:<12} | ${entry_price:.6f} | "
               f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | "
               f"levier {int(self.short_leverage)}x | marge ${amount_usdt:.2f} | notional ${notional:.2f}")
         return True
@@ -680,8 +803,8 @@ class PaperTrader:
         del self.wallet['positions'][symbol]
         self.save_wallet()
 
-        status = "✅ GAIN" if pnl_value > 0 else "❌ PERTE"
-        print(f"💰 VENTE {symbol:<12} ({reason}) | {status}: "
+        status = "[OK] GAIN" if pnl_value > 0 else "[X] PERTE"
+        print(f"[MONEY] VENTE {symbol:<12} ({reason}) | {status}: "
               f"${pnl_value:+.2f} ({pnl_percent:+.2f}%)")
 
         trade_data = {
@@ -734,15 +857,15 @@ class PaperTrader:
 
             if direction == 'LONG':
                 if current_price <= stop_loss:
-                    positions_to_close.append((symbol, current_price, "STOP LOSS 🛑"))
+                    positions_to_close.append((symbol, current_price, "STOP LOSS [STOP]"))
                 elif current_price >= take_profit:
-                    positions_to_close.append((symbol, current_price, "TAKE PROFIT 🎯"))
+                    positions_to_close.append((symbol, current_price, "TAKE PROFIT [TARGET]"))
             else:  # SHORT
                 # Pour un short : SL est au-dessus, TP est en dessous
                 if current_price >= stop_loss:
-                    positions_to_close.append((symbol, current_price, "STOP LOSS 🛑"))
+                    positions_to_close.append((symbol, current_price, "STOP LOSS [STOP]"))
                 elif current_price <= take_profit:
-                    positions_to_close.append((symbol, current_price, "TAKE PROFIT 🎯"))
+                    positions_to_close.append((symbol, current_price, "TAKE PROFIT [TARGET]"))
 
         for symbol, price, reason in positions_to_close:
             self.close_position(symbol, price, reason)
@@ -759,7 +882,7 @@ class PaperTrader:
         # Vérifier circuit breaker
         is_cb_active, cb_remaining = self.protector.is_circuit_breaker_active()
         if is_cb_active:
-            print(f"⛔ CIRCUIT BREAKER ACTIF - Trading suspendu ({cb_remaining}s)")
+            print(f"[BLOCK] CIRCUIT BREAKER ACTIF - Trading suspendu ({cb_remaining}s)")
             return
         
         positions_to_close = []
@@ -798,7 +921,7 @@ class PaperTrader:
                     protected_positions.append((symbol, protect_reason))
                     continue
                 else:
-                    positions_to_close.append((symbol, current_price, f"STOP LOSS 🛑 {protect_reason}"))
+                    positions_to_close.append((symbol, current_price, f"STOP LOSS [STOP] {protect_reason}"))
                     self.protector.record_sl_close(symbol)
 
             # Vérifier TP (toujours valide)
@@ -809,20 +932,20 @@ class PaperTrader:
                 is_at_tp = current_price <= take_profit
 
             if is_at_tp:
-                positions_to_close.append((symbol, current_price, "TAKE PROFIT 🎯"))
+                positions_to_close.append((symbol, current_price, "TAKE PROFIT [TARGET]"))
 
         # Fermer les positions à fermer
         for symbol, price, reason in positions_to_close:
             self.close_position(symbol, price, reason)
         # Logger les positions protégées
         for symbol, reason in protected_positions:
-            print(f"🛡️  {symbol} PROTÉGÉ: {reason}")
+            print(f"[SHIELD]  {symbol} PROTÉGÉ: {reason}")
 
     def reset_wallet(self, initial_balance: float = 100):
         """Remet le portefeuille à zéro (utile pour les tests)."""
         self.wallet = {'USDT': 100, 'positions': {}, 'initial_capital': 100}
         self.save_wallet()
-        print(f"🔄 Portefeuille réinitialisé à $100.00")
+        print(f"[REFRESH] Portefeuille réinitialisé à $100.00")
 
     def reverse_position(
         self,
@@ -852,7 +975,7 @@ class PaperTrader:
             True si l'inversion a réussi, False sinon
         """
         if symbol not in self.wallet['positions']:
-            print(f"⚠️ Pas de position existante sur {symbol} à inverser")
+            print(f"[WARN] Pas de position existante sur {symbol} à inverser")
             return False
         
         current_pos = self.wallet['positions'][symbol]
@@ -860,11 +983,11 @@ class PaperTrader:
         
         # Vérifier qu'on inverse vraiment (pas la même direction)
         if current_direction == new_direction:
-            print(f"⚠️ {symbol} déjà en {new_direction}, pas d'inversion nécessaire")
+            print(f"[WARN] {symbol} déjà en {new_direction}, pas d'inversion nécessaire")
             return False
         
         # Fermer la position actuelle
-        self.close_position(symbol, current_price, f"INVERSION → {new_direction} 🔄")
+        self.close_position(symbol, current_price, f"INVERSION → {new_direction} [REFRESH]")
         
         # Ouvrir la nouvelle position dans la direction opposée
         if new_direction == 'LONG':
@@ -888,7 +1011,7 @@ class PaperTrader:
             )
         
         if success:
-            print(f"🔄 INVERSION {symbol}: {current_direction} → {new_direction} @ ${current_price:.6f}")
+            print(f"[REFRESH] INVERSION {symbol}: {current_direction} → {new_direction} @ ${current_price:.6f}")
         
         return success
 

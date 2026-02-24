@@ -1,1 +1,48 @@
-{"USDT": 100, "positions": {}, "initial_capital": 100}
+{
+    "USDT": 61.358312500000004,
+    "positions": {
+        "FLOWUSDT": {
+            "direction": "LONG",
+            "amount_usdt": 15.0,
+            "quantity": 433.18415914839466,
+            "entry_price": 0.034627305,
+            "entry_time": "2026-02-24 15:04",
+            "stop_loss": 0.03425513832947181,
+            "take_profit": 0.03476927316880568,
+            "take_profit_2": null,
+            "entry_trend": "GRID_LONG",
+            "atr_pct": null,
+            "grid_trade": true
+        },
+        "BALUSDT": {
+            "direction": "SHORT",
+            "amount_usdt": 12.75,
+            "quantity": 131.91704435464888,
+            "entry_price": 0.9665165,
+            "entry_time": "2026-02-24 15:04",
+            "stop_loss": 0.9725506021427668,
+            "take_profit": 0.9515361839746317,
+            "take_profit_2": null,
+            "entry_trend": "GRID_SHORT",
+            "leverage": 10.0,
+            "atr_pct": null,
+            "grid_trade": true
+        },
+        "WOOUSDT": {
+            "direction": "LONG",
+            "amount_usdt": 10.827937499999999,
+            "quantity": 712.0083050579973,
+            "entry_price": 0.0152076,
+            "entry_time": "2026-02-24 15:04",
+            "stop_loss": 0.01501513698308356,
+            "take_profit": 0.015330331067250616,
+            "take_profit_2": null,
+            "entry_trend": "GRID_LONG",
+            "atr_pct": null
+        }
+    },
+    "initial_capital": 100,
+    "total_fees_usdt": 0.06375,
+    "daily_start_balance": 100.0,
+    "daily_start_date": "2026-02-24"
+}

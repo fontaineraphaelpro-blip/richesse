@@ -104,7 +104,7 @@ class NewsAnalyzer:
                     return result
                     
         except Exception as e:
-            print(f"⚠️ Erreur Fear & Greed API: {e}")
+            print(f"[WARN] Erreur Fear & Greed API: {e}")
         
         # Valeur par défaut en cas d'erreur
         return {
@@ -205,7 +205,7 @@ class NewsAnalyzer:
                 return news_items
                 
         except Exception as e:
-            print(f"⚠️ Erreur News API: {e}")
+            print(f"[WARN] Erreur News API: {e}")
         
         return []
     

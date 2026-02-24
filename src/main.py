@@ -3,6 +3,10 @@ Script principal: Crypto Swing Trader Bot & Dashboard ULTIME.
 Version: ULTIMATE v2.0 â€” Scanner complet + Bot Swing + Paper Trading + Dashboard Pro
 """
 
+import sys
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import time
 import os
 import math
@@ -477,6 +481,7 @@ def run_scanner():
     trader.check_and_apply_breakeven(real_prices)
     trader.check_and_apply_trailing_stop(real_prices)
     trader.check_and_apply_partial_tp(real_prices)
+    trader.check_and_apply_dca(real_prices, max_dca=2, dca_threshold_pct=-1.5)
     trader.check_time_based_exits(real_prices, max_hold_hours=48)
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
@@ -862,6 +867,16 @@ def run_scanner():
     else:
         add_bot_log("{} opps, best={} score={} — bloqué par score_min/sentiment.".format(
             len(opportunities_list), best['symbol'], best['score']), 'INFO')
+
+    # Grid Trading: opportunites en range si pas assez de signaux trend
+    if len(current_open) < MAX_POSITIONS:
+        try:
+            grid_count = trader.check_grid_opportunities(real_prices, shared_data.get('last_indicators', {}))
+            if grid_count > 0:
+                add_bot_log("{} trade(s) GRID ouverts (marche en range).".format(grid_count), 'TRADE')
+        except Exception:
+            pass
+
     return shared_data['opportunities']
 
 
@@ -1013,54 +1028,68 @@ def dashboard():
 @app.route('/api/data')
 def api_data():
     """API JSON pour le rechargement AJAX du dashboard."""
-    trader = PaperTrader()
-    balance = trader.get_usdt_balance()
-    open_positions = trader.get_open_positions()
-    all_trades = trader.get_trades_history()
-    history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
+    try:
+        trader = PaperTrader()
+        balance = trader.get_usdt_balance()
+        open_positions = trader.get_open_positions()
+        all_trades = trader.get_trades_history()
+        history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
 
-    positions_view = []
-    total_unrealized_pnl = 0
-    for symbol, pos_data in open_positions.items():
-        entry = pos_data['entry_price']
-        current = shared_data['last_prices'].get(symbol, entry)
-        direction = pos_data.get('direction', 'LONG')
-        if direction == 'LONG':
-            pnl_value = (current - entry) * pos_data['quantity']
-            pnl_percent = ((current - entry) / entry) * 100
-        else:
-            pnl_value = (entry - current) * pos_data['quantity']
-            pnl_percent = ((entry - current) / entry) * 100
-        total_unrealized_pnl += pnl_value
-        sl = pos_data.get('stop_loss', entry)
-        tp = pos_data.get('take_profit', entry)
-        if direction == 'LONG':
-            range_total = tp - sl if (tp - sl) != 0 else 1
-            progress = max(0, min(100, ((current - sl) / range_total) * 100))
-        else:
-            range_total = sl - tp if (sl - tp) != 0 else 1
-            progress = max(0, min(100, ((sl - current) / range_total) * 100))
-        positions_view.append({
-            'symbol': symbol, 'direction': direction, 'entry': entry, 'current': current,
-            'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],
-            'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
-            'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
-            'leverage': pos_data.get('leverage', 1),
+        positions_view = []
+        total_unrealized_pnl = 0
+        for symbol, pos_data in open_positions.items():
+            entry = pos_data['entry_price']
+            current = shared_data['last_prices'].get(symbol, entry)
+            direction = pos_data.get('direction', 'LONG')
+            if direction == 'LONG':
+                pnl_value = (current - entry) * pos_data['quantity']
+                pnl_percent = ((current - entry) / entry) * 100
+            else:
+                pnl_value = (entry - current) * pos_data['quantity']
+                pnl_percent = ((entry - current) / entry) * 100
+            total_unrealized_pnl += pnl_value
+            sl = pos_data.get('stop_loss', entry)
+            tp = pos_data.get('take_profit', entry)
+            if direction == 'LONG':
+                range_total = tp - sl if (tp - sl) != 0 else 1
+                progress = max(0, min(100, ((current - sl) / range_total) * 100))
+            else:
+                range_total = sl - tp if (sl - tp) != 0 else 1
+                progress = max(0, min(100, ((sl - current) / range_total) * 100))
+            positions_view.append({
+                'symbol': symbol, 'direction': direction, 'entry': entry, 'current': current,
+                'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],
+                'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
+                'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
+                'leverage': pos_data.get('leverage', 1),
+            })
+
+        # Sanitize opportunities for JSON serialization
+        safe_opps = []
+        for opp in shared_data.get('opportunities', []):
+            safe_opp = {}
+            for k, v in opp.items():
+                if isinstance(v, float) and (v != v):  # NaN check
+                    safe_opp[k] = 0
+                else:
+                    safe_opp[k] = v
+            safe_opps.append(safe_opp)
+
+        return jsonify({
+            'balance': balance,
+            'positions': positions_view,
+            'total_unrealized_pnl': round(total_unrealized_pnl, 2),
+            'history': history[:10],
+            'opportunities': safe_opps,
+            'is_scanning': shared_data['is_scanning'],
+            'last_update': shared_data['last_update'],
+            'scan_count': shared_data['scan_count'],
+            'bot_log': shared_data['bot_log'][:15],
+            'performance': shared_data.get('performance', {}),
+            'market_stats': shared_data.get('market_stats', {}),
         })
-
-    return jsonify({
-        'balance': balance,
-        'positions': positions_view,
-        'total_unrealized_pnl': round(total_unrealized_pnl, 2),
-        'history': history[:10],
-        'opportunities': shared_data['opportunities'],
-        'is_scanning': shared_data['is_scanning'],
-        'last_update': shared_data['last_update'],
-        'scan_count': shared_data['scan_count'],
-        'bot_log': shared_data['bot_log'][:15],
-        'performance': shared_data['performance'],
-        'market_stats': shared_data['market_stats'],
-    })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/export/trades')
@@ -1715,12 +1744,13 @@ def run_loop():
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if __name__ == '__main__':
-    # Thread Scanner (daemon â€” s'arrÃªte avec le programme principal)
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
 
     port = int(os.environ.get('PORT', 8080))
-    add_bot_log(f"Dashboard: http://localhost:{port}", 'INFO')
+    add_bot_log('Dashboard: http://localhost:{}'.format(port), 'INFO')
     app.run(host='0.0.0.0', port=port, debug=False)
-
-

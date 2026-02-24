@@ -130,7 +130,7 @@ def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> 
                 continue
                 
             elif response.status_code == 429:
-                print(f"⚠️ Rate Limit Binance atteint. Pause de 2s...")
+                print(f"[WARN] Rate Limit Binance atteint. Pause de 2s...")
                 time.sleep(2)
                 return None
             
@@ -140,7 +140,7 @@ def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> 
                 return None
                 
             else:
-                print(f"⚠️ Erreur API Binance {symbol}: {response.status_code}")
+                print(f"[WARN] Erreur API Binance {symbol}: {response.status_code}")
                 return None
                 
         except Exception as e:
@@ -148,7 +148,7 @@ def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> 
             continue
 
     # Si on arrive ici, toutes les URLs ont échoué
-    print(f"❌ Échec récupération {symbol} (Toutes API inaccessibles)")
+    print("[X] Echec recuperation {} (Toutes API inaccessibles)".format(symbol))
     return None
 
 
@@ -202,9 +202,11 @@ def get_binance_klines_range(symbol: str, interval: str = '15m', start_time_ms: 
                 if response.status_code == 200:
                     data = response.json()
                     if not data:
+                        current_start = end_time_ms
                         break
                     all_rows.extend(data)
                     if len(data) < chunk_size:
+                        current_start = end_time_ms
                         break
                     current_start = data[-1][0] + 1
                     if max_bars and len(all_rows) >= max_bars:
@@ -276,7 +278,7 @@ def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit
     print("Fetch parallele {} paires...".format(total))
 
     args_list = [(s, interval, limit) for s in symbols]
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(_fetch_one, args): args[0] for args in args_list}
         for future in as_completed(futures):
             try:
@@ -377,23 +379,23 @@ def analyze_multi_timeframe_trend(symbol: str, timeframes: List[str] = None) -> 
     if bullish_count == total:
         consensus = 'Bullish'
         alignment_score = 100
-        recommendation = "✅ FORT: Toutes les timeframes sont haussières"
+        recommendation = "[OK] FORT: Toutes les timeframes sont haussières"
     elif bearish_count == total:
         consensus = 'Bearish'
         alignment_score = 100
-        recommendation = "✅ FORT: Toutes les timeframes sont baissières"
+        recommendation = "[OK] FORT: Toutes les timeframes sont baissières"
     elif bullish_count > bearish_count:
         consensus = 'Bullish'
         alignment_score = int((bullish_count / total) * 100)
-        recommendation = f"⚠️ MODÉRÉ: {bullish_count}/{total} timeframes haussières"
+        recommendation = f"[WARN] MODÉRÉ: {bullish_count}/{total} timeframes haussières"
     elif bearish_count > bullish_count:
         consensus = 'Bearish'
         alignment_score = int((bearish_count / total) * 100)
-        recommendation = f"⚠️ MODÉRÉ: {bearish_count}/{total} timeframes baissières"
+        recommendation = f"[WARN] MODÉRÉ: {bearish_count}/{total} timeframes baissières"
     else:
         consensus = 'Mixed'
         alignment_score = 0
-        recommendation = "❌ CONFLICTUEL: Timeframes en désaccord, attendre"
+        recommendation = "[X] CONFLICTUEL: Timeframes en désaccord, attendre"
     
     return {
         'symbol': symbol,
@@ -478,13 +480,13 @@ def validate_signal_multi_timeframe(symbol: str, signal: str, timeframes: List[s
     is_valid = mtf['consensus'] == expected_consensus and mtf['alignment_score'] >= 66
     
     if mtf['consensus'] == 'Mixed':
-        reason = f"❌ Signal {signal} rejeté: Timeframes en conflit"
+        reason = f"[X] Signal {signal} rejeté: Timeframes en conflit"
     elif mtf['consensus'] != expected_consensus:
-        reason = f"❌ Signal {signal} rejeté: Tendance globale {mtf['consensus']}"
+        reason = f"[X] Signal {signal} rejeté: Tendance globale {mtf['consensus']}"
     elif mtf['alignment_score'] < 66:
-        reason = f"⚠️ Signal {signal} faible: Alignement {mtf['alignment_score']}%"
+        reason = f"[WARN] Signal {signal} faible: Alignement {mtf['alignment_score']}%"
     else:
-        reason = f"✅ Signal {signal} confirmé: {mtf['recommendation']}"
+        reason = f"[OK] Signal {signal} confirmé: {mtf['recommendation']}"
     
     return {
         'is_valid': is_valid,

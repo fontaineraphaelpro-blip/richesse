@@ -81,7 +81,7 @@ class SocialSentimentAnalyzer:
             'DOT': ['polkadot', 'dot', '$dot', '#polkadot'],
         }
         
-        print("📱 Social Sentiment Analyzer initialisé")
+        print("[SOCIAL] Social Sentiment Analyzer initialisé")
     
     def _get_cached(self, key: str) -> Optional[Any]:
         """Récupère données du cache si valide."""
@@ -146,7 +146,7 @@ class SocialSentimentAnalyzer:
                     return result
                     
         except Exception as e:
-            print(f"⚠️ Erreur Fear & Greed: {e}")
+            print(f"[WARN] Erreur Fear & Greed: {e}")
         
         return {
             'value': 50,
@@ -255,7 +255,7 @@ class SocialSentimentAnalyzer:
             return result
             
         except Exception as e:
-            print(f"⚠️ Erreur Reddit: {e}")
+            print(f"[WARN] Erreur Reddit: {e}")
             return {'sentiment_score': 0, 'signal': 'neutral', 'error': str(e)}
     
     def _analyze_text_sentiment(self, text: str) -> float:
@@ -357,7 +357,7 @@ class SocialSentimentAnalyzer:
                 return result
                 
         except Exception as e:
-            print(f"⚠️ Erreur trending: {e}")
+            print(f"[WARN] Erreur trending: {e}")
         
         return {'trending_coins': [], 'count': 0}
     
@@ -433,15 +433,15 @@ class SocialSentimentAnalyzer:
     def _get_social_recommendation(self, social_score: float, fear_greed: int) -> str:
         """Génère une recommandation textuelle."""
         if fear_greed <= 20:
-            return "🟢 EXTREME FEAR: Excellent moment pour accumuler (contrarian)"
+            return "[GREEN] EXTREME FEAR: Excellent moment pour accumuler (contrarian)"
         elif fear_greed <= 35:
-            return "🟢 FEAR: Bon moment pour acheter progressivement"
+            return "[GREEN] FEAR: Bon moment pour acheter progressivement"
         elif fear_greed <= 55:
-            return "⚪ NEUTRAL: Marché équilibré, trader normalement"
+            return "[NEUTRAL] NEUTRAL: Marché équilibré, trader normalement"
         elif fear_greed <= 75:
-            return "🟡 GREED: Prudence recommandée, réduire exposition"
+            return "[YELLOW] GREED: Prudence recommandée, réduire exposition"
         else:
-            return "🔴 EXTREME GREED: Éviter les achats, considérer prises de profits"
+            return "[RED] EXTREME GREED: Éviter les achats, considérer prises de profits"
     
     # ═══════════════════════════════════════════════════════════════
     # ANALYSE COMPLÈTE

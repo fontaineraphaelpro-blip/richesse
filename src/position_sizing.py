@@ -38,7 +38,7 @@ class PositionSizer:
         self.avg_win = 3.5     # % gain moyen estimé
         self.avg_loss = 2.0    # % perte moyenne estimée
         
-        print("💰 Position Sizer initialisé")
+        print("[MONEY] Position Sizer initialisé")
     
     def update_stats(self, is_win: bool, pnl_pct: float):
         """

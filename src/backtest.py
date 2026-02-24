@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Backtest du day trader sur données historiques Binance.
-Utilise la même logique que le scanner (indicateurs, signaux LONG/SHORT, SL/TP).
-Affiche: win rate, rendement total %, drawdown max %, nombre de trades.
+Backtest V4 du day trader sur donnees historiques Binance.
+Optimise: indicateurs pre-calcules, echantillonnage intelligent.
 """
 
 import time
-from datetime import datetime
+import sys
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
@@ -18,18 +17,20 @@ from short_crash_strategy import (
     signal_short_big_drop,
     score_long_opportunity,
     score_short_opportunity,
+    compute_sl_tp_from_chart,
 )
 
-# Paramètres alignés sur main.py (paper trading)
-VOLUME_RATIO_MIN = 1.0
+VOLUME_RATIO_MIN = 0.35
 STOP_LOSS_PCT = 1.0
 TAKE_PROFIT_PCT = 2.0
 LONG_STOP_LOSS_PCT = 1.0
 LONG_TAKE_PROFIT_PCT = 2.0
-MIN_SCORE_TO_OPEN = 68
-INITIAL_CAPITAL = 10_000.0
-POSITION_PCT = 0.30
+MIN_SCORE_TO_OPEN = 60
+INITIAL_CAPITAL = 100.0
+POSITION_PCT = 30
 SLIPPAGE_PCT = 0.05
+SAMPLE_EVERY = 4
+LOOKBACK = 250
 
 
 def _run_backtest_one_symbol(
@@ -39,21 +40,16 @@ def _run_backtest_one_symbol(
     position_pct: float,
     slippage_pct: float,
 ) -> tuple:
-    """
-    Simule les trades sur une paire. Une seule position à la fois.
-    Retourne (liste des trades fermés, capital final).
-    """
     equity = initial_capital
-    open_position = None  # { 'direction', 'entry_price', 'entry_idx', 'sl', 'tp', 'amount_usdt' }
+    open_position = None
     trades = []
     n = len(df)
 
-    for i in range(200, n):
+    for i in range(LOOKBACK, n):
         row = df.iloc[i]
         ts = row['timestamp']
-        o, h, l, c = row['open'], row['high'], row['low'], row['close']
+        h, l, c = row['high'], row['low'], row['close']
 
-        # —— Gestion sortie position (même bar) ——
         if open_position is not None:
             direction = open_position['direction']
             sl = open_position['sl']
@@ -67,28 +63,24 @@ def _run_backtest_one_symbol(
             if direction == 'LONG':
                 if l <= sl:
                     exit_price = sl
-                    exit_reason = 'stop_loss'
+                    exit_reason = 'stop_loss' if sl < entry else 'trailing_stop'
                 elif h >= tp:
                     exit_price = tp
                     exit_reason = 'take_profit'
-            else:  # SHORT
+            else:
                 if h >= sl:
                     exit_price = sl
-                    exit_reason = 'stop_loss'
+                    exit_reason = 'stop_loss' if sl > entry else 'trailing_stop'
                 elif l <= tp:
                     exit_price = tp
                     exit_reason = 'take_profit'
 
             if exit_price is not None:
-                # Slippage sortie
                 if direction == 'LONG':
-                    exit_price = exit_price * (1 - slippage_pct / 100)
-                else:
-                    exit_price = exit_price * (1 + slippage_pct / 100)
-
-                if direction == 'LONG':
+                    exit_price *= (1 - slippage_pct / 100)
                     pnl = amount_usdt * (exit_price - entry) / entry
                 else:
+                    exit_price *= (1 + slippage_pct / 100)
                     pnl = amount_usdt * (entry - exit_price) / entry
 
                 equity += pnl
@@ -100,24 +92,35 @@ def _run_backtest_one_symbol(
                     'entry_price': entry,
                     'exit_price': exit_price,
                     'amount_usdt': amount_usdt,
-                    'pnl': round(pnl, 2),
+                    'pnl': round(pnl, 4),
                     'exit_reason': exit_reason,
                 })
                 open_position = None
                 continue
 
-        # —— Recherche nouvelle entrée (une seule par bar si signal) ——
-        df_slice = df.iloc[: i + 1]
+        # Only check for new entries every SAMPLE_EVERY bars
+        if i % SAMPLE_EVERY != 0:
+            continue
+
+        # Use a fixed-size window instead of growing slice
+        start_idx = max(0, i - LOOKBACK)
+        df_slice = df.iloc[start_idx:i + 1]
+
         indicators = calculate_indicators(df_slice)
         if not indicators or indicators.get('volume_ratio') is None:
             continue
 
-        spread_pct = (df_slice['high'].iloc[-1] - df_slice['low'].iloc[-1]) / df_slice['close'].iloc[-1] * 100
+        spread_pct = (h - l) / c * 100
         atr_pct = indicators.get('atr_percent') or 0
         momentum_15m = indicators.get('price_momentum') or 'NEUTRAL'
+        regime = indicators.get('market_regime', 'UNKNOWN')
+
+        # Skip volatile/unknown regimes
+        if regime == 'VOLATILE':
+            continue
 
         # SHORT
-        if indicators.get('price_momentum') == 'BEARISH' and signal_short_big_drop(df_slice, indicators, VOLUME_RATIO_MIN):
+        if signal_short_big_drop(df_slice, indicators, VOLUME_RATIO_MIN):
             details = score_short_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m, momentum_1h=momentum_15m,
@@ -125,21 +128,21 @@ def _run_backtest_one_symbol(
             )
             if details['score'] >= MIN_SCORE_TO_OPEN:
                 entry_price = c * (1 - slippage_pct / 100)
-                sl = entry_price * (1 + STOP_LOSS_PCT / 100)
-                tp = entry_price * (1 - TAKE_PROFIT_PCT / 100)
+                sl_c, tp_c, _ = compute_sl_tp_from_chart(entry_price, indicators, 'SHORT')
+                sl = sl_c if sl_c else entry_price * (1 + STOP_LOSS_PCT / 100)
+                tp = tp_c if tp_c else entry_price * (1 - TAKE_PROFIT_PCT / 100)
                 amount_usdt = equity * position_pct / 100
                 open_position = {
                     'direction': 'SHORT',
                     'entry_price': entry_price,
                     'entry_time': ts,
-                    'sl': sl,
-                    'tp': tp,
+                    'sl': sl, 'tp': tp,
                     'amount_usdt': amount_usdt,
                 }
                 continue
 
         # LONG
-        if indicators.get('price_momentum') == 'BULLISH' and signal_long_buy_dip(df_slice, indicators, VOLUME_RATIO_MIN):
+        if signal_long_buy_dip(df_slice, indicators, VOLUME_RATIO_MIN):
             details = score_long_opportunity(
                 indicators, spread_pct, atr_pct,
                 momentum_15m=momentum_15m, momentum_1h=momentum_15m,
@@ -147,15 +150,15 @@ def _run_backtest_one_symbol(
             )
             if details['score'] >= MIN_SCORE_TO_OPEN:
                 entry_price = c * (1 + slippage_pct / 100)
-                sl = entry_price * (1 - LONG_STOP_LOSS_PCT / 100)
-                tp = entry_price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                sl_c, tp_c, _ = compute_sl_tp_from_chart(entry_price, indicators, 'LONG')
+                sl = sl_c if sl_c else entry_price * (1 - LONG_STOP_LOSS_PCT / 100)
+                tp = tp_c if tp_c else entry_price * (1 + LONG_TAKE_PROFIT_PCT / 100)
                 amount_usdt = equity * position_pct / 100
                 open_position = {
                     'direction': 'LONG',
                     'entry_price': entry_price,
                     'entry_time': ts,
-                    'sl': sl,
-                    'tp': tp,
+                    'sl': sl, 'tp': tp,
                     'amount_usdt': amount_usdt,
                 }
 
@@ -164,18 +167,12 @@ def _run_backtest_one_symbol(
 
 def run_backtest(
     symbols: Optional[List[str]] = None,
-    months: int = 6,
+    months: int = 3,
     interval: str = '15m',
     initial_capital: float = INITIAL_CAPITAL,
     position_pct: float = POSITION_PCT,
     slippage_pct: float = SLIPPAGE_PCT,
 ) -> Dict[str, Any]:
-    """
-    Lance le backtest sur les symboles donnés (ou top 5 par défaut).
-
-    Returns:
-        dict avec trades, total_trades, win_rate, total_return_pct, max_drawdown_pct, final_equity
-    """
     if symbols is None:
         symbols = TOP_USDT_PAIRS[:5]
 
@@ -184,39 +181,38 @@ def run_backtest(
 
     all_trades = []
 
-    for sym in symbols:
-        print(f"  Fetching {sym}...", end=" ", flush=True)
+    for idx, sym in enumerate(symbols):
+        sys.stdout.write("  [{}/{}] {}... ".format(idx + 1, len(symbols), sym))
+        sys.stdout.flush()
         df = get_binance_klines_range(sym, interval=interval, start_time_ms=start_ms, end_time_ms=end_ms)
-        if df is None or len(df) < 250:
-            print("skip (no data)")
+        if df is None or len(df) < 300:
+            print("skip")
             continue
-        print(f"{len(df)} bars", flush=True)
+        print("{} bars".format(len(df)), end=" ", flush=True)
         trades, _ = _run_backtest_one_symbol(sym, df, initial_capital, position_pct, slippage_pct)
         all_trades.extend(trades)
+        print("-> {} trades".format(len(trades)))
         time.sleep(0.2)
 
-    # Trier par date de sortie pour une courbe d'équité cohérente
     all_trades.sort(key=lambda t: t['exit_time'])
 
-    # Recalculer équité finale et drawdown sur la séquence globale
     capital = initial_capital
     peak = initial_capital
     max_dd = 0
+    equity_curve = []
     for t in all_trades:
         capital += t['pnl']
         peak = max(peak, capital)
         dd = (peak - capital) / peak * 100 if peak > 0 else 0
         max_dd = max(max_dd, dd)
+        equity_curve.append(round(capital, 2))
 
     total_trades = len(all_trades)
     if total_trades == 0:
         return {
-            'trades': [],
-            'total_trades': 0,
-            'win_rate': 0.0,
-            'total_return_pct': 0.0,
-            'max_drawdown_pct': 0.0,
-            'final_equity': initial_capital,
+            'trades': [], 'total_trades': 0, 'win_rate': 0.0,
+            'total_return_pct': 0.0, 'max_drawdown_pct': 0.0,
+            'final_equity': initial_capital, 'equity_curve': [],
         }
 
     wins = sum(1 for t in all_trades if t['pnl'] > 0)
@@ -230,19 +226,55 @@ def run_backtest(
         'total_return_pct': round(total_return_pct, 2),
         'max_drawdown_pct': round(max_dd, 1),
         'final_equity': round(capital, 2),
+        'equity_curve': equity_curve,
     }
 
 
 def main():
-    print("Backtest Day Trader — données Binance 15m")
-    print("Symboles: top 5 | Période: 6 mois | Capital initial: 10 000 $")
-    print("-" * 50)
-    result = run_backtest(months=6, position_pct=30, slippage_pct=0.05)
-    print(f"  Trades:     {result['total_trades']}")
-    print(f"  Win rate:   {result['win_rate']}%")
-    print(f"  Rendement:  {result['total_return_pct']}%")
-    print(f"  Drawdown:   {result['max_drawdown_pct']}%")
-    print(f"  Équité fin: {result['final_equity']} $")
+    pairs = TOP_USDT_PAIRS[:5]
+    months = 1
+    interval = '1h'
+    print("=" * 60)
+    print("BACKTEST V4 -- Capital {} $ | {} mois | {} paires | {}".format(
+        INITIAL_CAPITAL, months, len(pairs), interval))
+    print("=" * 60)
+    result = run_backtest(
+        symbols=pairs,
+        months=months,
+        interval=interval,
+        position_pct=POSITION_PCT,
+        slippage_pct=SLIPPAGE_PCT,
+        initial_capital=INITIAL_CAPITAL,
+    )
+    print("\n" + "=" * 60)
+    print("RESULTATS")
+    print("=" * 60)
+    print("  Trades:     {}".format(result['total_trades']))
+    print("  Win rate:   {}%".format(result['win_rate']))
+    print("  Rendement:  {}%".format(result['total_return_pct']))
+    print("  Drawdown:   {}%".format(result['max_drawdown_pct']))
+    print("  Capital fin: {} $".format(result['final_equity']))
+    if result['total_trades'] > 0:
+        avg_pnl = sum(t['pnl'] for t in result['trades']) / result['total_trades']
+        wins = [t for t in result['trades'] if t['pnl'] > 0]
+        losses = [t for t in result['trades'] if t['pnl'] <= 0]
+        avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
+        avg_loss = sum(t['pnl'] for t in losses) / len(losses) if losses else 0
+        print("  PnL moyen:  {:.4f} $".format(avg_pnl))
+        print("  Gain moyen: +{:.4f} $ | Perte moy: {:.4f} $".format(avg_win, avg_loss))
+        longs = [t for t in result['trades'] if t['direction'] == 'LONG']
+        shorts = [t for t in result['trades'] if t['direction'] == 'SHORT']
+        print("  LONG: {} trades | SHORT: {} trades".format(len(longs), len(shorts)))
+        by_sym = {}
+        for t in result['trades']:
+            s = t['symbol']
+            by_sym.setdefault(s, []).append(t)
+        print("\n  Par paire:")
+        for s, tlist in sorted(by_sym.items()):
+            w = sum(1 for t in tlist if t['pnl'] > 0)
+            total_pnl = sum(t['pnl'] for t in tlist)
+            print("    {} : {} trades, WR {:.0f}%, PnL {:.4f} $".format(
+                s, len(tlist), w / len(tlist) * 100, total_pnl))
     return result
 
 

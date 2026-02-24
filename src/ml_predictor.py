@@ -74,7 +74,7 @@ class MLPredictor:
         # Historique des prédictions pour apprentissage
         self.predictions_log = []
         
-        print("🤖 ML Predictor initialisé")
+        print("[ML] Predictor initialise")
     
     def load_model(self) -> Dict:
         """Charge les poids du modèle depuis le fichier."""
@@ -82,10 +82,10 @@ class MLPredictor:
             try:
                 with open(self.model_file, 'r') as f:
                     data = json.load(f)
-                    print(f"📊 Modèle ML chargé ({len(data.get('weights', {}))} features)")
+                    print("[ML] Modele charge ({} features)".format(len(data.get('weights', {}))))
                     return data.get('weights', self.default_weights.copy())
             except Exception as e:
-                print(f"⚠️ Erreur chargement modèle ML: {e}")
+                print("[ML] Erreur chargement modele: {}".format(e))
         return self.default_weights.copy()
     
     def save_model(self):
@@ -444,7 +444,7 @@ class MLPredictor:
         Apprend quelles features sont les plus prédictives.
         """
         if not os.path.exists(self.history_file):
-            print("⚠️ Pas de données d'entraînement disponibles")
+            print("[ML] Pas de donnees d'entrainement disponibles")
             return
         
         with open(self.history_file, 'r') as f:
@@ -454,7 +454,7 @@ class MLPredictor:
         completed = [h for h in history if h.get('actual_result') in ['WIN', 'LOSS']]
         
         if len(completed) < 20:
-            print(f"⚠️ Pas assez de données ({len(completed)}/20 min)")
+            print("[ML] Pas assez de donnees ({}/20 min)".format(len(completed)))
             return
         
         # Analyser quelles features sont corrélées au succès
@@ -491,11 +491,11 @@ class MLPredictor:
                         current = self.weights[weight_key]
                         new_weight = max(-30, min(30, current + adjustment))
                         self.weights[weight_key] = new_weight
-                        print(f"📊 {weight_key}: {current:.1f} → {new_weight:.1f} "
-                              f"(win rate: {win_rate*100:.0f}%)")
+                        print("{}: {:.1f} -> {:.1f} (WR: {:.0f}%)".format(
+                              weight_key, current, new_weight, win_rate * 100))
         
         self.save_model()
-        print(f"✅ Modèle mis à jour avec {len(completed)} trades")
+        print("[ML] Modele mis a jour avec {} trades".format(len(completed)))
     
     def get_model_stats(self) -> Dict:
         """Retourne les statistiques du modèle."""

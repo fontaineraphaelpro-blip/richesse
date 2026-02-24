@@ -41,7 +41,7 @@ class OnChainAnalyzer:
         self.whale_threshold_usd = 1_000_000  # Transactions > 1M USD
         self.exchange_flow_alert_pct = 5      # Alerte si flow > 5%
         
-        print("🐋 On-Chain Analyzer initialisé")
+        print("[WHALE] On-Chain Analyzer initialisé")
     
     def _get_cached(self, key: str) -> Optional[Dict]:
         """Récupère une donnée du cache si valide."""
@@ -332,23 +332,23 @@ class OnChainAnalyzer:
         if estimated_nupl > 0.75:
             phase = 'euphoria'
             signal = 'bearish'
-            description = '🔴 Euphorie - Top probable'
+            description = '[RED] Euphorie - Top probable'
         elif estimated_nupl > 0.5:
             phase = 'greed'
             signal = 'caution'
-            description = '🟠 Greed - Prudence conseillée'
+            description = '[ORANGE] Greed - Prudence conseillée'
         elif estimated_nupl > 0.25:
             phase = 'optimism'
             signal = 'neutral'
-            description = '🟡 Optimisme - Marché sain'
+            description = '[YELLOW] Optimisme - Marché sain'
         elif estimated_nupl > 0:
             phase = 'hope'
             signal = 'bullish'
-            description = '🟢 Espoir - Opportunités'
+            description = '[GREEN] Espoir - Opportunités'
         else:
             phase = 'capitulation'
             signal = 'strong_bullish'
-            description = '💚 Capitulation - Fond probable'
+            description = '[GREEN+] Capitulation - Fond probable'
         
         return {
             'nupl_estimated': round(estimated_nupl, 3),
@@ -382,19 +382,19 @@ class OnChainAnalyzer:
         
         if mvrv > 3.5:
             signal = 'strong_bearish'
-            description = '🔴 Très surévalué - Risque élevé'
+            description = '[RED] Très surévalué - Risque élevé'
         elif mvrv > 2.5:
             signal = 'bearish'
-            description = '🟠 Surévalué - Prudence'
+            description = '[ORANGE] Surévalué - Prudence'
         elif mvrv > 1.5:
             signal = 'neutral'
-            description = '🟡 Valeur juste'
+            description = '[YELLOW] Valeur juste'
         elif mvrv > 1.0:
             signal = 'bullish'
-            description = '🟢 Légèrement sous-évalué'
+            description = '[GREEN] Légèrement sous-évalué'
         else:
             signal = 'strong_bullish'
-            description = '💚 Sous-évalué - Opportunité'
+            description = '[GREEN+] Sous-évalué - Opportunité'
         
         return {
             'mvrv_estimated': round(mvrv, 2),

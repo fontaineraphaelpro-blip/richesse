@@ -84,7 +84,7 @@ class MacroEventsAnalyzer:
         # Calendrier statique 2026 (événements récurrents)
         self.static_calendar_2026 = self._build_2026_calendar()
         
-        print("📅 Macro Events Analyzer initialisé")
+        print("[CALENDAR] Macro Events Analyzer initialisé")
     
     def _get_cached(self, key: str) -> Optional[Any]:
         """Récupère une donnée du cache si valide."""
@@ -295,8 +295,8 @@ class MacroEventsAnalyzer:
                         'time': event_time,
                         'impact': event['impact'],
                         'minutes_until': minutes_until,
-                        'reason': f"⚠️ {event['name']} dans {minutes_until}min" if minutes_until > 0 
-                                  else f"⚠️ {event['name']} en cours/récent",
+                        'reason': f"[WARN] {event['name']} dans {minutes_until}min" if minutes_until > 0 
+                                  else f"[WARN] {event['name']} en cours/récent",
                         'pause_hours': event.get('pause_hours', 2)
                     }
             
@@ -310,7 +310,7 @@ class MacroEventsAnalyzer:
                         'time': event_time,
                         'impact': event['impact'],
                         'minutes_until': minutes_until,
-                        'reason': f"📊 {event['name']} proche ({minutes_until}min)"
+                        'reason': f"[CHART] {event['name']} proche ({minutes_until}min)"
                     }
         
         # Vérifier événements demain (alerte préventive)
@@ -325,7 +325,7 @@ class MacroEventsAnalyzer:
                 'time': critical_tomorrow[0].get('time'),
                 'impact': 'CRITICAL',
                 'days_until': 1,
-                'reason': f"⚠️ DEMAIN: {critical_tomorrow[0]['name']}"
+                'reason': f"[WARN] DEMAIN: {critical_tomorrow[0]['name']}"
             }
         
         return {
@@ -391,7 +391,7 @@ class MacroEventsAnalyzer:
                             'impact': 'HIGH' if any(w in title for w in ['sec', 'ban', 'etf']) else 'MEDIUM'
                         })
         except Exception as e:
-            print(f"⚠️ Erreur fetch regulation news: {e}")
+            print(f"[WARN] Erreur fetch regulation news: {e}")
         
         self._set_cache(cache_key, news)
         return news
