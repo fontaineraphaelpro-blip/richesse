@@ -52,7 +52,7 @@ TAKE_PROFIT_PCT  = 2.0
 LONG_STOP_LOSS_PCT   = 1.0
 LONG_TAKE_PROFIT_PCT = 2.0
 SCAN_INTERVAL    = 900
-MAX_POSITIONS    = 1
+MAX_POSITIONS    = 5
 MAX_CONSECUTIVE_LOSSES = 3   # Risk mgt: stop après 3 pertes pour protéger le capital
 COOLDOWN_MINUTES = 10        # Risk mgt: éviter le sur-trading
 SPREAD_MAX_PCT   = 0.50      # Qualité des bougies (assoupli pour avoir des candidats)
@@ -392,8 +392,8 @@ def run_scanner():
     trader.check_and_apply_partial_tp(real_prices)
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
-    if open_pos:
-        add_bot_log("Déjà une position ouverte, attente fermeture/cooldown.", 'INFO')
+    if len(open_pos) >= MAX_POSITIONS:
+        add_bot_log("{}/{} positions ouvertes — max atteint.".format(len(open_pos), MAX_POSITIONS), 'INFO')
         return []
 
     total_capital = trader.get_total_capital(real_prices)
@@ -595,15 +595,21 @@ def run_scanner():
         scan_num, n_pairs, n_volume_ok, n_spread_ok, n_long_signal, n_short_signal, len(opportunities_list)), 'INFO')
 
     # —— 4. Ouvrir la meilleure opportunité ——
-    if opportunities_list and not trader.get_open_positions():
+    current_open = trader.get_open_positions()
+    already_open_symbols = set(current_open.keys())
+    if opportunities_list and len(current_open) < MAX_POSITIONS:
         # Chercher: 1) signal strict avec bon R:R, 2) sinon meilleur potentiel avec score+R:R OK
         best = None
         for opp in opportunities_list:
+            if opp['symbol'] in already_open_symbols:
+                continue
             if opp.get('is_signal', False) and (opp.get('rr_ratio') or 0) >= MIN_RISK_REWARD:
                 best = opp
                 break
         if best is None:
             for opp in opportunities_list:
+                if opp['symbol'] in already_open_symbols:
+                    continue
                 if (opp.get('rr_ratio') or 0) >= MIN_RISK_REWARD and opp.get('score', 0) >= MIN_SCORE_TO_OPEN:
                     best = opp
                     add_bot_log("Pas de signal strict — ouverture sur meilleur potentiel {} (score {}).".format(opp['symbol'], opp['score']), 'INFO')
