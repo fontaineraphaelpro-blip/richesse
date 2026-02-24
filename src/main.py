@@ -52,19 +52,19 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
-# === MODE RENTABLE ~30%/mois: sizing conservateur, R:R 1.5:1, WR 55-60% ===
-STOP_LOSS_PCT    = 1.2        # SL serre = pertes controlees
-TAKE_PROFIT_PCT  = 1.8        # TP 1.5x SL (R:R 1.5:1, ~30%/mois a 55% WR)
+# === CIBLE 30%/mois: levier 10x, sizing agressif, R:R 1.5:1 ===
+STOP_LOSS_PCT    = 1.2        # SL controle
+TAKE_PROFIT_PCT  = 1.8        # TP 1.5x SL (R:R 1.5:1)
 LONG_STOP_LOSS_PCT   = 1.2
 LONG_TAKE_PROFIT_PCT = 1.8
 SCAN_INTERVAL    = 300
-SCAN_INTERVAL_SESSION = 120   # 2 min en session
+SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
-MAX_POSITIONS    = 2           # 2 positions max = diversification
-MAX_CONSECUTIVE_LOSSES = 2     # Kill switch apres 2 pertes
-COOLDOWN_MINUTES = 15          # 15 min entre trades
-SPREAD_MAX_PCT   = 0.10       # Spread raisonnable
-VOLUME_RATIO_MIN = 1.3        # Volume >= 130%
+MAX_POSITIONS    = 2           # 2 positions max
+MAX_CONSECUTIVE_LOSSES = 2
+COOLDOWN_MINUTES = 10          # 10 min entre trades
+SPREAD_MAX_PCT   = 0.10
+VOLUME_RATIO_MIN = 1.3
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
 TREND_15M_MUST_BEARISH = True
@@ -77,16 +77,16 @@ TREND_1H_LONG_ALLOW_NEUTRAL = True
 TREND_4H_ENABLED = True
 TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
-POSITION_PCT_BALANCE   = 0.25   # Max 25% du capital par position (rentable + preserve)
+POSITION_PCT_BALANCE   = 0.35   # 35% par position (levier 10x, equilibre risque/rendement)
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
 SESSION_BONUS_UTC_END = 22
-SESSION_BONUS_PTS = 2
-RISK_PCT_CAPITAL       = 0.02   # 2% risk par trade (Kelly-friendly)
-RISK_PCT_SMALL_ACCOUNT = 0.025  # 2.5% pour petit compte
+SESSION_BONUS_PTS = 3
+RISK_PCT_CAPITAL       = 0.06   # 6% risk par trade (agressif)
+RISK_PCT_SMALL_ACCOUNT = 0.06
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
-MAX_DAILY_DRAWDOWN_PCT = 8.0    # Pause si -8% dans la journee
+MAX_DAILY_DRAWDOWN_PCT = 15.0   # Tolerance 15% (levier 10x)
 
 MIN_SCORE_TO_OPEN = 78          # Score 78+ = bons setups (equilibre qualite/quantite)
 SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
@@ -95,8 +95,8 @@ FEAR_GREED_MAX_TO_LONG  = 78
 
 # Risk management: utiliser Kelly pour adapter la taille au win rate (max gains long terme)
 KELLY_RISK_ENABLED = True
-KELLY_RISK_MIN_PCT = 0.01      # Minimum 1%
-KELLY_RISK_MAX_PCT = 0.04      # Maximum 4% (quarter Kelly)
+KELLY_RISK_MIN_PCT = 0.02      # Minimum 2%
+KELLY_RISK_MAX_PCT = 0.08      # Maximum 8% (levier 10x)
 
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
@@ -788,7 +788,7 @@ def run_scanner():
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
 
-    MAX_PORTFOLIO_EXPOSURE = 0.60  # Max 60% du capital deploye (2 pos x 25%)
+    MAX_PORTFOLIO_EXPOSURE = 0.75  # Max 75% deploye (2 pos x 35%)
     deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
     available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
     if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
@@ -1787,7 +1787,7 @@ def _get_scan_interval():
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("MODE RENTABLE ~30%/mois: Score>={} | R:R>={} | 25% pos | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
+    add_bot_log("CIBLE 30%/mois | Lev 10x | Score>={} | R:R>={} | 45% pos | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:

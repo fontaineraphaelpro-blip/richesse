@@ -33,8 +33,8 @@ class PaperTrader:
             self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
-        self.breakeven_trigger_pct = 0.5   # Break-even rapide a +0.5% (lock profits tot)
-        self.max_drawdown_pct = 12.0      # Pause si drawdown > 12%
+        self.breakeven_trigger_pct = 0.5   # Break-even a +0.5%
+        self.max_drawdown_pct = 15.0      # Tolerance 15% (levier 10x)
         self.initial_capital = initial_balance
         
         # Trailing Stop — proteger les gains

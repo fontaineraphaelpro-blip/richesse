@@ -17,28 +17,30 @@ from short_crash_strategy import (
     signal_short_big_drop,
     score_long_opportunity,
     score_short_opportunity,
+    compute_sl_tp_from_chart,
 )
 
 # === PARAMS OPTIMISES POUR BACKTEST RENTABLE ===
 VOLUME_RATIO_MIN = 1.5
-STOP_LOSS_PCT = 0.95        # SL serre
-TAKE_PROFIT_PCT = 1.0       # R:R 1.1:1
-LONG_STOP_LOSS_PCT = 0.95
-LONG_TAKE_PROFIT_PCT = 1.0
-MIN_SCORE_TO_OPEN = 76      # Equilibre qualite/quantite
-MIN_ADX = 25                # Tendance confirmee
+# Fallback si compute_sl_tp_from_chart retourne None (SL/TP = chart ATR)
+STOP_LOSS_PCT = 1.2
+TAKE_PROFIT_PCT = 1.8
+LONG_STOP_LOSS_PCT = 1.2
+LONG_TAKE_PROFIT_PCT = 1.8
+MIN_SCORE_TO_OPEN = 76
+MIN_ADX = 25
 INITIAL_CAPITAL = 100.0
-POSITION_PCT = 20
+POSITION_PCT = 30            # 30% par position (levier 10x)
 SLIPPAGE_PCT = 0.05
 SAMPLE_EVERY = 4
 LOOKBACK = 250
 REQUIRE_TRENDING = True
-LEVERAGE = 4                 # 4x = equilibre rentabilite/risque
+LEVERAGE = 10                # Levier 10x (comme live)
 MAX_POSITIONS = 1
-BREAKEVEN_TRIGGER_PCT = 0.3   # Breakeven ultra rapide
-TRAILING_ACTIVATION_PCT = 0.4
-TRAILING_DISTANCE_PCT = 0.2
-MAX_HOLD_BARS = 20          # 20h max
+BREAKEVEN_TRIGGER_PCT = 0.35  # Breakeven ultra rapide
+TRAILING_ACTIVATION_PCT = 1.0
+TRAILING_DISTANCE_PCT = 0.5
+MAX_HOLD_BARS = 24
 
 
 def _load_data(
@@ -224,8 +226,9 @@ def run_backtest(
                 )
                 if details['score'] >= MIN_SCORE_TO_OPEN:
                     entry_price = current_price * (1 - slippage_pct / 100)
-                    sl = entry_price * (1 + STOP_LOSS_PCT / 100)
-                    tp = entry_price * (1 - TAKE_PROFIT_PCT / 100)
+                    sl_c, tp_c, _ = compute_sl_tp_from_chart(entry_price, indicators, 'SHORT')
+                    sl = sl_c if sl_c else entry_price * (1 + STOP_LOSS_PCT / 100)
+                    tp = tp_c if tp_c else entry_price * (1 - TAKE_PROFIT_PCT / 100)
                     rr = abs(tp - entry_price) / abs(sl - entry_price) if sl != entry_price else 1.2
                     opportunities.append({
                         'symbol': sym, 'direction': 'SHORT', 'score': details['score'],
@@ -241,8 +244,9 @@ def run_backtest(
                 )
                 if details['score'] >= MIN_SCORE_TO_OPEN:
                     entry_price = current_price * (1 + slippage_pct / 100)
-                    sl = entry_price * (1 - LONG_STOP_LOSS_PCT / 100)
-                    tp = entry_price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                    sl_c, tp_c, _ = compute_sl_tp_from_chart(entry_price, indicators, 'LONG')
+                    sl = sl_c if sl_c else entry_price * (1 - LONG_STOP_LOSS_PCT / 100)
+                    tp = tp_c if tp_c else entry_price * (1 + LONG_TAKE_PROFIT_PCT / 100)
                     rr = abs(tp - entry_price) / abs(entry_price - sl) if sl != entry_price else 1.2
                     opportunities.append({
                         'symbol': sym, 'direction': 'LONG', 'score': details['score'],
