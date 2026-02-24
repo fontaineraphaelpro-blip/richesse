@@ -374,26 +374,27 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Opportunités SHORT</h2>
+        <h2>Opportunités (LONG + SHORT)</h2>
         <span style="font-size:0.85rem;color:var(--text3)">{{ opportunities|length }} signaux</span>
     </div>
     {% if opportunities %}
     <div class="table-scroll">
         <table>
             <thead><tr>
-                <th>#</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
+                <th>#</th><th>Sens</th><th>Paire</th><th>Score</th><th>RSI</th><th>Vol</th><th>15m</th><th>1h</th>
                 <th>Prix</th><th>SL</th><th>TP</th><th>R:R</th><th>Spread%</th><th>ATR%</th>
             </tr></thead>
             <tbody>
             {% for opp in opportunities[:20] %}
             <tr>
                 <td style="font-weight:700;color:var(--text3)">{{ loop.index }}</td>
+                <td><span class="badge {% if opp.entry_signal == 'LONG' %}b-green{% else %}b-red{% endif %}">{{ opp.entry_signal|default('SHORT') }}</span></td>
                 <td style="font-weight:700;color:var(--blue)">{{ opp.symbol|default(opp.pair) }}</td>
                 <td style="font-weight:700;color:{% if opp.score >= 80 %}var(--green){% elif opp.score >= 60 %}var(--yellow){% else %}var(--text2){% endif %}">{{ opp.score|default(0) }} pts</td>
                 <td>{{ opp.rsi|default('-') }}</td>
                 <td>{{ opp.volume_ratio|default('-') }}x</td>
-                <td><span class="badge {% if opp.momentum_15m == 'BEARISH' %}b-red{% else %}b-yellow{% endif %}">{{ opp.momentum_15m|default('-') }}</span></td>
-                <td><span class="badge {% if opp.momentum_1h == 'BEARISH' %}b-red{% else %}b-yellow{% endif %}">{{ opp.momentum_1h|default('-') }}</span></td>
+                <td><span class="badge {% if opp.momentum_15m == 'BEARISH' %}b-red{% elif opp.momentum_15m == 'BULLISH' %}b-green{% else %}b-yellow{% endif %}">{{ opp.momentum_15m|default('-') }}</span></td>
+                <td><span class="badge {% if opp.momentum_1h == 'BEARISH' %}b-red{% elif opp.momentum_1h == 'BULLISH' %}b-green{% else %}b-yellow{% endif %}">{{ opp.momentum_1h|default('-') }}</span></td>
                 <td>${{ "%.4f"|format(opp.price|default(0)) }}</td>
                 <td style="font-size:0.85em;color:var(--red)">${{ "%.4f"|format(opp.stop_loss|default(0)) }}</td>
                 <td style="font-size:0.85em;color:var(--green)">${{ "%.4f"|format(opp.take_profit|default(0)) }}</td>
@@ -405,7 +406,7 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             </tbody>
         </table>
     </div>
-    <div style="padding:10px 20px;border-top:1px solid var(--border);font-size:0.8rem;color:var(--text3)">Le bot ouvre un SHORT sur la 1re opportunité (score ≥ {{ min_score_to_open|default(75) }} pts) si aucune position.</div>
+    <div style="padding:10px 20px;border-top:1px solid var(--border);font-size:0.8rem;color:var(--text3)">Le bot ouvre la meilleure opportunité (LONG ou SHORT, score ≥ {{ min_score_to_open|default(75) }} pts) si aucune position.</div>
     {% else %}
     <div class="empty">Aucune opportunité. Prochain scan {{ scan_interval_display|default('15 min') }}.</div>
     {% endif %}
