@@ -150,6 +150,94 @@ def get_binance_klines(symbol: str, interval: str = '15m', limit: int = 200) -> 
     return None
 
 
+def get_binance_klines_range(symbol: str, interval: str = '15m', start_time_ms: Optional[int] = None,
+                             end_time_ms: Optional[int] = None, max_bars: Optional[int] = None) -> Optional[pd.DataFrame]:
+    """
+    Récupère les bougies sur une plage de temps (pour backtest).
+    Boucle par chunks de 1000 (limite API Binance) jusqu'à end_time ou max_bars.
+    
+    Args:
+        symbol: Paire (ex: BTCUSDT)
+        interval: 15m, 1h, 4h, etc.
+        start_time_ms: Début en millisecondes (epoch). Si None = il y a 6 mois.
+        end_time_ms: Fin en millisecondes. Si None = maintenant.
+        max_bars: Nombre max de bougies à récupérer (ex: 10000).
+    
+    Returns:
+        DataFrame OHLCV trié par timestamp croissant, ou None.
+    """
+    import time as _time
+    base_urls = [
+        "https://api.binance.com/api/v3/klines",
+        "https://api.binance.us/api/v3/klines"
+    ]
+    valid_intervals = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']
+    if interval not in valid_intervals:
+        interval = '15m'
+
+    now_ms = int(_time.time() * 1000)
+    if end_time_ms is None:
+        end_time_ms = now_ms
+    if start_time_ms is None:
+        # ~6 mois en 15m ≈ 17 500 bougies
+        start_time_ms = end_time_ms - (180 * 24 * 60 * 60 * 1000)
+
+    all_rows = []
+    current_start = start_time_ms
+    chunk_size = 1000
+
+    while current_start < end_time_ms:
+        params = {
+            'symbol': symbol.upper(),
+            'interval': interval,
+            'startTime': current_start,
+            'endTime': end_time_ms,
+            'limit': chunk_size
+        }
+        for base_url in base_urls:
+            try:
+                response = requests.get(base_url, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if not data:
+                        break
+                    all_rows.extend(data)
+                    if len(data) < chunk_size:
+                        break
+                    current_start = data[-1][0] + 1
+                    if max_bars and len(all_rows) >= max_bars:
+                        all_rows = all_rows[:max_bars]
+                        current_start = end_time_ms
+                    _time.sleep(0.12)
+                    break
+                elif response.status_code == 451:
+                    continue
+                elif response.status_code == 429:
+                    _time.sleep(2)
+                    continue
+                else:
+                    continue
+            except Exception:
+                continue
+        else:
+            break
+
+    if not all_rows:
+        return None
+
+    df = pd.DataFrame(all_rows, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'trades',
+        'taker_buy_base', 'taker_buy_quote', 'ignore'
+    ])
+    df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+    for col in ['open', 'high', 'low', 'close', 'volume']:
+        df[col] = df[col].astype(float)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+    return df
+
+
 def fetch_klines(symbol: str, interval: str = '15m', limit: int = 200) -> Tuple[Optional[pd.DataFrame], Optional[float]]:
     """
     Récupère les données et le prix actuel pour une paire.

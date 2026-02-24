@@ -8,7 +8,7 @@ import os
 import threading
 import json
 from datetime import datetime
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, Response
 
 # Import des modules internes (seulement ceux utilisés par le flux principal + API dashboard)
 # Retirés (jamais utilisés dans main): validate_signal_multi_timeframe, find_swing_low, find_resistance,
@@ -64,7 +64,16 @@ TREND_1H_ALLOW_NEUTRAL = True
 TREND_15M_LONG_BULLISH = True
 TREND_1H_LONG_BULLISH  = True
 TREND_1H_LONG_ALLOW_NEUTRAL = True
-POSITION_PCT_BALANCE   = 0.30   # Risk mgt: max 30% du capital dans une seule position
+# Confirmation 4h (optionnel — meilleure qualité)
+TREND_4H_ENABLED = True
+TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
+TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
+POSITION_PCT_BALANCE   = 0.30
+# Bonus score en session US/EU (forte volatilité) 14h-22h UTC
+SESSION_BONUS_ENABLED = True
+SESSION_BONUS_UTC_START = 14
+SESSION_BONUS_UTC_END = 22
+SESSION_BONUS_PTS = 2   # Risk mgt: max 30% du capital dans une seule position
 RISK_PCT_CAPITAL       = 0.02   # 2% par trade (optimal croissance long terme)
 RISK_PCT_SMALL_ACCOUNT = 0.02   # 2% aussi pour petit compte
 SMALL_ACCOUNT_THRESHOLD = 200
@@ -378,6 +387,9 @@ def run_scanner():
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
     trader = PaperTrader()
+    # Risk management: d'abord mettre à jour SL (breakeven, trailing), puis vérifier SL/TP
+    trader.check_and_apply_breakeven(real_prices)
+    trader.check_and_apply_trailing_stop(real_prices)
     trader.check_positions(real_prices)
     open_pos = trader.get_open_positions()
     if open_pos:
@@ -409,6 +421,10 @@ def run_scanner():
     n_long_signal = 0
     n_no_indicators = 0
 
+    utc_hour = datetime.utcnow().hour
+    in_session = SESSION_BONUS_ENABLED and (SESSION_BONUS_UTC_START <= utc_hour < SESSION_BONUS_UTC_END)
+    session_bonus = SESSION_BONUS_PTS if in_session else 0
+
     for symbol, df in data.items():
         indicators = calculate_indicators(df)
         shared_data['last_indicators'][symbol] = indicators
@@ -427,16 +443,23 @@ def run_scanner():
         if atr_pct > VOLATILITY_MAX:
             continue
 
-        # Récupérer tendances 15m et 1h une fois par paire (pour LONG et SHORT)
+        # Récupérer tendances 15m, 1h et optionnellement 4h
         momentum_15m = None
         momentum_1h = None
-        tf_data = fetch_multi_timeframe(symbol, ['15m', '1h'])
+        momentum_4h = None
+        timeframes = ['15m', '1h']
+        if TREND_4H_ENABLED:
+            timeframes.append('4h')
+        tf_data = fetch_multi_timeframe(symbol, timeframes)
         if tf_data.get('15m') is not None:
             tf_ind = calculate_indicators(tf_data['15m'])
             momentum_15m = tf_ind.get('price_momentum') if tf_ind else None
         if tf_data.get('1h') is not None:
             tf_ind_1h = calculate_indicators(tf_data['1h'])
             momentum_1h = tf_ind_1h.get('price_momentum') if tf_ind_1h else None
+        if TREND_4H_ENABLED and tf_data.get('4h') is not None:
+            tf_ind_4h = calculate_indicators(tf_data['4h'])
+            momentum_4h = tf_ind_4h.get('price_momentum') if tf_ind_4h else None
 
         price = indicators.get('current_price')
         if not price or price <= 0:
@@ -450,7 +473,8 @@ def run_scanner():
         ok_15m_short = (momentum_15m == 'BEARISH') if TREND_15M_MUST_BEARISH else True
         allowed_1h = ('BEARISH', 'NEUTRAL') if TREND_1H_ALLOW_NEUTRAL else ('BEARISH',)
         ok_1h_short = (momentum_1h in allowed_1h) if TREND_1H_MUST_BEARISH else True
-        if ok_15m_short and ok_1h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
+        ok_4h_short = (momentum_4h is None or momentum_4h in ('BEARISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
+        if ok_15m_short and ok_1h_short and ok_4h_short and signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
             n_short_signal += 1
             stop_loss = price * (1 + STOP_LOSS_PCT / 100)
             take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
@@ -462,7 +486,7 @@ def run_scanner():
             short_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
-                'entry_signal': 'SHORT', 'score': details['score'],
+                'entry_signal': 'SHORT', 'score': details['score'] + session_bonus,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': details['rr_ratio'],
@@ -472,7 +496,8 @@ def run_scanner():
         # —— LONG ——
         ok_15m_long = (momentum_15m in ('BULLISH', 'NEUTRAL')) if TREND_15M_LONG_BULLISH else True
         ok_1h_long = (momentum_1h in ('BULLISH', 'NEUTRAL')) if TREND_1H_LONG_BULLISH else True
-        if ok_15m_long and ok_1h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN):
+        ok_4h_long = (momentum_4h is None or momentum_4h in ('BULLISH', 'NEUTRAL')) if TREND_4H_ENABLED else True
+        if ok_15m_long and ok_1h_long and ok_4h_long and signal_long_buy_dip(df, indicators, VOLUME_RATIO_MIN):
             n_long_signal += 1
             stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
             take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
@@ -484,7 +509,7 @@ def run_scanner():
             long_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
-                'entry_signal': 'LONG', 'score': details['score'],
+                'entry_signal': 'LONG', 'score': details['score'] + session_bonus,
                 'rsi': details['rsi'], 'volume_ratio': details['volume_ratio'],
                 'momentum_15m': details['momentum_15m'], 'momentum_1h': details['momentum_1h'],
                 'spread_pct': details['spread_pct'], 'atr_pct': details['atr_pct'], 'rr_ratio': details['rr_ratio'],
@@ -788,6 +813,23 @@ def api_data():
         'performance': shared_data['performance'],
         'market_stats': shared_data['market_stats'],
     })
+
+
+@app.route('/api/export/trades')
+def export_trades_csv():
+    """Exporte l'historique des trades en CSV (téléchargement)."""
+    import csv
+    import io
+    trader = PaperTrader()
+    history = trader.get_trades_history()
+    output = io.StringIO()
+    keys = ['time', 'type', 'symbol', 'direction', 'entry_price', 'price', 'amount', 'pnl', 'pnl_percent', 'reason']
+    writer = csv.DictWriter(output, fieldnames=keys, extrasaction='ignore')
+    writer.writeheader()
+    for t in history:
+        row = {k: t.get(k, '') for k in keys}
+        writer.writerow(row)
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': 'attachment; filename=trades_export.csv'})
 
 
 @app.route('/api/close/<symbol>', methods=['POST'])

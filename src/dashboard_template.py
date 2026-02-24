@@ -374,7 +374,15 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Opportunités (LONG + SHORT)</h2>
+        <h2>Courbe d'équité</h2>
+        <span style="font-size:0.85rem;color:var(--text3)">PnL cumulé par trade</span>
+    </div>
+    <div class="chart-container">
+        <canvas id="equityChart"></canvas>
+    </div>
+</div>
+
+<div class="card">
         <span style="font-size:0.85rem;color:var(--text3)">{{ opportunities|length }} signaux</span>
     </div>
     {% if opportunities %}
@@ -620,6 +628,36 @@ function closePos(symbol) {
             .catch(err => alert('Erreur reseau: ' + err));
     }
 }
+
+(function() {
+    var chartData = {{ chart_data|safe }};
+    var el = document.getElementById('equityChart');
+    if (el && chartData && chartData.equity) {
+        new Chart(el, {
+            type: 'line',
+            data: {
+                labels: chartData.equity.labels,
+                datasets: [{
+                    label: 'Equite ($)',
+                    data: chartData.equity.data,
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88,166,255,0.12)',
+                    fill: true,
+                    tension: 0.25
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8b949e', maxTicksLimit: 14 } },
+                    y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8b949e' } }
+                }
+            }
+        });
+    }
+})();
 </script>
 </body>
 </html>

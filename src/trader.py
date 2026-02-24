@@ -25,6 +25,12 @@ class PaperTrader:
         self.long_leverage = 1.0   # Levier désactivé (positions long)
         # Frais simulés 0.05% par côté (open/close)
         self.fee_pct = 0.0005
+        # Slippage simulé en paper (0.05% par défaut, ex: SLIPPAGE_PCT=0.1 pour 0.1%)
+        _slippage = os.environ.get('SLIPPAGE_PCT', '0.05').strip()
+        try:
+            self.slippage_pct = float(_slippage) / 100.0
+        except ValueError:
+            self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 1.0   # Activer break-even à +1% de gain
@@ -480,15 +486,16 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        quantity = amount_usdt / current_price
-        # Levier désactivé : quantité inchangée
+        # Slippage simulé (entrée LONG = prix d'achat plus haut)
+        entry_price = current_price * (1 + self.slippage_pct)
+        quantity = amount_usdt / entry_price
 
         self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'LONG',
             'amount_usdt': amount_usdt,
             'quantity':    quantity,
-            'entry_price': current_price,
+            'entry_price': entry_price,
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
@@ -501,7 +508,7 @@ class PaperTrader:
             'type':        'ACHAT',
             'symbol':      symbol,
             'direction':   'LONG',
-            'price':       current_price,
+            'price':       entry_price,
             'amount':      amount_usdt,
             'quantity':    quantity,
             'stop_loss':   stop_loss_price,
@@ -511,11 +518,16 @@ class PaperTrader:
             'pnl_percent': 0,
         })
 
-        sl_dist_pct = abs((current_price - stop_loss_price) / current_price * 100)
-        tp_dist_pct = abs((take_profit_price - current_price) / current_price * 100)
+        sl_dist_pct = abs((entry_price - stop_loss_price) / entry_price * 100)
+        tp_dist_pct = abs((take_profit_price - entry_price) / entry_price * 100)
         position_size = amount_usdt  # Levier désactivé
-        print(f"🛒 ACHAT  {symbol:<12} | ${current_price:.6f} | "
+        print(f"🛒 ACHAT  {symbol:<12} | ${entry_price:.6f} | "
               f"SL:-{sl_dist_pct:.2f}% | TP:+{tp_dist_pct:.2f}% | Taille position:${position_size:.2f} (levier désactivé, marge ${amount_usdt:.2f})")
+        try:
+            from notifier import on_trade_opened
+            on_trade_opened('LONG', symbol, entry_price, amount_usdt, stop_loss_price, take_profit_price)
+        except Exception:
+            pass
         return True
 
     def place_short_order(
@@ -536,9 +548,10 @@ class PaperTrader:
             print(f"⚠️ Position déjà ouverte sur {symbol}")
             return False
 
-        # Marge = amount_usdt, notional = marge × levier, quantité = notional / prix
+        # Slippage simulé (entrée SHORT = prix de vente plus bas)
+        entry_price = current_price * (1 - self.slippage_pct)
         lev = self.short_leverage
-        quantity = (amount_usdt * lev) / current_price
+        quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
         fee_open = notional * self.fee_pct
         total_lock = amount_usdt + fee_open
@@ -551,7 +564,7 @@ class PaperTrader:
             'direction':   'SHORT',
             'amount_usdt': amount_usdt,
             'quantity':    quantity,
-            'entry_price': current_price,
+            'entry_price': entry_price,
             'entry_time':  datetime.now().strftime('%Y-%m-%d %H:%M'),
             'stop_loss':   stop_loss_price,
             'take_profit': take_profit_price,
@@ -564,7 +577,7 @@ class PaperTrader:
             'type':        'SHORT',
             'symbol':      symbol,
             'direction':   'SHORT',
-            'price':       current_price,
+            'price':       entry_price,
             'amount':      amount_usdt,
             'quantity':    quantity,
             'stop_loss':   stop_loss_price,
@@ -573,9 +586,13 @@ class PaperTrader:
             'pnl':         0,
             'pnl_percent': 0,
         })
-
+        try:
+            from notifier import on_trade_opened
+            on_trade_opened('SHORT', symbol, entry_price, amount_usdt, stop_loss_price, take_profit_price)
+        except Exception:
+            pass
         notional = amount_usdt * self.short_leverage
-        print(f"📉 SHORT  {symbol:<12} | ${current_price:.6f} | "
+        print(f"📉 SHORT  {symbol:<12} | ${entry_price:.6f} | "
               f"SL:${stop_loss_price:.6f} | TP:${take_profit_price:.6f} | "
               f"levier {int(self.short_leverage)}x | marge ${amount_usdt:.2f} | notional ${notional:.2f}")
         return True
@@ -591,16 +608,22 @@ class PaperTrader:
         entry_amount = pos['amount_usdt']
         entry_price  = pos['entry_price']
 
+        # Slippage simulé sur la sortie
+        if direction == 'LONG':
+            exit_price = current_price * (1 - self.slippage_pct)  # On vend plus bas
+        else:
+            exit_price = current_price * (1 + self.slippage_pct)  # On rachète plus haut (SHORT)
+
         # Calcul PnL selon direction
         if direction == 'LONG':
-            exit_value  = quantity * current_price
+            exit_value  = quantity * exit_price
             pnl_value   = exit_value - entry_amount
-            pnl_percent = ((current_price - entry_price) / entry_price) * 100
+            pnl_percent = ((exit_price - entry_price) / entry_price) * 100
             returned    = exit_value
         else:  # SHORT
-            pnl_value   = (entry_price - current_price) * quantity
-            pnl_percent = ((entry_price - current_price) / entry_price) * 100
-            exit_notional = quantity * current_price
+            pnl_value   = (entry_price - exit_price) * quantity
+            pnl_percent = ((entry_price - exit_price) / entry_price) * 100
+            exit_notional = quantity * exit_price
             fee_close = exit_notional * self.fee_pct
             self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_close
             returned = entry_amount + pnl_value - fee_close
@@ -614,11 +637,11 @@ class PaperTrader:
         print(f"💰 VENTE {symbol:<12} ({reason}) | {status}: "
               f"${pnl_value:+.2f} ({pnl_percent:+.2f}%)")
 
-        self.log_trade({
+        trade_data = {
             'type':        f'VENTE ({reason})',
             'symbol':      symbol,
             'direction':   direction,
-            'price':       current_price,
+            'price':       exit_price,
             'amount':      round(abs(returned), 2),
             'quantity':    quantity,
             'entry_price': entry_price,
@@ -626,7 +649,13 @@ class PaperTrader:
             'pnl':         round(pnl_value, 2),
             'pnl_percent': round(pnl_percent, 2),
             'reason':      reason,
-        })
+        }
+        self.log_trade(trade_data)
+        try:
+            from notifier import on_trade_closed
+            on_trade_closed(trade_data)
+        except Exception:
+            pass
         # Mise à jour du position sizer (Kelly) pour adapter la taille des prochains trades
         try:
             from position_sizing import update_position_stats
