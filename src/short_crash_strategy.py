@@ -16,14 +16,14 @@ RSI_SHORT_MIN = 35         # Pas de short sous 35 (trop oversold)
 RSI_SHORT_MAX = 50         # Short zone: 35-50
 LONG_PRICE_ABOVE_EMA_PCT = 0.05   # Prix juste au-dessus EMA21 (entry optimale)
 
-# SL/TP pour 60%+ WR: SL serre, TP proche
-ATR_SL_MULTIPLIER = 1.5    # SL = ATR * 1.5 (controle, pas trop large)
-ATR_TP_MULTIPLIER = 2.5    # TP = ATR * 2.5 (gros target = gros gains all-in)
+# SL/TP equilibres: R:R 1.5:1, WR 55-60%, rentable ~30%/mois
+ATR_SL_MULTIPLIER = 1.2    # SL = ATR * 1.2 (pertes controlees)
+ATR_TP_MULTIPLIER = 1.5    # TP = ATR * 1.5 (R:R 1.25:1)
 ATR_TP_RR_RATIO = None
-ATR_SL_MIN_PCT = 0.5       # SL min 0.5%
-ATR_SL_MAX_PCT = 1.5       # SL max 1.5% (cap strict, avec 10x = -15% max sur marge)
-ATR_TP_MIN_PCT = 1.0       # TP min 1.0% (avec 10x = +10% minimum sur marge)
-ATR_TP_MAX_PCT = 4.0       # TP max 4.0% (avec 10x = +40% sur marge si le move est la)
+ATR_SL_MIN_PCT = 0.4       # SL min 0.4%
+ATR_SL_MAX_PCT = 1.2       # SL max 1.2%
+ATR_TP_MIN_PCT = 0.5       # TP min 0.5%
+ATR_TP_MAX_PCT = 2.0       # TP max 2.0%
 
 
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):

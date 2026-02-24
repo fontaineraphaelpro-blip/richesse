@@ -33,18 +33,18 @@ class PaperTrader:
             self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
-        self.breakeven_trigger_pct = 0.8   # Break-even a +0.8% (avec 10x = +8% sur marge)
-        self.max_drawdown_pct = 25.0       # Tolerance 25% drawdown (mode all-in)
+        self.breakeven_trigger_pct = 0.5   # Break-even rapide a +0.5% (lock profits tot)
+        self.max_drawdown_pct = 12.0      # Pause si drawdown > 12%
         self.initial_capital = initial_balance
         
-        # Trailing Stop — laisser courir les gros moves
+        # Trailing Stop — proteger les gains
         self.trailing_stop_enabled = True
-        self.trailing_stop_activation_pct = 2.0  # Trailing a +2.0% prix (avec 10x = +20% marge)
-        self.trailing_stop_distance_pct = 0.5     # Distance 0.5% (serre pour locker les gains)
+        self.trailing_stop_activation_pct = 1.2  # Trailing a +1.2% prix
+        self.trailing_stop_distance_pct = 0.6     # Distance 0.6%
         
-        # Partial TP DESACTIVE — all-in = laisser courir au TP complet
-        self.partial_tp_enabled = False
-        self.partial_tp_ratio = 0.0
+        # Partial TP: 50% a TP1, reste vers TP2
+        self.partial_tp_enabled = True
+        self.partial_tp_ratio = 0.5
         
         # Cooldown après trade
         self.cooldown_enabled = True

@@ -52,18 +52,19 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
-STOP_LOSS_PCT    = 1.5        # SL controle — avec 10x = -15% max sur marge
-TAKE_PROFIT_PCT  = 3.0        # TP large — avec 10x = +30% sur marge
-LONG_STOP_LOSS_PCT   = 1.5
-LONG_TAKE_PROFIT_PCT = 3.0
+# === MODE RENTABLE ~30%/mois: sizing conservateur, R:R 1.5:1, WR 55-60% ===
+STOP_LOSS_PCT    = 1.2        # SL serre = pertes controlees
+TAKE_PROFIT_PCT  = 1.8        # TP 1.5x SL (R:R 1.5:1, ~30%/mois a 55% WR)
+LONG_STOP_LOSS_PCT   = 1.2
+LONG_TAKE_PROFIT_PCT = 1.8
 SCAN_INTERVAL    = 300
-SCAN_INTERVAL_SESSION = 90    # 1.5 min pendant session (trouver LE trade)
+SCAN_INTERVAL_SESSION = 120   # 2 min en session
 SCAN_INTERVAL_NIGHT = 900
-MAX_POSITIONS    = 1           # 1 SEULE position = ALL-IN
-MAX_CONSECUTIVE_LOSSES = 3     # 3 pertes avant kill switch (tolerance plus haute)
-COOLDOWN_MINUTES = 30          # 30 min cooldown = attendre LE meilleur setup
-SPREAD_MAX_PCT   = 0.08       # Spread ultra serre
-VOLUME_RATIO_MIN = 1.8        # Volume >= 180% (gros momentum seulement)
+MAX_POSITIONS    = 2           # 2 positions max = diversification
+MAX_CONSECUTIVE_LOSSES = 2     # Kill switch apres 2 pertes
+COOLDOWN_MINUTES = 15          # 15 min entre trades
+SPREAD_MAX_PCT   = 0.10       # Spread raisonnable
+VOLUME_RATIO_MIN = 1.3        # Volume >= 130%
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
 TREND_15M_MUST_BEARISH = True
@@ -76,27 +77,26 @@ TREND_1H_LONG_ALLOW_NEUTRAL = True
 TREND_4H_ENABLED = True
 TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
-POSITION_PCT_BALANCE   = 0.90   # ALL-IN: 90% du capital par position
-# Bonus score en session US/EU (forte volatilité) 14h-22h UTC
+POSITION_PCT_BALANCE   = 0.25   # Max 25% du capital par position (rentable + preserve)
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
 SESSION_BONUS_UTC_END = 22
-SESSION_BONUS_PTS = 3
-RISK_PCT_CAPITAL       = 0.10   # 10% risk par trade = sizing agressif pour all-in
-RISK_PCT_SMALL_ACCOUNT = 0.10   # Meme chose petit compte
+SESSION_BONUS_PTS = 2
+RISK_PCT_CAPITAL       = 0.02   # 2% risk par trade (Kelly-friendly)
+RISK_PCT_SMALL_ACCOUNT = 0.025  # 2.5% pour petit compte
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
-MAX_DAILY_DRAWDOWN_PCT = 25.0   # Tolerance drawdown 25% (all-in = gros swings)
+MAX_DAILY_DRAWDOWN_PCT = 8.0    # Pause si -8% dans la journee
 
-MIN_SCORE_TO_OPEN = 85          # Score 85+ = top 1% des setups SEULEMENT (all-in = besoin du meilleur)
+MIN_SCORE_TO_OPEN = 78          # Score 78+ = bons setups (equilibre qualite/quantite)
 SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
 
 # Risk management: utiliser Kelly pour adapter la taille au win rate (max gains long terme)
 KELLY_RISK_ENABLED = True
-KELLY_RISK_MIN_PCT = 0.03      # Minimum 3% (agressif)
-KELLY_RISK_MAX_PCT = 0.12      # Maximum 12% (all-in Kelly)
+KELLY_RISK_MIN_PCT = 0.01      # Minimum 1%
+KELLY_RISK_MAX_PCT = 0.04      # Maximum 4% (quarter Kelly)
 
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
@@ -108,8 +108,8 @@ SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '300'))  # 5 min par défaut
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Take Profit Partiel (Scaling Out)
-PARTIAL_TP_ENABLED = False   # DESACTIVE: all-in = laisser courir au TP complet
-PARTIAL_TP_RATIO = 0.0       # Prendre 0% Ã  TP1
+PARTIAL_TP_ENABLED = True    # Prendre 50% a TP1, laisser courir le reste
+PARTIAL_TP_RATIO = 0.5       # Prendre 0% Ã  TP1
 # Le reste court vers TP2
 
 # Filtrage Volume
@@ -124,12 +124,11 @@ AVOID_WEEKENDS = True
 
 # Score Dynamique selon Marche
 DYNAMIC_SCORE_ENABLED = True
-SCORE_BULLISH_MARKET = 80    # Strict en bull (all-in = best only)
-SCORE_BEARISH_MARKET = 90    # Ultra strict en bear
-SCORE_NEUTRAL_MARKET = 85    # Tres strict en neutre
+SCORE_BULLISH_MARKET = 75    # Bull: setups corrects
+SCORE_BEARISH_MARKET = 82    # Bear: plus strict
+SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
-# Risk/Reward Minimum (1.2:1 = TP facile a atteindre = 60%+ WR)
-MIN_RISK_REWARD = 1.5        # R:R 1.5:1 = gros gains par trade (all-in doit payer)
+MIN_RISK_REWARD = 1.2        # R:R 1.2:1 minimum (profitable a 55% WR)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True
@@ -789,7 +788,7 @@ def run_scanner():
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
 
-    MAX_PORTFOLIO_EXPOSURE = 0.95  # ALL-IN: 95% du capital deployable
+    MAX_PORTFOLIO_EXPOSURE = 0.60  # Max 60% du capital deploye (2 pos x 25%)
     deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
     available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
     if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
@@ -1788,7 +1787,7 @@ def _get_scan_interval():
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("MODE SNIPER: Score>={} | R:R>={} | ADX>=20 | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
+    add_bot_log("MODE RENTABLE ~30%/mois: Score>={} | R:R>={} | 25% pos | Session {}h-{}h UTC | Max {} pos".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, TRADING_START_HOUR, TRADING_END_HOUR, MAX_POSITIONS), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:
