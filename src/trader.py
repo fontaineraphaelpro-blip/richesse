@@ -627,6 +627,12 @@ class PaperTrader:
             'pnl_percent': round(pnl_percent, 2),
             'reason':      reason,
         })
+        # Mise à jour du position sizer (Kelly) pour adapter la taille des prochains trades
+        try:
+            from position_sizing import update_position_stats
+            update_position_stats(is_win=(pnl_value > 0), pnl_pct=pnl_percent)
+        except Exception:
+            pass
         return True
 
     # ─────────────────────────────────────────────────────────

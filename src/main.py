@@ -38,6 +38,14 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 
 # STRATÉGIE SHORT UNIQUEMENT — Grandes baisses
 # ─────────────────────────────────────────────────────────
+# Comportement type trader discipliné (sans les défauts humains):
+# • Une seule position à la fois, pas de sur-exposition
+# • Stop loss systématique, pas de "laisser courir la perte"
+# • Pas de revenge trading: pause après 3 pertes consécutives
+# • Cooldown après chaque trade pour éviter le sur-trading
+# • Score minimum adapté au régime de marché (plus strict en baissier, plus permissif en haussier)
+# • Faire fructifier un petit capital: risque légèrement plus élevé sur petit solde, compound des gains
+# ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'   # Bougies 15 min (détecter les vraies baisses)
 CANDLE_LIMIT     = 200     # Au moins 200 bougies (requis par indicators.py pour SMA200/calculs)
 # Pour un SHORT: SL au-dessus du prix, TP en dessous
@@ -53,8 +61,11 @@ VOLUME_RATIO_MIN = 1.0     # Volume au moins égal à la moyenne
 VOLATILITY_MAX   = 5.0     # ATR % max
 TREND_15M_MUST_BEARISH = True  # Ne short que si tendance 15m baissière
 TREND_1H_MUST_BEARISH = True   # Confirmation tendance 1h baissière (meilleure qualité)
+TREND_1H_ALLOW_NEUTRAL = True  # Accepter aussi 1h NEUTRAL (plus d'opportunités, qualité un peu moindre)
 POSITION_PCT_BALANCE   = 0.20  # Plafond marge = 20% du solde
 RISK_PCT_CAPITAL       = 0.01  # Risque max 1% du capital par trade (sizing)
+RISK_PCT_SMALL_ACCOUNT = 0.015 # 1.5% quand solde < 200 USDT pour faire fructifier un petit capital
+SMALL_ACCOUNT_THRESHOLD = 200  # En dessous de ce solde, utiliser RISK_PCT_SMALL_ACCOUNT
 MIN_POSITION_USDT      = 10    # Minimum 10 USDT par short
 MAX_DAILY_DRAWDOWN_PCT = 5.0   # Pause si perte du jour >= 5%
 
@@ -380,16 +391,29 @@ def run_scanner():
 
     # —— 3. Parcourir les paires, collecter toutes les opportunités SHORT et les scorer ——
     opportunities_list = []
+    n_pairs = len(data)
+    n_volume_ok = 0
+    n_spread_ok = 0
+    n_15m_bearish = 0
+    n_1h_bearish = 0
+    n_signal_ok = 0
+    n_cooldown = 0
+    n_no_indicators = 0
 
     for symbol, df in data.items():
         indicators = calculate_indicators(df)
         shared_data['last_indicators'][symbol] = indicators
 
-        if indicators.get('volume_ratio') is None or indicators.get('volume_ratio', 0) < VOLUME_RATIO_MIN:
+        if not indicators or indicators.get('volume_ratio') is None:
+            n_no_indicators += 1
             continue
+        if indicators.get('volume_ratio', 0) < VOLUME_RATIO_MIN:
+            continue
+        n_volume_ok += 1
         spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['close'].iloc[-1] * 100
         if spread_pct > SPREAD_MAX_PCT:
             continue
+        n_spread_ok += 1
         atr_pct = indicators.get('atr_percent') or 0
         if atr_pct > VOLATILITY_MAX:
             continue
@@ -405,6 +429,7 @@ def run_scanner():
                     continue
             else:
                 continue
+            n_15m_bearish += 1
         else:
             momentum_15m = 'BEARISH'
 
@@ -415,18 +440,22 @@ def run_scanner():
             if tf_data_1h.get('1h') is not None:
                 tf_ind_1h = calculate_indicators(tf_data_1h['1h'])
                 momentum_1h = tf_ind_1h.get('price_momentum')
-                if momentum_1h != 'BEARISH':
+                allowed_1h = ('BEARISH', 'NEUTRAL') if TREND_1H_ALLOW_NEUTRAL else ('BEARISH',)
+                if momentum_1h not in allowed_1h:
                     continue
             else:
                 continue
+            n_1h_bearish += 1
         else:
             momentum_1h = 'BEARISH'
 
         if not signal_short_big_drop(df, indicators, VOLUME_RATIO_MIN):
             continue
+        n_signal_ok += 1
 
         in_cooldown, cooldown_rem = trader.is_in_cooldown(symbol)
         if in_cooldown:
+            n_cooldown += 1
             continue
 
         price = indicators.get('current_price')
@@ -457,15 +486,35 @@ def run_scanner():
             'rr_ratio': details['rr_ratio'],
         })
 
-    # Trier par score décroissant et stocker pour le dashboard
+    # Résumé du scan pour le journal (compréhensible)
+    if n_no_indicators > 0:
+        add_bot_log("{} paire(s) sans indicateurs (donnees insuffisantes ou < 200 bougies).".format(n_no_indicators), 'INFO')
+    summary = "Scan #{}: {} paires | volume OK: {} | spread OK: {} | 15m bearish: {} | 1h bearish: {} | signal SHORT: {} | cooldown: {} -> {} opportunite(s).".format(
+        scan_num, n_pairs, n_volume_ok, n_spread_ok, n_15m_bearish, n_1h_bearish, n_signal_ok, n_cooldown, len(opportunities_list))
+    add_bot_log(summary, 'INFO')
     opportunities_list.sort(key=lambda x: x['score'], reverse=True)
     shared_data['opportunities'] = opportunities_list[:30]
 
     # —— 4. Ouvrir la meilleure opportunité si aucune position ouverte ——
     if opportunities_list and not trader.get_open_positions():
         best = opportunities_list[0]
-        if best['score'] < MIN_SCORE_TO_OPEN:
-            add_bot_log("Meilleure opportunité score {} < {} (min) — pas d'ouverture.".format(best['score'], MIN_SCORE_TO_OPEN), 'INFO')
+        # Score minimum dynamique selon régime de marché (trader discipliné: plus strict en bearish, plus permissif en bullish)
+        min_score = MIN_SCORE_TO_OPEN
+        if DYNAMIC_SCORE_ENABLED:
+            try:
+                fg = get_social_fear_greed()
+                if fg and not fg.get('error'):
+                    v = fg.get('value', 50)
+                    if v < 25:
+                        min_score = SCORE_BEARISH_MARKET   # Marché très bearish → exiger meilleur setup
+                    elif v < 45:
+                        min_score = SCORE_NEUTRAL_MARKET
+                    else:
+                        min_score = SCORE_BULLISH_MARKET  # Marché haussier → accepter setups un peu moins parfaits
+            except Exception:
+                pass
+        if best['score'] < min_score:
+            add_bot_log("Meilleure opportunité score {} < {} (min) — pas d'ouverture.".format(best['score'], min_score), 'INFO')
         else:
             # Filtre sentiment: ne pas short en Extreme Fear (rebond probable)
             skip_sentiment = False
@@ -484,9 +533,10 @@ def run_scanner():
                 take_profit = best['take_profit']
                 balance = trader.get_usdt_balance()
                 lev = trader.short_leverage
+                risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
                 pos_size = position_size_usdt(
                     balance,
-                    risk_pct=RISK_PCT_CAPITAL,
+                    risk_pct=risk_pct,
                     sl_pct=STOP_LOSS_PCT,
                     leverage=lev,
                     max_pct_balance=POSITION_PCT_BALANCE,
@@ -498,7 +548,7 @@ def run_scanner():
                     add_bot_log(f"SHORT {symbol} @ {price:.4f} | Score {best['score']} pts | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
                     return shared_data['opportunities']
 
-    add_bot_log("Aucun signal grande baisse (SHORT) détecté." if not opportunities_list else f"{len(opportunities_list)} opportunité(s) — aucune ouverte (solde/cooldown).", 'INFO')
+    add_bot_log("Aucun signal grande baisse (SHORT) détecté." if not opportunities_list else f"{len(opportunities_list)} opportunité(s) — aucune ouverte (solde/cooldown/sentiment).", 'INFO')
     return shared_data['opportunities']
 
 

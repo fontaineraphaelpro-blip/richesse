@@ -107,9 +107,11 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     # Tendance 15m baissière → +15 pts
     if momentum_15m == 'BEARISH':
         score += 15
-    # Tendance 1h baissière → +15 pts
+    # Tendance 1h baissière → +15 pts ; 1h neutre → +7 pts (pour TREND_1H_ALLOW_NEUTRAL)
     if momentum_1h == 'BEARISH':
         score += 15
+    elif momentum_1h == 'NEUTRAL':
+        score += 7
 
     # Spread faible = bougie propre → +0 à +10 pts (spread < 0.05% = 10, < 0.1% = 7, < 0.15% = 4)
     if spread_pct < 0.05:

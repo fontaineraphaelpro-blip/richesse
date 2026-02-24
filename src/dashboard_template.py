@@ -133,6 +133,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 .l-WARN { background: rgba(245,158,11,0.1); color: var(--yellow); }
 .l-ERROR { background: rgba(239,68,68,0.1); color: var(--red); }
 .log-msg { color: var(--text2); flex: 1; }
+.log-scan-summary { background: rgba(99,102,241,0.08); border-left: 3px solid var(--blue); font-weight: 500; }
+.log-scan-summary .log-msg { color: var(--text1); }
 
 /* Grid layouts */
 .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
@@ -454,12 +456,13 @@ tr:hover td { background: rgba(59,130,246,0.03); }
 
 <div class="card">
     <div class="card-header">
-        <h2>Journal (logs)</h2>
+        <h2>Historique du bot trading</h2>
+        <span style="font-size:0.8rem;color:var(--text3)">Résumés de scan (volume, tendance 15m/1h, signal SHORT) et actions</span>
     </div>
     <div class="log">
         {% if bot_log %}
         {% for entry in bot_log %}
-        <div class="log-line">
+        <div class="log-line{% if 'Scan #' in entry.msg %} log-scan-summary{% endif %}">
             <span class="log-time">{{ entry.time }}</span>
             <span class="log-level l-{{ entry.level }}">{{ entry.level }}</span>
             <span class="log-msg">{{ entry.msg }}</span>
