@@ -108,17 +108,36 @@ def run_arbitrage_autonomous(
     while True:
         try:
             prices = {}
+            errors = {}
             for ex in exchanges:
+                sym = symbol
                 try:
-                    ticker = ex.fetch_ticker(symbol)
-                    last = ticker.get('last')
-                    if last is not None and last > 0:
-                        prices[ex.id] = last
-                except Exception as e:
-                    _log('DEBUG', f'{ex.id}: {str(e)[:50]}')
+                    market = ex.market(symbol)
+                    sym = market.get('symbol', symbol)
+                except Exception:
+                    pass
+                for attempt in range(2):
+                    try:
+                        ticker = ex.fetch_ticker(sym)
+                        last = ticker.get('last')
+                        if last is not None and last > 0:
+                            prices[ex.id] = last
+                            break
+                        errors[ex.id] = 'pas de last'
+                    except Exception as e:
+                        err_msg = str(e).strip()[:80]
+                        errors[ex.id] = err_msg
+                        if attempt == 0:
+                            time.sleep(1)
+                            continue
+                        _log('DEBUG', f'{ex.id}: {err_msg}')
+                    break
+                time.sleep(0.3)
 
             if len(prices) < 2:
-                _log('WARN', 'Pas assez de prix (APIs indisponibles?)')
+                who = ', '.join(f'{k}={v:.2f}' for k, v in prices.items()) if prices else 'aucun'
+                err_who = ', '.join(f'{k}: {v}' for k, v in list(errors.items())[:3])
+                _log('WARN', f'Prix insuffisants ({len(prices)}/3). OK: {who}. Erreurs: {err_who}')
                 time.sleep(poll_interval_sec)
                 continue
 

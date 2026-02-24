@@ -1,27 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-Stratégie DAY TRADING PRO — LONG et SHORT.
+Stratégie DAY TRADING PRO — LONG et SHORT (SUIVI DE TENDANCE).
 
-Risk management optimal: analyse technique + filtres qualité (ADX, volume, tendance 15m/1h)
-pour maximiser les gains sur la durée tout en protégeant le capital.
+Le bot suit la tendance et n'entre pas sur les rebonds (pas d'achat oversold, pas de short oversold).
+- LONG: continuation haussière (prix au-dessus de l'EMA, RSI dans la zone tendance).
+- SHORT: continuation baissière (prix sous EMA, RSI pas en zone rebond).
 """
 
 
-# Seuil ADX minimum (risk mgt: tendance claire = meilleure qualité des setups)
+# Seuil ADX minimum (tendance claire, pas de range)
 ADX_MIN_FOR_TREND = 18
+# RSI: éviter les zones de rebond (oversold = bounce long, oversold short = bounce short)
+RSI_LONG_MIN = 45   # Pas d'achat si RSI < 45 (rebond oversold)
+RSI_SHORT_MIN = 30  # Pas de short si RSI < 30 (rebond après panique)
+# Prix doit être clairement dans la tendance (pas "dip" à acheter)
+LONG_PRICE_ABOVE_EMA_PCT = 0.1   # Prix >= EMA21 * (1 + 0.1%) = dans la tendance
 
 
-# ─── LONG (acheter les dips / momentum haussier) ─────────────────────────────
+# ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité LONG (achat sur force haussière ou rebond).
+    Détecte une opportunité LONG en SUIVI DE TENDANCE (continuation, pas de rebond oversold).
 
     Conditions (toutes requises):
       1. Tendance haussière: price_momentum == 'BULLISH'.
-      2. Prix au-dessus ou proche EMA21 (confirmation tendance).
+      2. Prix au-dessus de l'EMA21 (dans la tendance, pas en train de "dip").
       3. ADX >= 18 (tendance présente).
-      4. RSI pas en surchauffe: RSI < 70 et (RSI > 40 ou RSI en hausse).
+      4. RSI entre 45 et 70 (pas d'achat oversold = pas de trade rebond).
       5. Dernière bougie haussière (close > open).
       6. Volume >= volume_ratio_min × moyenne.
     """
@@ -30,9 +36,10 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
 
     current = indicators.get('current_price')
     ema21 = indicators.get('ema21')
-    if current is None or ema21 is None or current <= 0:
+    if current is None or ema21 is None or current <= 0 or ema21 <= 0:
         return False
-    if current < ema21 * 0.995:  # Légèrement sous EMA21 OK (dip), pas trop
+    # Prix clairement au-dessus de l'EMA = on suit la tendance, on n'achète pas un rebond
+    if current < ema21 * (1 + LONG_PRICE_ABOVE_EMA_PCT / 100):
         return False
 
     adx = indicators.get('adx')
@@ -40,12 +47,11 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
         return False
 
     rsi = indicators.get('rsi14')
-    rsi_prev = indicators.get('rsi14_prev')
     if rsi is None:
         return False
     if rsi >= 70:  # Surchauffé
         return False
-    if rsi < 40 and (rsi_prev is None or rsi <= rsi_prev):  # Encore trop faible sans rebond
+    if rsi < RSI_LONG_MIN:  # Pas d'achat en zone oversold (rebond)
         return False
 
     is_bullish = indicators.get('open_price') is not None and current > indicators.get('open_price')
@@ -61,20 +67,18 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
 
 def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLISH', momentum_1h='BULLISH',
                            stop_loss_pct=1.0, take_profit_pct=2.0):
-    """Score 0-100 pour une opportunité LONG (analyse technique poussée)."""
+    """Score 0-100 pour une opportunité LONG (suivi tendance: zone 45-70)."""
     score = 0.0
     rsi = indicators.get('rsi14') or 50
-    # RSI: zone 45-65 idéale pour long (momentum sans surchauffe) → +8 à +25
-    if 50 <= rsi < 60:
+    # RSI: zone 50-65 idéale pour continuation haussière (pas rebond)
+    if 52 <= rsi < 62:
         score += 25
-    elif 45 <= rsi < 50:
+    elif 48 <= rsi < 52:
         score += 20
-    elif 40 <= rsi < 45:
+    elif 45 <= rsi < 48:
         score += 15
-    elif 60 <= rsi < 70:
+    elif 62 <= rsi < 70:
         score += 10
-    elif 35 <= rsi < 40:
-        score += 8
 
     vol_ratio = indicators.get('volume_ratio') or 0
     if vol_ratio >= 2.0:
@@ -107,7 +111,7 @@ def score_long_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BULLIS
             score += 2
 
     bb_percent = indicators.get('bb_percent')
-    if bb_percent is not None and bb_percent <= 0.4:  # Zone basse = bon point d'entrée long
+    if bb_percent is not None and 0.3 <= bb_percent <= 0.6:  # Ni oversold ni suracheté = tendance
         score += 3
 
     if spread_pct < 0.05:
@@ -162,19 +166,20 @@ def position_size_long_usdt(balance_usdt, risk_pct=0.01, sl_pct=1.0, max_pct_bal
     return max(min_usdt, min(position, balance_usdt * 0.98))
 
 
-# ─── SHORT (vendre les rallies / grandes baisses) ─────────────────────────────
+# ─── SHORT (continuation baissière, pas de short sur rebond) ───────────────────
 
 def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     """
-    Détecte une opportunité SHORT sur une grande baisse.
+    Détecte une opportunité SHORT en SUIVI DE TENDANCE (continuation, pas de short oversold).
 
     Conditions (toutes requises):
       1. Tendance baissière: price_momentum == 'BEARISH'.
       2. Prix sous EMA21 (confirmation tendance).
-      3. ADX >= 18 (tendance présente, pas de range plat).
-      4. RSI < 55 (pas d'achat fort) ou RSI en baisse (rsi14 < rsi14_prev).
-      5. Dernière bougie baissière (close < open) ou pattern bearish.
-      6. Volume >= volume_ratio_min × moyenne (confirmation).
+      3. ADX >= 18 (tendance présente).
+      4. RSI >= 30 (pas de short en zone rebond oversold) et RSI < 55 (pas de force acheteuse).
+      5. RSI pas en forte remontée (pas de rebond en cours): rsi <= rsi_prev + 5.
+      6. Dernière bougie baissière (close < open).
+      7. Volume >= volume_ratio_min × moyenne.
 
     Returns:
         True si signal SHORT valide, False sinon.
@@ -187,7 +192,6 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     if current is None or ema21 is None or current >= ema21:
         return False
 
-    # Analyse technique poussée: tendance suffisamment marquée (ADX)
     adx = indicators.get('adx')
     if adx is not None and adx < ADX_MIN_FOR_TREND:
         return False
@@ -196,10 +200,15 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     rsi_prev = indicators.get('rsi14_prev')
     if rsi is None:
         return False
-    if rsi >= 55 and (rsi_prev is None or rsi >= rsi_prev):
+    if rsi < RSI_SHORT_MIN:  # Pas de short en zone rebond (oversold)
+        return False
+    if rsi >= 55 and (rsi_prev is None or rsi >= rsi_prev):  # Pas de force acheteuse
+        return False
+    # Pas de short si RSI remonte fort (rebond en cours)
+    if rsi_prev is not None and rsi > rsi_prev + 5:
         return False
 
-    # Bougie baissière ou pattern bearish
+    # Bougie baissière
     is_bearish = indicators.get('is_bearish_candle', False)
     open_p = indicators.get('open_price')
     if open_p is not None and current is not None and open_p > 0:
@@ -241,14 +250,14 @@ def score_short_opportunity(indicators, spread_pct, atr_pct, momentum_15m='BEARI
     rsi = indicators.get('rsi14')
     if rsi is None:
         rsi = 50
-    # RSI: plus c'est bas, plus c'est bearish → +0 à +25 pts
-    if rsi < 35:
+    # RSI: zone 30-50 idéale pour continuation baissière (pas oversold = pas rebond)
+    if 35 <= rsi < 45:
         score += 25
-    elif rsi < 45:
+    elif 30 <= rsi < 35:
         score += 20
-    elif rsi < 50:
+    elif 45 <= rsi < 50:
         score += 15
-    elif rsi < 55:
+    elif 50 <= rsi < 55:
         score += 8
 
     vol_ratio = indicators.get('volume_ratio') or 0
