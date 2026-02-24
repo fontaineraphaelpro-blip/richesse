@@ -25,6 +25,8 @@ Un seul bot principal: **SHORT grandes baisses** (lancé par `run.py`). Il n’o
   - Taille de position calculée pour risquer au max 1 % du capital par trade (levier 10x).
   - Confirmation 15m + 1h baissières pour filtrer les faux signaux.
   - Drawdown journalier : plus de nouveaux trades si perte du jour ≥ 5 % (reprise le lendemain).
+  - **Score minimum pour ouvrir** (`MIN_SCORE_TO_OPEN`, défaut 75) : seuls les signaux à fort score ouvrent un SHORT (meilleur taux de réussite).
+  - **Filtre sentiment** : pas de SHORT en Extreme Fear (indice ≤ 22) pour éviter les rebonds.
 
 La logique est dans `src/short_crash_strategy.py` et la boucle de scan dans `run_scanner()` dans `src/main.py`.
 
@@ -91,6 +93,8 @@ gunicorn --bind 0.0.0.0:$PORT --workers 1 wsgi:application
 
 ## Structure (fichiers principaux)
 
+Tous les modules listés sont utilisés par l’app (`run.py` / dashboard / API). Les anciens modules non utilisés (scorer, trade_filters, support, backtest, scalping_signals, signal_validation, chart_analyzer, entry_strategy, adaptive_strategy, advanced_technical_analysis, fundamental_analysis, fetch_pairs, config, logging_config, scanner_filters, web_server) ont été supprimés.
+
 ```
 src/
 ├── main.py                   # App Flask + run_scanner() SHORT only
@@ -100,7 +104,18 @@ src/
 ├── trader.py                 # Paper trading (LONG/SHORT, SL/TP)
 ├── dashboard_template.py     # Template HTML dashboard
 ├── arbitrage_strategy.py     # Bot arbitrage (optionnel)
-└── ...
+├── reversal_protection.py    # Protection retournement (trader)
+├── pattern_detection.py      # Patterns chandelier (indicators)
+├── crash_protection.py       # Protection crash
+├── news_analyzer.py          # Sentiment / Fear & Greed (dashboard + filtre)
+├── social_sentiment.py       # Sentiment réseaux (dashboard + filtre SHORT)
+├── market_intelligence.py    # API intelligence
+├── ml_predictor.py           # API ML
+├── onchain_analyzer.py       # API on-chain
+├── position_sizing.py        # API position sizing
+├── macro_events.py           # API macro
+├── trade_journal_ai.py       # API journal
+└── dashboard_stats.py        # Stats dashboard
 run.py                        # python run.py
 wsgi.py                       # Gunicorn
 ```

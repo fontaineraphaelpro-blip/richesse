@@ -316,6 +316,8 @@ tr:hover td { background: rgba(59,130,246,0.03); }
             <div class="detail-item"><span class="detail-label">Intervalle scan</span><span class="detail-value">{{ scan_interval_display|default('15 min') }}</span></div>
             <div class="detail-item"><span class="detail-label">Paires scannees</span><span class="detail-value">{{ scan_pairs_display|default('20 paires') }}</span></div>
             <div class="detail-item"><span class="detail-label">Frais simules</span><span class="detail-value">0,05% / cote</span></div>
+            <div class="detail-item"><span class="detail-label">Score min pour ouvrir</span><span class="detail-value">{{ min_score_to_open|default(75) }} pts</span></div>
+            <div class="detail-item"><span class="detail-label">Filtre sentiment (Extreme Fear)</span><span class="detail-value">{% if sentiment_filter_enabled %}Oui{% else %}Non{% endif %}</span></div>
         </div>
     </div>
 </div>

@@ -58,6 +58,12 @@ RISK_PCT_CAPITAL       = 0.01  # Risque max 1% du capital par trade (sizing)
 MIN_POSITION_USDT      = 10    # Minimum 10 USDT par short
 MAX_DAILY_DRAWDOWN_PCT = 5.0   # Pause si perte du jour >= 5%
 
+# Score minimum pour ouvrir un SHORT (élever = moins de trades mais meilleur taux de réussite)
+MIN_SCORE_TO_OPEN = 75
+# Ne pas short en Extreme Fear (marché peut rebondir)
+SENTIMENT_FILTER_ENABLED = True
+FEAR_GREED_MIN_TO_SHORT = 22   # En dessous de 22 (Extreme Fear), pas de SHORT
+
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
@@ -458,25 +464,39 @@ def run_scanner():
     # —— 4. Ouvrir la meilleure opportunité si aucune position ouverte ——
     if opportunities_list and not trader.get_open_positions():
         best = opportunities_list[0]
-        symbol = best['symbol']
-        price = best['price']
-        stop_loss = best['stop_loss']
-        take_profit = best['take_profit']
-        balance = trader.get_usdt_balance()
-        lev = trader.short_leverage
-        pos_size = position_size_usdt(
-            balance,
-            risk_pct=RISK_PCT_CAPITAL,
-            sl_pct=STOP_LOSS_PCT,
-            leverage=lev,
-            max_pct_balance=POSITION_PCT_BALANCE,
-            min_usdt=MIN_POSITION_USDT,
-        )
-        pos_size = min(pos_size, max(0, balance * 0.98))
-        if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
-            trader.record_trade_time(symbol)
-            add_bot_log(f"SHORT {symbol} @ {price:.4f} | Score {best['score']} pts | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
-            return shared_data['opportunities']
+        if best['score'] < MIN_SCORE_TO_OPEN:
+            add_bot_log("Meilleure opportunité score {} < {} (min) — pas d'ouverture.".format(best['score'], MIN_SCORE_TO_OPEN), 'INFO')
+        else:
+            # Filtre sentiment: ne pas short en Extreme Fear (rebond probable)
+            skip_sentiment = False
+            if SENTIMENT_FILTER_ENABLED:
+                try:
+                    fg = get_social_fear_greed()
+                    if fg and not fg.get('error') and fg.get('value', 50) <= FEAR_GREED_MIN_TO_SHORT:
+                        add_bot_log("Extreme Fear ({}): pas de SHORT pour eviter rebond.".format(fg.get('value')), 'INFO')
+                        skip_sentiment = True
+                except Exception:
+                    pass
+            if not skip_sentiment:
+                symbol = best['symbol']
+                price = best['price']
+                stop_loss = best['stop_loss']
+                take_profit = best['take_profit']
+                balance = trader.get_usdt_balance()
+                lev = trader.short_leverage
+                pos_size = position_size_usdt(
+                    balance,
+                    risk_pct=RISK_PCT_CAPITAL,
+                    sl_pct=STOP_LOSS_PCT,
+                    leverage=lev,
+                    max_pct_balance=POSITION_PCT_BALANCE,
+                    min_usdt=MIN_POSITION_USDT,
+                )
+                pos_size = min(pos_size, max(0, balance * 0.98))
+                if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT'):
+                    trader.record_trade_time(symbol)
+                    add_bot_log(f"SHORT {symbol} @ {price:.4f} | Score {best['score']} pts | SL {stop_loss:.4f} | TP {take_profit:.4f}", 'TRADE')
+                    return shared_data['opportunities']
 
     add_bot_log("Aucun signal grande baisse (SHORT) détecté." if not opportunities_list else f"{len(opportunities_list)} opportunité(s) — aucune ouverte (solde/cooldown).", 'INFO')
     return shared_data['opportunities']
@@ -558,7 +578,7 @@ def dashboard():
     if open_positions:
         bot_status = 'POSITION_OUVERTE'
         bot_status_reason = 'Une position est ouverte — pas de nouveau trade avant fermeture.'
-    elif daily_dd >= MAX_DAILY_DRAWDOWN_PCT:
+    elif daily_drawdown_pct >= MAX_DAILY_DRAWDOWN_PCT:
         bot_status = 'PAUSE_DRAWDOWN'
         bot_status_reason = f'Drawdown du jour {daily_drawdown_pct:.1f}% ≥ {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.'
     elif len(last_3_sales) >= MAX_CONSECUTIVE_LOSSES and all(t.get('pnl', 0) < 0 for t in last_3_sales):
@@ -631,6 +651,8 @@ def dashboard():
         arbitrage_threshold_pct=arbitrage_threshold_pct,
         arbitrage_poll_sec=arbitrage_poll_sec,
         sentiment_display=shared_data.get('sentiment_display') or {},
+        min_score_to_open=MIN_SCORE_TO_OPEN,
+        sentiment_filter_enabled=SENTIMENT_FILTER_ENABLED,
     )
 
 
