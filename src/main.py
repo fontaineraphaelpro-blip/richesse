@@ -31,7 +31,6 @@ from position_sizing import position_sizer, calculate_position_size, get_positio
 from macro_events import macro_analyzer, get_macro_analysis, get_upcoming_economic_events
 from social_sentiment import get_social_analyzer, get_fear_greed as get_social_fear_greed, get_social_sentiment
 from trade_journal_ai import get_trade_journal, get_journal_stats
-from arbitrage_strategy import run_arbitrage_autonomous
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CONFIGURATION DU BOT
@@ -242,9 +241,6 @@ shared_data = {
         'summary': '',
         'updated': None
     },
-    'arbitrage_logs': [],       # Logs arbitrage
-    'arbitrage_paper_balance': 100.0,   # Capital paper 100 € (bot arbitrage)
-    'arbitrage_paper_trades': [],       # Derniers trades paper arbitrage
     'sentiment_display': None,  # Sentiment marché & réseaux (Fear & Greed, Reddit, trending)
 }
 
@@ -790,11 +786,6 @@ def dashboard():
     rr_ratio = TAKE_PROFIT_PCT / STOP_LOSS_PCT if STOP_LOSS_PCT else 0
     levier_display = int(trader.short_leverage)
 
-    # Config arbitrage (depuis env ou défaut)
-    arbitrage_symbol = os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT')
-    arbitrage_threshold_pct = os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3')
-    arbitrage_poll_sec = os.environ.get('ARBITRAGE_POLL_SEC', '45')
-
     # Calculer les stats avancees et donnees de graphiques
     stats = calculate_advanced_stats(all_trades)
     chart_data = calculate_chart_data(all_trades)
@@ -824,9 +815,6 @@ def dashboard():
         chart_data=json.dumps(chart_data),
         all_pairs=all_pairs,
         crash=crash,
-        arbitrage_logs=shared_data.get('arbitrage_logs', []),
-        arbitrage_paper_balance=shared_data.get('arbitrage_paper_balance', 100),
-        arbitrage_paper_trades=shared_data.get('arbitrage_paper_trades', []),
         total_fees_usdt=total_fees_usdt,
         daily_drawdown_pct=daily_drawdown_pct,
         risk_pct_capital=risk_pct_capital,
@@ -842,9 +830,6 @@ def dashboard():
         scan_pairs_display=scan_pairs_display,
         levier_display=levier_display,
         max_daily_drawdown_pct=MAX_DAILY_DRAWDOWN_PCT,
-        arbitrage_symbol=arbitrage_symbol,
-        arbitrage_threshold_pct=arbitrage_threshold_pct,
-        arbitrage_poll_sec=arbitrage_poll_sec,
         sentiment_display=shared_data.get('sentiment_display') or {},
         min_score_to_open=MIN_SCORE_TO_OPEN,
         sentiment_filter_enabled=SENTIMENT_FILTER_ENABLED,
@@ -1544,21 +1529,6 @@ if __name__ == '__main__':
     # Thread Scanner (daemon â€” s'arrÃªte avec le programme principal)
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
-
-    def _run_arbitrage_loop():
-        symbol = os.environ.get('ARBITRAGE_SYMBOL', 'BTC/USDT')
-        threshold = float(os.environ.get('ARBITRAGE_THRESHOLD_PCT', '0.3'))
-        poll_sec = int(os.environ.get('ARBITRAGE_POLL_SEC', '45'))
-        run_arbitrage_autonomous(
-            shared_data['arbitrage_logs'],
-            symbol=symbol,
-            threshold_pct=threshold,
-            poll_interval_sec=poll_sec,
-            paper_trading=True,
-            shared_data=shared_data,
-        )
-    arbitrage_thread = threading.Thread(target=_run_arbitrage_loop, daemon=True)
-    arbitrage_thread.start()
 
     port = int(os.environ.get('PORT', 8080))
     add_bot_log(f"Dashboard: http://localhost:{port}", 'INFO')
