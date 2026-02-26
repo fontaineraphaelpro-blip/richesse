@@ -94,7 +94,7 @@ MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 15.0   # Tolerance 15% (levier 10x)
 
 MIN_SCORE_TO_OPEN = 62          # Score 62+ = opportunités adaptatives (multi-indicateurs)
-SENTIMENT_FILTER_ENABLED = True # Éviter LONG en Extreme Greed / SHORT en Extreme Fear
+SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
 
@@ -127,8 +127,8 @@ TRADING_START_HOUR = 8         # (ignoré si TRADING_HOURS_ENABLED=False)
 TRADING_END_HOUR = 22          # (ignoré si TRADING_HOURS_ENABLED=False)
 AVOID_WEEKENDS = False         # Crypto trade 7j/7
 
-# Score Dynamique selon Marche
-DYNAMIC_SCORE_ENABLED = True
+# Score Dynamique selon Marche (DÉSACTIVÉ — utilise MIN_SCORE_TO_OPEN fixe)
+DYNAMIC_SCORE_ENABLED = False
 SCORE_BULLISH_MARKET = 75    # Bull: setups corrects
 SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
