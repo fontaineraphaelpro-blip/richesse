@@ -647,17 +647,22 @@ def run_scanner():
             why_parts = []
             rsi = indicators.get('rsi14')
             if rsi is not None:
-                why_parts.append("RSI {:.0f}".format(rsi) + (" survendu" if rsi < 35 else " bas" if rsi < 50 else ""))
+                if rsi < 35:
+                    why_parts.append("RSI à {:.0f} en zone de survente".format(rsi))
+                elif rsi < 50:
+                    why_parts.append("RSI à {:.0f} en zone basse".format(rsi))
+                else:
+                    why_parts.append("RSI à {:.0f}".format(rsi))
             adx = indicators.get('adx')
             if adx is not None and adx >= 20:
-                why_parts.append("ADX {:.0f}".format(adx))
+                why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
             if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
-                why_parts.append("15m bull")
+                why_parts.append("Tendance 15 minutes haussière")
             if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
-                why_parts.append("1h bull")
+                why_parts.append("Tendance 1 heure haussière")
             if vol_r and vol_r >= 1.2:
-                why_parts.append("vol x{:.1f}".format(vol_r))
-            why_parts.append("R:R {:.1f}".format(rr))
+                why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+            why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
             long_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
@@ -683,17 +688,22 @@ def run_scanner():
             why_parts = []
             rsi = indicators.get('rsi14')
             if rsi is not None:
-                why_parts.append("RSI {:.0f}".format(rsi) + (" surachete" if rsi > 65 else " haut" if rsi > 50 else ""))
+                if rsi > 65:
+                    why_parts.append("RSI à {:.0f} en zone de surachat".format(rsi))
+                elif rsi > 50:
+                    why_parts.append("RSI à {:.0f} en zone haute".format(rsi))
+                else:
+                    why_parts.append("RSI à {:.0f}".format(rsi))
             adx = indicators.get('adx')
             if adx is not None and adx >= 20:
-                why_parts.append("ADX {:.0f}".format(adx))
+                why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
             if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
-                why_parts.append("15m bear")
+                why_parts.append("Tendance 15 minutes baissière")
             if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
-                why_parts.append("1h bear")
+                why_parts.append("Tendance 1 heure baissière")
             if vol_r and vol_r >= 1.2:
-                why_parts.append("vol x{:.1f}".format(vol_r))
-            why_parts.append("R:R {:.1f}".format(rr))
+                why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+            why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
             short_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
