@@ -134,6 +134,7 @@ SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
 MIN_RISK_REWARD = 1.2        # R:R 1.2:1 minimum (profitable a 55% WR)
+USE_STRICT_SIGNAL_GATE = True  # Exiger signal_long_buy_dip / signal_short_big_drop en plus du score (meilleure lecture signaux)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True
@@ -445,6 +446,7 @@ def run_scanner():
     """
     from short_crash_strategy import (
         position_size_usdt, position_size_long_usdt, compute_sl_tp_from_chart,
+        signal_long_buy_dip, signal_short_big_drop,
     )
     try:
         from adaptive_scorer import score_adaptive
@@ -635,87 +637,99 @@ def run_scanner():
         final_long = score_long + session_bonus
         final_short = score_short + session_bonus
 
-        # LONG si score suffisant
+        # LONG si score suffisant (+ gate strict optionnel pour mieux lire les signaux)
         if final_long >= MIN_SCORE_TO_OPEN:
-            n_long_signal += 1
-            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
-            if stop_loss is None:
-                stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
-                take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
-                sl_pct_eff = LONG_STOP_LOSS_PCT
-            rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
-            why_parts = []
-            rsi = indicators.get('rsi14')
-            if rsi is not None:
-                if rsi < 35:
-                    why_parts.append("RSI à {:.0f} en zone de survente".format(rsi))
-                elif rsi < 50:
-                    why_parts.append("RSI à {:.0f} en zone basse".format(rsi))
+            if USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
+                pass  # score ok mais signal strict non validé → pas d'opp LONG
+            else:
+                n_long_signal += 1
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
+                if stop_loss is None:
+                    stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
+                    take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                    sl_pct_eff = LONG_STOP_LOSS_PCT
+                rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
+                if rr < MIN_RISK_REWARD:
+                    pass  # R:R insuffisant, ne pas ajouter cette opp
                 else:
-                    why_parts.append("RSI à {:.0f}".format(rsi))
-            adx = indicators.get('adx')
-            if adx is not None and adx >= 20:
-                why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
-            if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
-                why_parts.append("Tendance 15 minutes haussière")
-            if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
-                why_parts.append("Tendance 1 heure haussière")
-            if vol_r and vol_r >= 1.2:
-                why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
-            why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-            long_opportunities.append({
-                'symbol': symbol, 'pair': symbol, 'price': price,
-                'stop_loss': stop_loss, 'take_profit': take_profit,
-                'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'LONG', 'score': final_long,
-                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
-                'is_signal': True, 'regime': regime, 'indicators': indicators,
-                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-            })
+                    why_parts = []
+                    rsi = indicators.get('rsi14')
+                    if rsi is not None:
+                        if rsi < 35:
+                            why_parts.append("RSI à {:.0f} en zone de survente".format(rsi))
+                        elif rsi < 50:
+                            why_parts.append("RSI à {:.0f} en zone basse".format(rsi))
+                        else:
+                            why_parts.append("RSI à {:.0f}".format(rsi))
+                    adx = indicators.get('adx')
+                    if adx is not None and adx >= 20:
+                        why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
+                    if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
+                        why_parts.append("Tendance 15 minutes haussière")
+                    if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
+                        why_parts.append("Tendance 1 heure haussière")
+                    if vol_r and vol_r >= 1.2:
+                        why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+                    why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
+                    long_opportunities.append({
+                        'symbol': symbol, 'pair': symbol, 'price': price,
+                        'stop_loss': stop_loss, 'take_profit': take_profit,
+                        'sl_pct_effective': sl_pct_eff,
+                        'entry_signal': 'LONG', 'score': final_long,
+                        'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                        'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                        'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                        'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
+                        'is_signal': True, 'regime': regime, 'indicators': indicators,
+                        'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                    })
 
-        # SHORT si score suffisant
+        # SHORT si score suffisant (+ gate strict optionnel)
         if final_short >= MIN_SCORE_TO_OPEN:
-            n_short_signal += 1
-            stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
-            if stop_loss is None:
-                stop_loss = price * (1 + STOP_LOSS_PCT / 100)
-                take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
-                sl_pct_eff = STOP_LOSS_PCT
-            rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
-            why_parts = []
-            rsi = indicators.get('rsi14')
-            if rsi is not None:
-                if rsi > 65:
-                    why_parts.append("RSI à {:.0f} en zone de surachat".format(rsi))
-                elif rsi > 50:
-                    why_parts.append("RSI à {:.0f} en zone haute".format(rsi))
+            if USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
+                pass  # score ok mais signal strict non validé → pas d'opp SHORT
+            else:
+                n_short_signal += 1
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
+                if stop_loss is None:
+                    stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+                    take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+                    sl_pct_eff = STOP_LOSS_PCT
+                rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
+                if rr < MIN_RISK_REWARD:
+                    pass
                 else:
-                    why_parts.append("RSI à {:.0f}".format(rsi))
-            adx = indicators.get('adx')
-            if adx is not None and adx >= 20:
-                why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
-            if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
-                why_parts.append("Tendance 15 minutes baissière")
-            if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
-                why_parts.append("Tendance 1 heure baissière")
-            if vol_r and vol_r >= 1.2:
-                why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
-            why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-            short_opportunities.append({
-                'symbol': symbol, 'pair': symbol, 'price': price,
-                'stop_loss': stop_loss, 'take_profit': take_profit,
-                'sl_pct_effective': sl_pct_eff,
-                'entry_signal': 'SHORT', 'score': final_short,
-                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
-                'is_signal': True, 'regime': regime, 'indicators': indicators,
-                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-            })
+                    why_parts = []
+                    rsi = indicators.get('rsi14')
+                    if rsi is not None:
+                        if rsi > 65:
+                            why_parts.append("RSI à {:.0f} en zone de surachat".format(rsi))
+                        elif rsi > 50:
+                            why_parts.append("RSI à {:.0f} en zone haute".format(rsi))
+                        else:
+                            why_parts.append("RSI à {:.0f}".format(rsi))
+                    adx = indicators.get('adx')
+                    if adx is not None and adx >= 20:
+                        why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
+                    if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
+                        why_parts.append("Tendance 15 minutes baissière")
+                    if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
+                        why_parts.append("Tendance 1 heure baissière")
+                    if vol_r and vol_r >= 1.2:
+                        why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+                    why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
+                    short_opportunities.append({
+                        'symbol': symbol, 'pair': symbol, 'price': price,
+                        'stop_loss': stop_loss, 'take_profit': take_profit,
+                        'sl_pct_effective': sl_pct_eff,
+                        'entry_signal': 'SHORT', 'score': final_short,
+                        'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                        'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                        'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                        'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
+                        'is_signal': True, 'regime': regime, 'indicators': indicators,
+                        'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                    })
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
         continue
@@ -785,7 +799,7 @@ def run_scanner():
         if opp['symbol'] in already_open_symbols:
             continue
         rr = opp.get('rr_ratio') or 0
-        if rr < 1.0:
+        if rr < MIN_RISK_REWARD:
             continue
         best = opp
         is_long = opp.get('entry_signal') == 'LONG'
@@ -877,18 +891,23 @@ def run_scanner():
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _prices_for_dashboard(open_positions):
-    """Prix a jour: last_prices + fetch des symboles des positions si manquants."""
+    """Prix à jour: pour les positions ouvertes, on fetch TOUJOURS les prix en direct
+    pour que le PnL affiché soit correct (évite affichage 0 quand last_prices est stale)."""
     last = dict(shared_data.get('last_prices') or {})
-    missing = [s for s in open_positions if s not in last]
-    if missing:
+    symbols_to_fetch = list(open_positions.keys()) if open_positions else []
+    if symbols_to_fetch:
         try:
-            extra = fetch_current_prices(missing)
-            last.update(extra)
-            if extra:
+            fresh = fetch_current_prices(symbols_to_fetch)
+            if fresh:
+                last.update(fresh)
                 shared_data.setdefault('last_prices', {})
-                shared_data['last_prices'].update(extra)
-        except Exception:
-            pass
+                shared_data['last_prices'].update(fresh)
+            # Si un symbole n'a pas été récupéré, on garde last_prices en fallback
+            for s in symbols_to_fetch:
+                if s not in last and s in (shared_data.get('last_prices') or {}):
+                    last[s] = shared_data['last_prices'][s]
+        except Exception as e:
+            add_bot_log("Dashboard: fetch prix positions échoué: {}".format(e), 'WARN')
     return last
 
 

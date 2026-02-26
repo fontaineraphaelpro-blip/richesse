@@ -16,14 +16,15 @@ RSI_SHORT_MIN = 35         # Pas de short sous 35 (trop oversold)
 RSI_SHORT_MAX = 50         # Short zone: 35-50
 LONG_PRICE_ABOVE_EMA_PCT = 0.05   # Prix juste au-dessus EMA21 (entry optimale)
 
-# SL/TP serres pour max breakeven saves (backtest rentable)
+# SL/TP mieux positionnés: SL plus large pour éviter stop-out sur le bruit
 ATR_SL_MULTIPLIER = 1.0    # SL = ATR * 1.0
-ATR_TP_MULTIPLIER = 1.2    # TP = ATR * 1.2 (R:R 1.2:1)
+ATR_TP_MULTIPLIER = 1.2    # TP = ATR * 1.2 (R:R 1.2:1 minimum)
 ATR_TP_RR_RATIO = None
-ATR_SL_MIN_PCT = 0.4
-ATR_SL_MAX_PCT = 0.7
-ATR_TP_MIN_PCT = 0.4
-ATR_TP_MAX_PCT = 1.2
+ATR_SL_MIN_PCT = 0.7       # Éviter SL trop serré (0.4% = trop de stop-out)
+ATR_SL_MAX_PCT = 1.5
+ATR_TP_MIN_PCT = 0.6
+ATR_TP_MAX_PCT = 2.0
+MIN_RR_RATIO = 1.2         # R:R minimum garanti (TP distance >= SL * 1.2)
 
 
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):
@@ -46,11 +47,16 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
     sl_pct = (sl_distance / price) * 100
     sl_pct = max(ATR_SL_MIN_PCT, min(ATR_SL_MAX_PCT, sl_pct))
     sl_distance = price * (sl_pct / 100.0)
-    # TP distance (independant, plus proche)
+    # TP distance: au moins MIN_RR_RATIO * sl_distance pour R:R rentable
     tp_distance = atr * tp_mult
     tp_pct = (tp_distance / price) * 100
     tp_pct = max(ATR_TP_MIN_PCT, min(ATR_TP_MAX_PCT, tp_pct))
     tp_distance = price * (tp_pct / 100.0)
+    # Garantir R:R minimum (éviter TP trop proche = jamais atteint ou SL toujours touché avant)
+    min_tp_distance = sl_distance * MIN_RR_RATIO
+    if tp_distance < min_tp_distance:
+        tp_distance = min_tp_distance
+        tp_pct = (tp_distance / price) * 100
 
     if direction == 'LONG':
         stop_loss = price - sl_distance
