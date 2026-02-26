@@ -1096,6 +1096,16 @@ def close_position_route(symbol):
     return jsonify({'success': success})
 
 
+@app.route('/api/reset', methods=['POST'])
+def api_reset():
+    """Réinitialise le portefeuille à 100€ et vide l'historique des trades."""
+    trader = PaperTrader()
+    ok = trader.reset_to_initial(100)
+    if ok:
+        add_bot_log("Réinitialisation: 100€, 0 positions, historique vide.", 'INFO')
+    return jsonify({'success': ok, 'error': None if ok else 'Erreur reset'})
+
+
 @app.route('/health')
 def health():
     """Health check pour load balancers et monitoring (production)."""

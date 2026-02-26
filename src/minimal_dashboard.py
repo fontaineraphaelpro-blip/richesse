@@ -15,7 +15,7 @@ body { margin: 0; padding: 12px; background: #000; color: #fff; font-family: sys
 h1 { font-size: 1.25rem; margin: 0 0 8px 0; }
 h2 { font-size: 1rem; margin: 0 0 8px 0; font-weight: 600; }
 section { margin-bottom: 20px; }
-.status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
 .dot.on { background: #fff; }
 .dot.scan { background: #fff; animation: pulse 1s infinite; }
@@ -43,6 +43,7 @@ button:active { opacity: 0.8; }
   <div class="status">
     <span class="dot {% if is_scanning %}scan{% else %}on{% endif %}"></span>
     <span>{% if is_scanning %}Scan...{% else %}Actif{% endif %} &middot; #{{ scan_count }} &middot; {{ last_update or '-' }}</span>
+    <button onclick="resetWallet()" style="margin-left:auto;font-size:0.8rem;padding:6px 10px">Réinitialiser (100€)</button>
   </div>
 </section>
 <section>
@@ -128,6 +129,13 @@ button:active { opacity: 0.8; }
   </div>
 </section>
 <script>
+function resetWallet() {
+  if (!confirm('Réinitialiser à 100€ ? Toutes les positions et l\'historique seront supprimés.')) return;
+  fetch('/api/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => { if (d.success) location.reload(); else alert(d.error || 'Erreur'); })
+    .catch(function() { alert('Erreur réseau'); });
+}
 function closePos(sym) {
   if (!confirm('Fermer ' + sym + ' ?')) return;
   fetch('/api/close/' + sym, { method: 'POST' })

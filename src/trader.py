@@ -87,6 +87,26 @@ class PaperTrader:
         with open(self.balance_file, 'w') as f:
             json.dump(self.wallet, f, indent=4)
 
+    def reset_to_initial(self, initial_usdt: float = 100) -> bool:
+        """Réinitialise le portefeuille à 100€ et vide l'historique des trades."""
+        try:
+            today = datetime.now().strftime('%Y-%m-%d')
+            self.wallet = {
+                'USDT': initial_usdt,
+                'positions': {},
+                'initial_capital': initial_usdt,
+                'total_fees_usdt': 0.0,
+                'daily_start_balance': initial_usdt,
+                'daily_start_date': today,
+            }
+            self.save_wallet()
+            with open(self.trades_file, 'w') as f:
+                json.dump([], f)
+            self.recent_trades = {}
+            return True
+        except Exception:
+            return False
+
     def log_trade(self, trade_data: dict):
         """Enregistre une transaction dans l'historique."""
         history = []
