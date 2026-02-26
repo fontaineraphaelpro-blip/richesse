@@ -29,7 +29,7 @@ from flask import Flask, render_template_string, jsonify, request, Response
 #   get_trade_modifier, fundamental_analyzer/get_fundamental_*, advanced_ta/get_advanced_*,
 #   adaptive_strategy/analyze_and_adapt/get_adaptive_strategy
 from trader import PaperTrader
-from data_fetcher import fetch_multiple_pairs
+from data_fetcher import fetch_multiple_pairs, fetch_current_prices
 from minimal_dashboard import get_minimal_dashboard_html
 from indicators import calculate_indicators
 from crash_protection import crash_protector, get_crash_status
@@ -65,7 +65,7 @@ LONG_TAKE_PROFIT_PCT = 1.8
 SCAN_INTERVAL    = 300
 SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
-MAX_POSITIONS    = 4           # 4 positions max (multiplier les trades gagnants)
+MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 2
 COOLDOWN_MINUTES = 10          # 10 min entre trades
 SPREAD_MAX_PCT   = 0.10
@@ -471,9 +471,17 @@ def run_scanner():
             return []
 
     # Liste des paires (limité en mode test pour exécution rapide)
-    symbols = get_top_pairs()
+    symbols = list(get_top_pairs())
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
+    # Toujours inclure les paires des positions ouvertes pour mettre à jour last_prices
+    try:
+        from trader import PaperTrader
+        for sym in PaperTrader().get_open_positions():
+            if sym not in symbols:
+                symbols.append(sym)
+    except Exception:
+        pass
     add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT — risk mgt optimal ===".format(scan_num, len(symbols)), 'INFO')
 
     # —— 1. Données marché (15m) ——
@@ -872,6 +880,22 @@ def run_scanner():
 # ROUTES FLASK
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+def _prices_for_dashboard(open_positions):
+    """Prix a jour: last_prices + fetch des symboles des positions si manquants."""
+    last = dict(shared_data.get('last_prices') or {})
+    missing = [s for s in open_positions if s not in last]
+    if missing:
+        try:
+            extra = fetch_current_prices(missing)
+            last.update(extra)
+            if extra:
+                shared_data.setdefault('last_prices', {})
+                shared_data['last_prices'].update(extra)
+        except Exception:
+            pass
+    return last
+
+
 @app.route('/')
 def dashboard():
     """Dashboard principal â€” rendu cÃ´tÃ© serveur."""
@@ -879,11 +903,12 @@ def dashboard():
     update_performance_stats(trader)
     balance = trader.get_usdt_balance()
     open_positions = trader.get_open_positions()
+    prices = _prices_for_dashboard(open_positions)
     positions_view = []
     total_unrealized_pnl = 0
     for symbol, pos_data in open_positions.items():
         entry = pos_data['entry_price']
-        current = shared_data['last_prices'].get(symbol, entry)
+        current = prices.get(symbol, entry)
         direction = pos_data.get('direction', 'LONG')
         
         # Calcul PnL selon direction
@@ -912,6 +937,15 @@ def dashboard():
             'direction':   direction,
             'entry':       entry,
             'current':     current,
+            'amount':      pos_data.get('amount_usdt', 0),
+            'quantity':    pos_data.get('quantity', 0),
+            'pnl_value':   pnl_value,
+            'pnl_percent': pnl_percent,
+            'sl':          pos_data.get('stop_loss', entry),
+            'tp':          pos_data.get('take_profit', entry),
+            'entry_time':  pos_data.get('entry_time', 'N/A'),
+            'progress':    progress,
+            'leverage':    pos_data.get('leverage', 1),
             'amount':      pos_data['amount_usdt'],
             'quantity':    pos_data['quantity'],
             'pnl_value':   pnl_value,
@@ -926,6 +960,12 @@ def dashboard():
     total_invested = sum(p['amount'] for p in positions_view)
     total_capital = balance + total_invested + total_unrealized_pnl
     perf = shared_data.get('performance') or {'total_trades': 0, 'winning_trades': 0, 'total_pnl': 0, 'win_rate': 0}
+    # Taux USD -> EUR (1 USDT = X EUR) pour affichage PnL en €
+    try:
+        eur_usdt = shared_data.get('last_prices', {}).get('EURUSDT') or fetch_current_prices(['EURUSDT']).get('EURUSDT', 1.08)
+        usd_to_eur = 1.0 / float(eur_usdt) if eur_usdt else 0.92
+    except Exception:
+        usd_to_eur = 0.92
 
     return render_template_string(
         get_minimal_dashboard_html(),
@@ -933,6 +973,7 @@ def dashboard():
         total_capital=total_capital,
         positions=positions_view,
         total_unrealized_pnl=total_unrealized_pnl,
+        usd_to_eur=usd_to_eur,
         opportunities=shared_data['opportunities'],
         is_scanning=shared_data['is_scanning'],
         last_update=shared_data['last_update'],
@@ -952,11 +993,12 @@ def api_data():
         all_trades = trader.get_trades_history()
         history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
 
+        prices = _prices_for_dashboard(open_positions)
         positions_view = []
         total_unrealized_pnl = 0
         for symbol, pos_data in open_positions.items():
             entry = pos_data['entry_price']
-            current = shared_data['last_prices'].get(symbol, entry)
+            current = prices.get(symbol, entry)
             direction = pos_data.get('direction', 'LONG')
             if direction == 'LONG':
                 pnl_value = (current - entry) * pos_data['quantity']
@@ -1030,7 +1072,13 @@ def export_trades_csv():
 def close_position_route(symbol):
     """Ferme manuellement une position."""
     trader = PaperTrader()
-    current_price = shared_data['last_prices'].get(symbol)
+    current_price = shared_data.get('last_prices', {}).get(symbol)
+    if not current_price:
+        try:
+            fetched = fetch_current_prices([symbol])
+            current_price = fetched.get(symbol)
+        except Exception:
+            pass
     if not current_price:
         return jsonify({'success': False, 'error': 'Prix non disponible'})
     success = trader.close_position(symbol, current_price, "MANUEL ðŸ‘¤")

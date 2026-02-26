@@ -298,6 +298,41 @@ def get_top_pairs() -> List[str]:
     return TOP_USDT_PAIRS
 
 
+def fetch_current_prices(symbols: List[str]) -> Dict[str, float]:
+    """
+    Récupère le prix actuel pour une liste de paires (API ticker Binance, léger).
+    Utile pour le dashboard quand des positions ne sont pas dans last_prices.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    prices = {}
+    if not symbols:
+        return prices
+    urls = [
+        "https://api.binance.com/api/v3/ticker/price",
+        "https://api.binance.us/api/v3/ticker/price",
+    ]
+    def _get_one(sym):
+        for base in urls:
+            try:
+                r = requests.get(base, params={"symbol": sym.upper()}, timeout=3)
+                if r.status_code == 200:
+                    d = r.json()
+                    return sym, float(d.get("price", 0))
+            except Exception:
+                continue
+        return sym, None
+    with ThreadPoolExecutor(max_workers=min(5, len(symbols))) as ex:
+        futs = {ex.submit(_get_one, s): s for s in symbols}
+        for fut in as_completed(futs):
+            try:
+                sym, price = fut.result()
+                if price is not None:
+                    prices[sym] = price
+            except Exception:
+                pass
+    return prices
+
+
 # ─────────────────────────────────────────────────────────────
 # MULTI-TIMEFRAME ANALYSIS
 # ─────────────────────────────────────────────────────────────
