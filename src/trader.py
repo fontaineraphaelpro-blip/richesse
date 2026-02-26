@@ -677,13 +677,11 @@ class PaperTrader:
         lev = self.long_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
-        fee_open = notional * self.fee_pct
-        total_lock = amount_usdt + fee_open
-        if self.wallet['USDT'] < total_lock:
-            print("Fonds insuffisants LONG (marge + frais): {:.2f} USDT".format(total_lock))
+        # Pas de frais à l'entrée
+        if self.wallet['USDT'] < amount_usdt:
+            print("Fonds insuffisants LONG (marge): {:.2f} USDT".format(amount_usdt))
             return False
-        self.wallet['USDT'] -= total_lock
-        self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_open
+        self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'LONG',
             'amount_usdt': amount_usdt,
@@ -747,13 +745,11 @@ class PaperTrader:
         lev = self.short_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
-        fee_open = notional * self.fee_pct
-        total_lock = amount_usdt + fee_open
-        if self.wallet['USDT'] < total_lock:
-            print(f"Fonds insuffisants (marge + frais): {total_lock:.2f} USDT")
+        # Pas de frais à l'entrée
+        if self.wallet['USDT'] < amount_usdt:
+            print(f"Fonds insuffisants (marge): {amount_usdt:.2f} USDT")
             return False
-        self.wallet['USDT'] -= total_lock
-        self.wallet['total_fees_usdt'] = self.wallet.get('total_fees_usdt', 0) + fee_open
+        self.wallet['USDT'] -= amount_usdt
         self.wallet['positions'][symbol] = {
             'direction':   'SHORT',
             'amount_usdt': amount_usdt,
