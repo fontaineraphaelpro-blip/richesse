@@ -103,7 +103,7 @@ button:active { opacity: 0.8; }
       <td><strong>{{ t.symbol }}</strong></td>
       <td>{{ t.direction }}</td>
       <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format((t.pnl|default(0)) * (usd_to_eur|default(0.92))) }} € ({{ "%+.1f"|format(t.pnl_percent|default(0)) }}%)</span></td>
-      <td style="font-size:0.8rem">{{ t.reason|default('-')[:20] }}</td>
+      <td style="font-size:0.8rem">{{ (t.reason|default('-'))[:20] }}</td>
     </tr>
     {% endfor %}
     </tbody>
