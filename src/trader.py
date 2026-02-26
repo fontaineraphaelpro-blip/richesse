@@ -673,7 +673,8 @@ class PaperTrader:
             print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
-        entry_price = current_price * (1 + self.slippage_pct)
+        # Pas de slippage à l'entrée (PnL = 0% au dashboard)
+        entry_price = current_price
         lev = self.long_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
@@ -740,8 +741,8 @@ class PaperTrader:
             print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
-        # Slippage simulé (entrée SHORT = prix de vente plus bas)
-        entry_price = current_price * (1 - self.slippage_pct)
+        # Pas de slippage à l'entrée (PnL = 0% au dashboard)
+        entry_price = current_price
         lev = self.short_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
