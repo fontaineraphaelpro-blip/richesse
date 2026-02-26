@@ -38,8 +38,10 @@ report.html
 *.log
 opportunities_data.json
 .scanning
-opportunities_data.json
-.scanning
+
+# Données paper trading (ne jamais committer — reset à chaque déploiement)
+paper_wallet.json
+paper_trades.json
 
 # OS
 .DS_Store
