@@ -746,174 +746,118 @@ def run_scanner():
     add_bot_log("Scan #{}: {} paires | volume OK: {} | spread OK: {} | LONG: {} | SHORT: {} -> {} opportunite(s).".format(
         scan_num, n_pairs, n_volume_ok, n_spread_ok, n_long_signal, n_short_signal, len(opportunities_list)), 'INFO')
 
-    # —— 4. Ouvrir la meilleure opportunité ——
+    # —— 4. Ouvrir plusieurs opportunités (pas qu'une seule par scan) ——
     current_open = trader.get_open_positions()
     already_open_symbols = set(current_open.keys())
-
-    MAX_PORTFOLIO_EXPOSURE = 0.85  # Max 85% deploye (4 pos x 35%)
-    deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
-    available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
-    if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
-        shared_data['last_block_reason'] = "Portfolio exposure {:.0f}% >= {:.0f}% max".format(
-            (deployed_capital / total_capital) * 100, MAX_PORTFOLIO_EXPOSURE * 100)
-        add_bot_log("Portfolio exposure {:.0f}% >= {:.0f}% max — pas de nouvelle position.".format(
-            (deployed_capital / total_capital) * 100, MAX_PORTFOLIO_EXPOSURE * 100), 'INFO')
-        return shared_data['opportunities']
-
-    # BTC erratique: relever le score minimum
-    btc_score_penalty = 5 if btc_regime == 'VOLATILE' else 0
     best = None
+    opened_count = 0
 
-    if opportunities_list and len(current_open) < MAX_POSITIONS:
-        # Meilleure opportunite: score max, R:R OK, pas deja ouverte
-        for opp in opportunities_list:
-            if opp['symbol'] in already_open_symbols:
-                continue
-            rr = opp.get('rr_ratio') or 0
-            if rr >= MIN_RISK_REWARD:
-                best = opp
-                break
-        if best is None:
-            for opp in opportunities_list:
-                if opp['symbol'] in already_open_symbols:
-                    continue
-                if (opp.get('rr_ratio') or 0) >= 1.0:
-                    best = opp
-                    break
+    MAX_PORTFOLIO_EXPOSURE = 0.85
+    min_score = MIN_SCORE_TO_OPEN + (5 if btc_regime == 'VOLATILE' else 0) + _adaptive_state.get('min_score_adjust', 0)
+    if DYNAMIC_SCORE_ENABLED:
+        try:
+            fg = get_social_fear_greed()
+            if fg and not fg.get('error'):
+                v = fg.get('value', 50)
+                if v < 25: min_score = SCORE_BEARISH_MARKET
+                elif v < 45: min_score = SCORE_NEUTRAL_MARKET
+                else: min_score = SCORE_BULLISH_MARKET
+        except Exception:
+            pass
 
-        if best is not None:
-            is_long = best.get('entry_signal') == 'LONG'
-            # Setup similarity bonus/malus
-            similarity_bonus = _check_setup_similarity(best, trader)
-            best['score'] += similarity_bonus
-            # Adaptive score adjustment
-            min_score = MIN_SCORE_TO_OPEN + btc_score_penalty + _adaptive_state.get('min_score_adjust', 0)
-            if DYNAMIC_SCORE_ENABLED:
-                try:
-                    fg = get_social_fear_greed()
-                    if fg and not fg.get('error'):
-                        v = fg.get('value', 50)
-                        if v < 25:
-                            min_score = SCORE_BEARISH_MARKET
-                        elif v < 45:
-                            min_score = SCORE_NEUTRAL_MARKET
-                        else:
-                            min_score = SCORE_BULLISH_MARKET
-                except Exception:
-                    pass
-            if best['score'] < min_score:
-                shared_data['last_block_reason'] = "Score {} < {} (min requis)".format(best['score'], min_score)
-                add_bot_log("Meilleure opp {} score {} < {} (min) — pas d'ouverture.".format(best['symbol'], best['score'], min_score), 'INFO')
-            else:
-                skip_sentiment = False
-                if SENTIMENT_FILTER_ENABLED:
-                    try:
-                        fg = get_social_fear_greed()
-                        if fg and not fg.get('error'):
-                            v = fg.get('value', 50)
-                            if is_long and v >= FEAR_GREED_MAX_TO_LONG:
-                                shared_data['last_block_reason'] = "Extreme Greed ({}) : pas de LONG".format(v)
-                                add_bot_log("Extreme Greed ({}): pas de LONG.".format(v), 'INFO')
-                                skip_sentiment = True
-                            elif not is_long and v <= FEAR_GREED_MIN_TO_SHORT:
-                                add_bot_log("Extreme Fear ({}) mais SHORT autorise (trend-following).".format(v), 'INFO')
-                    except Exception:
-                        pass
-                if not skip_sentiment:
-                    symbol = best['symbol']
-                    price = best['price']
-                    stop_loss = best['stop_loss']
-                    take_profit = best['take_profit']
+    for opp in opportunities_list:
+        if len(current_open) >= MAX_POSITIONS:
+            break
+        deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
+        if total_capital > 0 and (deployed_capital / total_capital) >= MAX_PORTFOLIO_EXPOSURE:
+            shared_data['last_block_reason'] = "Portfolio exposure max"
+            break
+        if opp['symbol'] in already_open_symbols:
+            continue
+        rr = opp.get('rr_ratio') or 0
+        if rr < 1.0:
+            continue
+        best = opp
+        is_long = opp.get('entry_signal') == 'LONG'
+        similarity_bonus = _check_setup_similarity(opp, trader)
+        opp['score'] = opp.get('score', 0) + similarity_bonus
+        if opp['score'] < min_score:
+            continue
+        if SENTIMENT_FILTER_ENABLED:
+            try:
+                fg = get_social_fear_greed()
+                if fg and not fg.get('error'):
+                    v = fg.get('value', 50)
+                    if is_long and v >= FEAR_GREED_MAX_TO_LONG:
+                        continue
+            except Exception:
+                pass
+        symbol = opp['symbol']
+        price = opp['price']
+        stop_loss = opp['stop_loss']
+        take_profit = opp['take_profit']
+        try:
+            of = fetch_order_flow(symbol)
+            pressure = of.get('pressure', 'NEUTRAL')
+            if is_long and pressure == 'SELL': opp['score'] -= 8
+            elif not is_long and pressure == 'BUY': opp['score'] -= 8
+        except Exception:
+            pass
+        if opp['score'] < min_score:
+            continue
+        balance = trader.get_usdt_balance()
+        if KELLY_RISK_ENABLED:
+            risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, position_sizer.calculate_kelly()))
+        else:
+            risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
+        atr_pct = opp.get('atr_pct') or 2.0
+        n_open = len(current_open)
+        multi_pos_factor = 1.0 / math.sqrt(1 + n_open)
+        corr_factor = _check_correlation(symbol, current_open, shared_data.get('last_indicators', {})) or 1.0
+        avg_slip = _get_avg_slippage(symbol) or 0
+        slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
+        size_mult = (position_sizer.calculate_atr_adjustment(atr_pct) or 1.0) * (position_sizer.calculate_score_adjustment(opp['score'], 50) or 1.0) * (position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0) * multi_pos_factor * corr_factor * slip_factor
+        opened = False
+        if is_long:
+            sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
+            pos_size = position_size_long_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.long_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
+            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+            take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
+            if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct')):
+                trader.record_trade_time(symbol)
+                _record_slippage(symbol, opp.get('spread_pct', 0.05))
+                add_bot_log("LONG {} @ {:.4f} | Score {} | SL {:.4f} TP {:.4f}".format(symbol, price, opp['score'], stop_loss, take_profit), 'TRADE')
+                opened = True
+        else:
+            sl_pct = opp.get('sl_pct_effective') or STOP_LOSS_PCT
+            pos_size = position_size_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.short_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
+            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+            take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
+            if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct')):
+                trader.record_trade_time(symbol)
+                _record_slippage(symbol, opp.get('spread_pct', 0.05))
+                add_bot_log("SHORT {} @ {:.4f} | Score {} | SL {:.4f} TP {:.4f}".format(symbol, price, opp['score'], stop_loss, take_profit), 'TRADE')
+                opened = True
+        if opened:
+            opened_count += 1
+            shared_data['last_block_reason'] = None
+            current_open = trader.get_open_positions()
+            already_open_symbols = set(current_open.keys())
+            total_capital = trader.get_total_capital(real_prices)
 
-                    # Dernier filtre: order flow ne doit pas contredire fortement
-                    try:
-                        of = fetch_order_flow(symbol)
-                        pressure = of.get('pressure', 'NEUTRAL')
-                        if is_long and pressure == 'SELL':
-                            best['score'] -= 8
-                        elif not is_long and pressure == 'BUY':
-                            best['score'] -= 8
-                    except Exception:
-                        pass
-
-                    if best['score'] < min_score:
-                        shared_data['last_block_reason'] = "Order flow contraire (score -8) : {} < {}".format(best['score'], min_score)
-                        add_bot_log("Opp {} score {} apres order flow < {} — skip.".format(symbol, best['score'], min_score), 'INFO')
-                        return shared_data['opportunities']
-
-                    balance = trader.get_usdt_balance()
-                    if KELLY_RISK_ENABLED:
-                        kelly = position_sizer.calculate_kelly()
-                        risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, kelly))
-                    else:
-                        risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
-                    atr_pct = best.get('atr_pct')
-                    if atr_pct is None or atr_pct == 0:
-                        atr_pct = 2.0
-                    n_open = len(current_open)
-                    multi_pos_factor = 1.0 / math.sqrt(1 + n_open)
-                    corr_factor = _check_correlation(symbol, current_open, shared_data.get('last_indicators', {})) or 1.0
-                    avg_slip = _get_avg_slippage(symbol) or 0
-                    slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
-                    atr_adj = position_sizer.calculate_atr_adjustment(atr_pct) or 1.0
-                    score_adj = position_sizer.calculate_score_adjustment(best['score'], 50) or 1.0
-                    dd_adj = position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0
-                    size_mult = atr_adj * score_adj * dd_adj * multi_pos_factor * corr_factor * slip_factor
-                    if is_long:
-                        lev = trader.long_leverage
-                        sl_pct = best.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
-                        pos_size = position_size_long_usdt(
-                            balance, risk_pct=risk_pct, sl_pct=sl_pct,
-                            leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
-                        )
-                        pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
-                        take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
-                        if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
-                            trader.record_trade_time(symbol)
-                            _record_slippage(symbol, best.get('spread_pct', 0.05))
-                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}, OF {}".format(
-                                best['rsi'], best.get('adx') or '-',
-                                'bull' if best.get('macd_bullish') else '-',
-                                best['momentum_15m'], best['momentum_1h'],
-                                'OK' if best.get('score', 0) > min_score else '-')
-                            add_bot_log("LONG {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
-                            shared_data['last_block_reason'] = None
-                            return shared_data['opportunities']
-                    else:
-                        lev = trader.short_leverage
-                        sl_pct = best.get('sl_pct_effective') or STOP_LOSS_PCT
-                        pos_size = position_size_usdt(
-                            balance, risk_pct=risk_pct, sl_pct=sl_pct,
-                            leverage=lev, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT,
-                        )
-                        pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
-                        take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
-                        if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=best.get('atr_pct')):
-                            trader.record_trade_time(symbol)
-                            _record_slippage(symbol, best.get('spread_pct', 0.05))
-                            ta = "RSI {}, ADX {}, MACD {}, 15m {}, 1h {}, OF {}".format(
-                                best['rsi'], best.get('adx') or '-',
-                                'bear' if best.get('macd_bearish') else '-',
-                                best['momentum_15m'], best['momentum_1h'],
-                                'OK' if best.get('score', 0) > min_score else '-')
-                            add_bot_log("SHORT {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
-                            shared_data['last_block_reason'] = None
-                            return shared_data['opportunities']
-                    shared_data['last_block_reason'] = "Ouverture echouee (balance/cooldown/min position?)"
+    if opened_count > 0:
+        add_bot_log("{} position(s) ouverte(s) ce scan.".format(opened_count), 'INFO')
 
     if not opportunities_list:
         shared_data['last_block_reason'] = "Aucune opportunite detectee"
         add_bot_log("Aucune opportunité détectée sur ce scan.", 'INFO')
-    elif best is None:
+    elif opened_count == 0 and best is None:
         shared_data['last_block_reason'] = "Aucune opp avec R:R>={:.1f} et score>={}".format(MIN_RISK_REWARD, MIN_SCORE_TO_OPEN)
-        n_rr_ok = sum(1 for o in opportunities_list if (o.get('rr_ratio') or 0) >= MIN_RISK_REWARD)
-        n_score_ok = sum(1 for o in opportunities_list if o.get('score', 0) >= MIN_SCORE_TO_OPEN)
         add_bot_log("{} opps mais aucune avec R:R>={:.1f} ET score>={} — pas d'ouverture.".format(
             len(opportunities_list), MIN_RISK_REWARD, MIN_SCORE_TO_OPEN), 'INFO')
-    else:
+    elif opened_count == 0 and best is not None:
         shared_data['last_block_reason'] = shared_data.get('last_block_reason') or "Bloque (score/sentiment)"
-        add_bot_log("{} opps, best={} score={} — bloqué par score_min/sentiment.".format(
-            len(opportunities_list), best['symbol'], best['score']), 'INFO')
+        add_bot_log("{} opps, best={} score={} — bloqué.".format(len(opportunities_list), best['symbol'], best['score']), 'INFO')
 
     return shared_data['opportunities']
 
