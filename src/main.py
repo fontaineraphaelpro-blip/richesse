@@ -253,6 +253,7 @@ shared_data = {
         'updated': None
     },
     'sentiment_display': None,  # Sentiment marché & réseaux (Fear & Greed, Reddit, trending)
+    'last_block_reason': None,  # Pourquoi on n'a pas ouvert (affiché sur les opportunités)
 }
 
 app = Flask(__name__)
@@ -723,16 +724,18 @@ def run_scanner():
     deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
     available_pct = 1.0 - (deployed_capital / total_capital) if total_capital > 0 else 0
     if available_pct < (1.0 - MAX_PORTFOLIO_EXPOSURE):
+        shared_data['last_block_reason'] = "Portfolio exposure {:.0f}% >= {:.0f}% max".format(
+            (deployed_capital / total_capital) * 100, MAX_PORTFOLIO_EXPOSURE * 100)
         add_bot_log("Portfolio exposure {:.0f}% >= {:.0f}% max — pas de nouvelle position.".format(
             (deployed_capital / total_capital) * 100, MAX_PORTFOLIO_EXPOSURE * 100), 'INFO')
         return shared_data['opportunities']
 
     # BTC erratique: relever le score minimum
     btc_score_penalty = 5 if btc_regime == 'VOLATILE' else 0
+    best = None
 
     if opportunities_list and len(current_open) < MAX_POSITIONS:
         # Meilleure opportunite: score max, R:R OK, pas deja ouverte
-        best = None
         for opp in opportunities_list:
             if opp['symbol'] in already_open_symbols:
                 continue
@@ -769,6 +772,7 @@ def run_scanner():
                 except Exception:
                     pass
             if best['score'] < min_score:
+                shared_data['last_block_reason'] = "Score {} < {} (min requis)".format(best['score'], min_score)
                 add_bot_log("Meilleure opp {} score {} < {} (min) — pas d'ouverture.".format(best['symbol'], best['score'], min_score), 'INFO')
             else:
                 skip_sentiment = False
@@ -778,6 +782,7 @@ def run_scanner():
                         if fg and not fg.get('error'):
                             v = fg.get('value', 50)
                             if is_long and v >= FEAR_GREED_MAX_TO_LONG:
+                                shared_data['last_block_reason'] = "Extreme Greed ({}) : pas de LONG".format(v)
                                 add_bot_log("Extreme Greed ({}): pas de LONG.".format(v), 'INFO')
                                 skip_sentiment = True
                             elif not is_long and v <= FEAR_GREED_MIN_TO_SHORT:
@@ -802,6 +807,7 @@ def run_scanner():
                         pass
 
                     if best['score'] < min_score:
+                        shared_data['last_block_reason'] = "Order flow contraire (score -8) : {} < {}".format(best['score'], min_score)
                         add_bot_log("Opp {} score {} apres order flow < {} — skip.".format(symbol, best['score'], min_score), 'INFO')
                         return shared_data['opportunities']
 
@@ -841,6 +847,7 @@ def run_scanner():
                                 best['momentum_15m'], best['momentum_1h'],
                                 'OK' if best.get('score', 0) > min_score else '-')
                             add_bot_log("LONG {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                            shared_data['last_block_reason'] = None
                             return shared_data['opportunities']
                     else:
                         lev = trader.short_leverage
@@ -860,16 +867,21 @@ def run_scanner():
                                 best['momentum_15m'], best['momentum_1h'],
                                 'OK' if best.get('score', 0) > min_score else '-')
                             add_bot_log("SHORT {} @ {:.4f} | Score {} | {} | SL {:.4f} TP {:.4f}".format(symbol, price, best['score'], ta, stop_loss, take_profit), 'TRADE')
+                            shared_data['last_block_reason'] = None
                             return shared_data['opportunities']
+                    shared_data['last_block_reason'] = "Ouverture echouee (balance/cooldown/min position?)"
 
     if not opportunities_list:
+        shared_data['last_block_reason'] = "Aucune opportunite detectee"
         add_bot_log("Aucune opportunité détectée sur ce scan.", 'INFO')
     elif best is None:
+        shared_data['last_block_reason'] = "Aucune opp avec R:R>={:.1f} et score>={}".format(MIN_RISK_REWARD, MIN_SCORE_TO_OPEN)
         n_rr_ok = sum(1 for o in opportunities_list if (o.get('rr_ratio') or 0) >= MIN_RISK_REWARD)
         n_score_ok = sum(1 for o in opportunities_list if o.get('score', 0) >= MIN_SCORE_TO_OPEN)
         add_bot_log("{} opps mais aucune avec R:R>={:.1f} ET score>={} — pas d'ouverture.".format(
             len(opportunities_list), MIN_RISK_REWARD, MIN_SCORE_TO_OPEN), 'INFO')
     else:
+        shared_data['last_block_reason'] = shared_data.get('last_block_reason') or "Bloque (score/sentiment)"
         add_bot_log("{} opps, best={} score={} — bloqué par score_min/sentiment.".format(
             len(opportunities_list), best['symbol'], best['score']), 'INFO')
 
@@ -978,6 +990,7 @@ def dashboard():
         total_unrealized_pnl=total_unrealized_pnl,
         usd_to_eur=usd_to_eur,
         opportunities=shared_data['opportunities'],
+        last_block_reason=shared_data.get('last_block_reason'),
         is_scanning=shared_data['is_scanning'],
         last_update=shared_data['last_update'],
         scan_count=shared_data['scan_count'],
@@ -1044,6 +1057,7 @@ def api_data():
             'total_unrealized_pnl': round(total_unrealized_pnl, 2),
             'history': history[:10],
             'opportunities': safe_opps,
+            'last_block_reason': shared_data.get('last_block_reason'),
             'is_scanning': shared_data['is_scanning'],
             'last_update': shared_data['last_update'],
             'scan_count': shared_data['scan_count'],

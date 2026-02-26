@@ -75,6 +75,9 @@ button:active { opacity: 0.8; }
 </section>
 <section>
   <h2>Opportunités ({{ opportunities|length }})</h2>
+  {% if last_block_reason %}
+  <p style="font-size:0.85rem;color:#f80;margin-bottom:8px">Pas rentré : {{ last_block_reason }}</p>
+  {% endif %}
   {% if opportunities %}
   <table>
     <thead><tr><th>Paire</th><th>Signal</th><th>Score</th></tr></thead>
