@@ -80,13 +80,14 @@ button:active { opacity: 0.8; }
   {% endif %}
   {% if opportunities %}
   <table>
-    <thead><tr><th>Paire</th><th>Signal</th><th>Score</th></tr></thead>
+    <thead><tr><th>Paire</th><th>Signal</th><th>Score</th><th>Pourquoi</th></tr></thead>
     <tbody>
     {% for o in opportunities[:8] %}
     <tr>
       <td>{{ o.pair }}</td>
       <td>{{ o.entry_signal }}</td>
       <td>{{ o.score }}</td>
+      <td style="font-size:0.8rem;color:#999;max-width:180px">{{ o.why|default('-') }}</td>
     </tr>
     {% endfor %}
     </tbody>

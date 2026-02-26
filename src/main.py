@@ -644,6 +644,20 @@ def run_scanner():
                 take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
                 sl_pct_eff = LONG_STOP_LOSS_PCT
             rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
+            why_parts = []
+            rsi = indicators.get('rsi14')
+            if rsi is not None:
+                why_parts.append("RSI {:.0f}".format(rsi) + (" survendu" if rsi < 35 else " bas" if rsi < 50 else ""))
+            adx = indicators.get('adx')
+            if adx is not None and adx >= 20:
+                why_parts.append("ADX {:.0f}".format(adx))
+            if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
+                why_parts.append("15m bull")
+            if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
+                why_parts.append("1h bull")
+            if vol_r and vol_r >= 1.2:
+                why_parts.append("vol x{:.1f}".format(vol_r))
+            why_parts.append("R:R {:.1f}".format(rr))
             long_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
@@ -654,6 +668,7 @@ def run_scanner():
                 'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
                 'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
                 'is_signal': True, 'regime': regime, 'indicators': indicators,
+                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
             })
 
         # SHORT si score suffisant
@@ -665,6 +680,20 @@ def run_scanner():
                 take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
                 sl_pct_eff = STOP_LOSS_PCT
             rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
+            why_parts = []
+            rsi = indicators.get('rsi14')
+            if rsi is not None:
+                why_parts.append("RSI {:.0f}".format(rsi) + (" surachete" if rsi > 65 else " haut" if rsi > 50 else ""))
+            adx = indicators.get('adx')
+            if adx is not None and adx >= 20:
+                why_parts.append("ADX {:.0f}".format(adx))
+            if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
+                why_parts.append("15m bear")
+            if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
+                why_parts.append("1h bear")
+            if vol_r and vol_r >= 1.2:
+                why_parts.append("vol x{:.1f}".format(vol_r))
+            why_parts.append("R:R {:.1f}".format(rr))
             short_opportunities.append({
                 'symbol': symbol, 'pair': symbol, 'price': price,
                 'stop_loss': stop_loss, 'take_profit': take_profit,
@@ -675,6 +704,7 @@ def run_scanner():
                 'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
                 'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
                 'is_signal': True, 'regime': regime, 'indicators': indicators,
+                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
             })
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
