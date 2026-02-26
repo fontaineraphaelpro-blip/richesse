@@ -967,6 +967,9 @@ def dashboard():
     except Exception:
         usd_to_eur = 0.92
 
+    all_trades = trader.get_trades_history()
+    trades_history = [t for t in all_trades if 'VENTE' in t.get('type', '')][:50]
+
     return render_template_string(
         get_minimal_dashboard_html(),
         balance=balance,
@@ -980,6 +983,7 @@ def dashboard():
         scan_count=shared_data['scan_count'],
         bot_log=shared_data['bot_log'],
         perf=perf,
+        trades_history=trades_history,
     )
 
 
@@ -1070,8 +1074,11 @@ def export_trades_csv():
 
 @app.route('/api/close/<symbol>', methods=['POST'])
 def close_position_route(symbol):
-    """Ferme manuellement une position."""
+    """Ferme manuellement une position. Si prix indisponible, ferme au prix d'entree (force)."""
     trader = PaperTrader()
+    open_pos = trader.get_open_positions()
+    if symbol not in open_pos:
+        return jsonify({'success': False, 'error': 'Position inexistante'})
     current_price = shared_data.get('last_prices', {}).get(symbol)
     if not current_price:
         try:
@@ -1080,8 +1087,10 @@ def close_position_route(symbol):
         except Exception:
             pass
     if not current_price:
-        return jsonify({'success': False, 'error': 'Prix non disponible'})
-    success = trader.close_position(symbol, current_price, "MANUEL ðŸ‘¤")
+        # Force close: utilise le prix d'entree (PnL = 0) pour supprimer la position bloquee
+        current_price = open_pos[symbol]['entry_price']
+        add_bot_log("Prix {} indisponible (API) — fermeture forcee au prix d'entree.".format(symbol), 'WARN')
+    success = trader.close_position(symbol, current_price, "MANUEL")
     if success:
         add_bot_log(f"ðŸ’° VENTE MANUELLE {symbol} @ ${current_price:.4f}", 'TRADE')
     return jsonify({'success': success})

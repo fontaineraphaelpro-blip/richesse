@@ -91,7 +91,31 @@ button:active { opacity: 0.8; }
   {% endif %}
 </section>
 <section>
-  <h2>Journal</h2>
+  <h2>Historique des trades ({{ (trades_history|default([]))|length }})</h2>
+  {% if trades_history|default([]) %}
+  <div style="max-height:220px;overflow-y:auto">
+  <table>
+    <thead><tr><th>Date</th><th>Paire</th><th>Type</th><th>PnL</th><th>Raison</th></tr></thead>
+    <tbody>
+    {% for t in (trades_history|default([])) %}
+    <tr>
+      <td style="font-size:0.8rem;color:#999">{{ t.time }}</td>
+      <td><strong>{{ t.symbol }}</strong></td>
+      <td>{{ t.direction }}</td>
+      <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format((t.pnl|default(0)) * (usd_to_eur|default(0.92))) }} € ({{ "%+.1f"|format(t.pnl_percent|default(0)) }}%)</span></td>
+      <td style="font-size:0.8rem">{{ t.reason|default('-')[:20] }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:0.75rem;color:#666;margin-top:6px"><a href="/api/export/trades" style="color:#888">Exporter CSV</a></p>
+  {% else %}
+  <p class="empty">Aucun trade ferme</p>
+  {% endif %}
+</section>
+<section>
+  <h2>Journal bot</h2>
   <div class="log">
   {% if bot_log %}
   {% for e in bot_log %}
