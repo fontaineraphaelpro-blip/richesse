@@ -1755,6 +1755,12 @@ if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
+    # RESET_ON_START=1 : reinitialise wallet et historique a chaque demarrage (deploiement)
+    if os.environ.get('RESET_ON_START', '').strip() == '1':
+        trader = PaperTrader()
+        trader.reset_to_initial(100)
+        add_bot_log("RESET_ON_START: portefeuille reinitialise a 100 USDT.", 'INFO')
+
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
 
