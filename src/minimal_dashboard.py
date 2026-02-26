@@ -55,12 +55,13 @@ button:active { opacity: 0.8; }
   <h2>Positions ({{ positions|length }})</h2>
   {% if positions %}
   <table>
-    <thead><tr><th>Paire</th><th>Type</th><th>PnL</th><th></th></tr></thead>
+    <thead><tr><th>Paire</th><th>Type</th><th>Marge</th><th>PnL</th><th></th></tr></thead>
     <tbody>
     {% for p in positions %}
     <tr>
       <td><strong>{{ p.symbol }}</strong></td>
       <td>{{ p.direction }}</td>
+      <td>{{ "%.2f"|format((p.amount|default(0)) * (usd_to_eur|default(0.92))) }} €</td>
       <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(p.pnl_value * (usd_to_eur|default(0.92))) }} € ({{ "%+.2f"|format(p.pnl_percent) }}%)</span></td>
       <td><button onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
     </tr>
