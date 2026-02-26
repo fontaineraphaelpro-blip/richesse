@@ -97,10 +97,11 @@ button:active { opacity: 0.8; }
   {% if trades_history|default([]) %}
   <div style="max-height:220px;overflow-y:auto">
   <table>
-    <thead><tr><th>Date</th><th>Paire</th><th>Type</th><th>PnL</th><th>Raison</th></tr></thead>
+    <thead><tr><th>Entree</th><th>Sortie</th><th>Paire</th><th>Type</th><th>PnL</th><th>Raison</th></tr></thead>
     <tbody>
     {% for t in (trades_history|default([])) %}
     <tr>
+      <td style="font-size:0.8rem;color:#999">{{ t.entry_time|default('-') }}</td>
       <td style="font-size:0.8rem;color:#999">{{ t.time }}</td>
       <td><strong>{{ t.symbol }}</strong></td>
       <td>{{ t.direction }}</td>

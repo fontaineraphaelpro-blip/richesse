@@ -835,6 +835,15 @@ class PaperTrader:
         print(f"[MONEY] VENTE {symbol:<12} ({reason}) | {status}: "
               f"${pnl_value:+.2f} ({pnl_percent:+.2f}%)")
 
+        exit_time_str = datetime.now().strftime('%d/%m %H:%M')
+        entry_time_raw = pos.get('entry_time', '')
+        entry_time_str = entry_time_raw
+        if entry_time_raw and '-' in entry_time_raw:
+            try:
+                t = datetime.strptime(entry_time_raw[:16], '%Y-%m-%d %H:%M')
+                entry_time_str = t.strftime('%d/%m %H:%M')
+            except Exception:
+                pass
         trade_data = {
             'type':        f'VENTE ({reason})',
             'symbol':      symbol,
@@ -843,7 +852,8 @@ class PaperTrader:
             'amount':      round(abs(returned), 2),
             'quantity':    quantity,
             'entry_price': entry_price,
-            'time':        datetime.now().strftime('%d/%m %H:%M'),
+            'entry_time':  entry_time_str,
+            'time':        exit_time_str,
             'pnl':         round(pnl_value, 2),
             'pnl_percent': round(pnl_percent, 2),
             'reason':      reason,

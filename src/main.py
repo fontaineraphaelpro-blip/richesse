@@ -1063,7 +1063,7 @@ def export_trades_csv():
     trader = PaperTrader()
     history = trader.get_trades_history()
     output = io.StringIO()
-    keys = ['time', 'type', 'symbol', 'direction', 'entry_price', 'price', 'amount', 'pnl', 'pnl_percent', 'reason']
+    keys = ['entry_time', 'time', 'type', 'symbol', 'direction', 'entry_price', 'price', 'amount', 'pnl', 'pnl_percent', 'reason']
     writer = csv.DictWriter(output, fieldnames=keys, extrasaction='ignore')
     writer.writeheader()
     for t in history:
