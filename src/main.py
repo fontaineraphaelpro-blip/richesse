@@ -1100,9 +1100,15 @@ def close_position_route(symbol):
 def api_reset():
     """Réinitialise le portefeuille à 100€ et vide l'historique des trades."""
     trader = PaperTrader()
-    ok = trader.reset_to_initial(100)
+    try:
+        eur_usdt = shared_data.get('last_prices', {}).get('EURUSDT') or fetch_current_prices(['EURUSDT']).get('EURUSDT', 1.08)
+        usd_to_eur = 1.0 / float(eur_usdt) if eur_usdt else 0.92
+        initial_usdt = 100.0 / usd_to_eur
+    except Exception:
+        initial_usdt = 108.0
+    ok = trader.reset_to_initial(initial_usdt)
     if ok:
-        add_bot_log("Réinitialisation: 100€, 0 positions, historique vide.", 'INFO')
+        add_bot_log("Reinitialisation: 100 EUR, 0 positions, historique vide.", 'INFO')
     return jsonify({'success': ok, 'error': None if ok else 'Erreur reset'})
 
 

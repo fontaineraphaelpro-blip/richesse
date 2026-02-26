@@ -43,7 +43,7 @@ button:active { opacity: 0.8; }
   <div class="status">
     <span class="dot {% if is_scanning %}scan{% else %}on{% endif %}"></span>
     <span>{% if is_scanning %}Scan...{% else %}Actif{% endif %} &middot; #{{ scan_count }} &middot; {{ last_update or '-' }}</span>
-    <button onclick="resetWallet()" style="margin-left:auto;font-size:0.8rem;padding:6px 10px">Réinitialiser (100€)</button>
+    <button onclick="resetWallet()" style="margin-left:auto;font-size:0.8rem;padding:6px 10px">Reinitialiser (100 EUR)</button>
   </div>
 </section>
 <section>
