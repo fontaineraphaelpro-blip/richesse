@@ -95,11 +95,11 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr
 
 
-def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
+def calculate_adx(df: pd.DataFrame, period: int = 14) -> Dict:
     """
-    Calcule l'ADX (Force de la tendance).
+    Calcule l'ADX (Force de la tendance) + DI+ et DI-.
     ADX > 25 = Tendance forte.
-    ADX < 20 = Range (Pas de trade en swing).
+    Returns: {'adx': Series, 'plus_di': Series, 'minus_di': Series}
     """
     high = df['high']
     low = df['low']
@@ -123,7 +123,7 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     dx = 100 * abs(plus_di - minus_di) / dx_denominator.replace(0, np.nan)
     adx = dx.rolling(window=period).mean()
     
-    return adx
+    return {'adx': adx, 'plus_di': plus_di, 'minus_di': minus_di}
 
 
 def calculate_stochastic(df: pd.DataFrame, period: int = 14, k_period: int = 3, d_period: int = 3) -> Dict:
@@ -154,6 +154,40 @@ def calculate_ichimoku(df: pd.DataFrame) -> Dict:
     kijun_sen = (period26_high + period26_low) / 2
     
     return {'tenkan': tenkan_sen, 'kijun': kijun_sen}
+
+
+def calculate_obv(df: pd.DataFrame) -> pd.Series:
+    """
+    On-Balance Volume: cumul du volume selon la direction du prix.
+    Confirme la force d'un mouvement (volume suit le prix).
+    """
+    if df is None or len(df) < 2:
+        return pd.Series(dtype=float)
+    close = df['close']
+    volume = df['volume']
+    obv = (np.sign(close.diff()) * volume).fillna(0).cumsum()
+    return obv
+
+
+def calculate_mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    Money Flow Index: RSI pondere par le volume.
+    Combine prix et volume pour detecter surchauffe/oversold.
+    """
+    if df is None or len(df) < period + 2:
+        return pd.Series(dtype=float)
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    volume = df['volume']
+    typical_price = (high + low + close) / 3
+    raw_money_flow = typical_price * volume
+    delta = typical_price.diff()
+    positive_flow = raw_money_flow.where(delta > 0, 0).rolling(period).sum()
+    negative_flow = raw_money_flow.where(delta < 0, 0).rolling(period).sum()
+    mfi_ratio = positive_flow / negative_flow.replace(0, np.nan)
+    mfi = 100 - (100 / (1 + mfi_ratio))
+    return mfi
 
 
 def calculate_vwap(df: pd.DataFrame) -> pd.Series:
@@ -378,7 +412,8 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     # 3. VOLATILITÉ & FORCE
     # ----------------------------------------
     atr = calculate_atr(df, 14)
-    adx = calculate_adx(df, 14)
+    adx_data = calculate_adx(df, 14)
+    adx = adx_data['adx'] if isinstance(adx_data, dict) else adx_data
     bb = calculate_bollinger_bands(close, 20, 2.0)
     
     # 3b. ICHIMOKU (Tenkan/Kijun pour confluence)
@@ -391,6 +426,8 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
     # 4. VOLUME
     # ----------------------------------------
     volume_ma20 = calculate_sma(volume, 20)
+    obv = calculate_obv(df)
+    mfi14 = calculate_mfi(df, 14)
     
     # 5. PATTERNS & SUPPORTS (Si disponibles)
     # ----------------------------------------
@@ -488,6 +525,8 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         'atr': atr.iloc[-1],
         'atr_percent': (atr.iloc[-1] / current_price) * 100,
         'adx': adx.iloc[-1],
+        'di_plus': adx_data['plus_di'].iloc[-1] if isinstance(adx_data, dict) else None,
+        'di_minus': adx_data['minus_di'].iloc[-1] if isinstance(adx_data, dict) else None,
         
         # --- BANDES DE BOLLINGER ---
         'bb_upper': bb['upper'].iloc[-1],
@@ -499,6 +538,9 @@ def calculate_indicators(df: pd.DataFrame) -> Dict:
         'current_volume': volume.iloc[-1],
         'volume_ma20': volume_ma20.iloc[-1] if not pd.isna(volume_ma20.iloc[-1]) else 0,
         'volume_ratio': volume.iloc[-1] / volume_ma20.iloc[-1] if (not pd.isna(volume_ma20.iloc[-1]) and volume_ma20.iloc[-1] > 0) else None,
+        'obv': obv.iloc[-1] if len(obv) > 0 and not pd.isna(obv.iloc[-1]) else None,
+        'obv_slope': (obv.iloc[-1] - obv.iloc[-5]) if len(obv) >= 5 else None,
+        'mfi14': mfi14.iloc[-1] if len(mfi14) > 0 and not pd.isna(mfi14.iloc[-1]) else None,
         
         # --- PATTERNS & EXTRA ---
         'candlestick_patterns': patterns.get('patterns', []),

@@ -4,11 +4,17 @@ Version: ULTIMATE v2.0 â€” Scanner complet + Bot Swing + Paper Trading + Da
 """
 
 import sys
+import os
+
+# Garantir que le dossier contenant main.py est dans le path (pour Docker /app ou exécution depuis la racine)
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
+
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 import time
-import os
 import math
 import threading
 import json
@@ -439,7 +445,13 @@ def run_scanner():
     from short_crash_strategy import (
         position_size_usdt, position_size_long_usdt, compute_sl_tp_from_chart,
     )
-    from adaptive_scorer import score_adaptive
+    try:
+        from adaptive_scorer import score_adaptive
+    except ImportError:
+        add_bot_log("Module adaptive_scorer non trouvé — utilisation du score de repli (pas d'ouverture). Ajoutez src/adaptive_scorer.py au déploiement.", 'WARNING')
+        def score_adaptive(indicators, momentum_15m, momentum_1h, momentum_4h, spread_pct, atr_pct,
+                          momentum_5m=None, order_flow=None, depth_imbalance=None, fear_greed=None):
+            return 50.0, 50.0, 'UNKNOWN'
     from indicators import calculate_indicators
     from data_fetcher import fetch_multiple_pairs, get_top_pairs, fetch_multi_timeframe, fetch_order_flow, fetch_orderbook_depth
 

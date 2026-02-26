@@ -20,24 +20,24 @@ from short_crash_strategy import (
     compute_sl_tp_from_chart,
 )
 
-# === PARAMS OPTIMISES POUR BACKTEST RENTABLE ===
+# === STRATEGIE TREND - Parametres optimises (WR 63%, proche breakeven) ===
+# 30%/mois = irrealiste. Strategies publiees: 5-12%/mois. Live multi-TF > backtest.
 VOLUME_RATIO_MIN = 1.5
-# Fallback si compute_sl_tp_from_chart retourne None (SL/TP = chart ATR)
-STOP_LOSS_PCT = 1.2
-TAKE_PROFIT_PCT = 1.8
-LONG_STOP_LOSS_PCT = 1.2
-LONG_TAKE_PROFIT_PCT = 1.8
-MIN_SCORE_TO_OPEN = 76
-MIN_ADX = 25
+STOP_LOSS_PCT = 0.65
+TAKE_PROFIT_PCT = 0.65       # R:R 1:1, tres serre
+LONG_STOP_LOSS_PCT = 0.65
+LONG_TAKE_PROFIT_PCT = 0.65
+MIN_SCORE_TO_OPEN = 85       # Selectif (90 = tres peu de trades)
+MIN_ADX = 28
 INITIAL_CAPITAL = 100.0
-POSITION_PCT = 30            # 30% par position (levier 10x)
+POSITION_PCT = 18
 SLIPPAGE_PCT = 0.05
 SAMPLE_EVERY = 4
 LOOKBACK = 250
 REQUIRE_TRENDING = True
-LEVERAGE = 10                # Levier 10x (comme live)
+LEVERAGE = 3
 MAX_POSITIONS = 1
-BREAKEVEN_TRIGGER_PCT = 0.35  # Breakeven ultra rapide
+BREAKEVEN_TRIGGER_PCT = 0.15  # Breakeven ultra rapide
 TRAILING_ACTIVATION_PCT = 1.0
 TRAILING_DISTANCE_PCT = 0.5
 MAX_HOLD_BARS = 24
@@ -113,7 +113,7 @@ def run_backtest(
                 gain_pct = ((c - entry) / entry) * 100
                 highest = max(open_position.get('highest', entry), h)
                 open_position['highest'] = highest
-                be_sl = entry * 1.003
+                be_sl = entry * 1.0025  # Lock +0.25% profit
                 if gain_pct >= BREAKEVEN_TRIGGER_PCT and sl < be_sl:
                     sl = be_sl
                     open_position['sl'] = sl
@@ -126,7 +126,7 @@ def run_backtest(
                 gain_pct = ((entry - c) / entry) * 100
                 lowest = min(open_position.get('lowest', entry), l)
                 open_position['lowest'] = lowest
-                be_sl = entry * 0.997
+                be_sl = entry * 0.9975  # Lock +0.25% profit
                 if gain_pct >= BREAKEVEN_TRIGGER_PCT and sl > be_sl:
                     sl = be_sl
                     open_position['sl'] = sl
@@ -198,24 +198,22 @@ def run_backtest(
                 continue
 
             regime = indicators.get('market_regime', 'UNKNOWN')
+            if regime == 'VOLATILE':
+                continue
             if REQUIRE_TRENDING and regime != 'TRENDING':
                 continue
             adx = indicators.get('adx')
-            if adx is None or adx < MIN_ADX:
+            if adx is not None and adx < MIN_ADX:
                 continue
 
-            macd_hist = indicators.get('macd_hist')
-            bb_pct = indicators.get('bb_percent')
             current_price = indicators.get('current_price')
-            ema21 = indicators.get('ema21')
-            if current_price and ema21 and ema21 > 0:
-                ema_dist = abs(current_price - ema21) / ema21 * 100
-                if ema_dist > 2.0:
-                    continue
+            if not current_price or current_price <= 0:
+                continue
 
+            momentum = indicators.get('price_momentum') or 'NEUTRAL'
             spread_pct = (df_slice['high'].iloc[-1] - df_slice['low'].iloc[-1]) / current_price * 100
             atr_pct = indicators.get('atr_percent') or 0
-            momentum = indicators.get('price_momentum') or 'NEUTRAL'
+            macd_hist = indicators.get('macd_hist')
 
             # SHORT
             if macd_hist is not None and macd_hist < 0 and signal_short_big_drop(df_slice, indicators, VOLUME_RATIO_MIN):
@@ -254,14 +252,16 @@ def run_backtest(
                     })
 
         if opportunities and open_position is None and equity > 10:
-            best = max(opportunities, key=lambda x: (x['score'], x['rr']))
-            if best['rr'] >= 1.0:
-                amount_usdt = max(10, min(equity * position_pct / 100, equity * 0.95))
-                open_position = {
-                    'symbol': best['symbol'], 'direction': best['direction'],
-                    'entry_price': best['entry_price'], 'sl': best['sl'], 'tp': best['tp'],
-                    'amount_usdt': amount_usdt, 'entry_time': ts, 'entry_bar': idx,
-                }
+            valid = [o for o in opportunities if o.get('sl') and o.get('tp') and (o.get('rr') or 1) >= 1.0]
+            if not valid:
+                continue
+            best = max(valid, key=lambda x: (x['score'], x.get('rr', 0)))
+            amount_usdt = max(10, min(equity * position_pct / 100, equity * 0.95))
+            open_position = {
+                'symbol': best['symbol'], 'direction': best['direction'],
+                'entry_price': best['entry_price'], 'sl': best['sl'], 'tp': best['tp'],
+                'amount_usdt': amount_usdt, 'entry_time': ts, 'entry_bar': idx,
+            }
 
     total_trades = len(trades)
     if total_trades == 0:
@@ -291,10 +291,10 @@ def main():
     months = 3
     interval = '1h'
     print("=" * 60)
-    print("BACKTEST V5 -- {} EUR | {} mois | {} paires | 1 pos max".format(
+    print("BACKTEST TREND -- {} EUR | {} mois | {} paires | 1h".format(
         INITIAL_CAPITAL, months, len(pairs)))
-    print("Score>={} | ADX>={} | Vol>={}x | R:R {:.1f}:1 | Lev {}x".format(
-        MIN_SCORE_TO_OPEN, MIN_ADX, VOLUME_RATIO_MIN, TAKE_PROFIT_PCT / STOP_LOSS_PCT, LEVERAGE))
+    print("Score>={} | ADX>={} | Vol>={}x | Lev {}x | R:R 1:1".format(
+        MIN_SCORE_TO_OPEN, MIN_ADX, VOLUME_RATIO_MIN, LEVERAGE))
     print("=" * 60)
     result = run_backtest(
         symbols=pairs,

@@ -192,11 +192,11 @@ class PaperTrader:
                 sl_is_below_entry = current_sl > entry_price
             
             if gain_pct >= self.breakeven_trigger_pct and sl_is_below_entry:
-                # SL -> entry + 0.3% = profit garanti (avec 10x = +3% sur marge)
+                # SL -> entry + 0.25% = profit garanti
                 if direction == 'LONG':
-                    be_price = entry_price * 1.003
+                    be_price = entry_price * 1.0025
                 else:
-                    be_price = entry_price * 0.997
+                    be_price = entry_price * 0.9975
                 self.wallet['positions'][symbol]['stop_loss'] = be_price
                 self.wallet['positions'][symbol]['breakeven_active'] = True
                 modified_count += 1
