@@ -1002,12 +1002,6 @@ def dashboard():
     total_invested = sum(p['amount'] for p in positions_view)
     total_capital = balance + total_invested + total_unrealized_pnl
     perf = shared_data.get('performance') or {'total_trades': 0, 'winning_trades': 0, 'total_pnl': 0, 'win_rate': 0}
-    # Taux USD -> EUR (1 USDT = X EUR) pour affichage PnL en €
-    try:
-        eur_usdt = shared_data.get('last_prices', {}).get('EURUSDT') or fetch_current_prices(['EURUSDT']).get('EURUSDT', 1.08)
-        usd_to_eur = 1.0 / float(eur_usdt) if eur_usdt else 0.92
-    except Exception:
-        usd_to_eur = 0.92
 
     all_trades = trader.get_trades_history()
     trades_history = [t for t in all_trades if 'VENTE' in t.get('type', '')][:50]
@@ -1018,7 +1012,6 @@ def dashboard():
         total_capital=total_capital,
         positions=positions_view,
         total_unrealized_pnl=total_unrealized_pnl,
-        usd_to_eur=usd_to_eur,
         opportunities=shared_data['opportunities'],
         last_block_reason=shared_data.get('last_block_reason'),
         is_scanning=shared_data['is_scanning'],
@@ -1142,17 +1135,11 @@ def close_position_route(symbol):
 
 @app.route('/api/reset', methods=['POST'])
 def api_reset():
-    """Réinitialise le portefeuille à 100€ et vide l'historique des trades."""
+    """Réinitialise le portefeuille à 100 USDT et vide l'historique des trades."""
     trader = PaperTrader()
-    try:
-        eur_usdt = shared_data.get('last_prices', {}).get('EURUSDT') or fetch_current_prices(['EURUSDT']).get('EURUSDT', 1.08)
-        usd_to_eur = 1.0 / float(eur_usdt) if eur_usdt else 0.92
-        initial_usdt = 100.0 / usd_to_eur
-    except Exception:
-        initial_usdt = 108.0
-    ok = trader.reset_to_initial(initial_usdt)
+    ok = trader.reset_to_initial(100)
     if ok:
-        add_bot_log("Reinitialisation: 100 EUR, 0 positions, historique vide.", 'INFO')
+        add_bot_log("Reinitialisation: 100 USDT, 0 positions, historique vide.", 'INFO')
     return jsonify({'success': ok, 'error': None if ok else 'Erreur reset'})
 
 

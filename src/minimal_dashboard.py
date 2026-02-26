@@ -43,14 +43,14 @@ button:active { opacity: 0.8; }
   <div class="status">
     <span class="dot {% if is_scanning %}scan{% else %}on{% endif %}"></span>
     <span>{% if is_scanning %}Scan...{% else %}Actif{% endif %} &middot; #{{ scan_count }} &middot; {{ last_update or '-' }}</span>
-    <button onclick="resetWallet()" style="margin-left:auto;font-size:0.8rem;padding:6px 10px">Reinitialiser (100 EUR)</button>
+    <button onclick="resetWallet()" style="margin-left:auto;font-size:0.8rem;padding:6px 10px">Reinitialiser (100 USDT)</button>
   </div>
 </section>
 <section>
-  <div class="row"><span class="label">Capital</span><span>{{ "%.2f"|format(total_capital * (usd_to_eur|default(0.92))) }} €</span></div>
-  <div class="row"><span class="label">Dispo</span><span>{{ "%.2f"|format(balance * (usd_to_eur|default(0.92))) }} €</span></div>
-  <div class="row"><span class="label">PnL latent</span><span class="{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(total_unrealized_pnl * (usd_to_eur|default(0.92))) }} €</span></span></div>
-  <div class="row"><span class="label">PnL réalisé</span><span class="{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(perf.total_pnl * (usd_to_eur|default(0.92))) }} €</span> ({{ perf.win_rate }}% WR, {{ perf.total_trades }} trades)</span></div>
+  <div class="row"><span class="label">Capital</span><span>{{ "%.2f"|format(total_capital) }} USDT</span></div>
+  <div class="row"><span class="label">Dispo</span><span>{{ "%.2f"|format(balance) }} USDT</span></div>
+  <div class="row"><span class="label">PnL latent</span><span class="{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(total_unrealized_pnl) }} USDT</span></span></div>
+  <div class="row"><span class="label">PnL réalisé</span><span class="{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(perf.total_pnl) }} USDT</span> ({{ perf.win_rate }}% WR, {{ perf.total_trades }} trades)</span></div>
 </section>
 <section>
   <h2>Positions ({{ positions|length }})</h2>
@@ -62,8 +62,8 @@ button:active { opacity: 0.8; }
     <tr>
       <td><strong>{{ p.symbol }}</strong></td>
       <td>{{ p.direction }}</td>
-      <td>{{ "%.2f"|format((p.amount|default(0)) * (usd_to_eur|default(0.92))) }} €</td>
-      <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(p.pnl_value * (usd_to_eur|default(0.92))) }} € ({{ "%+.2f"|format(p.pnl_percent) }}%)</span></td>
+      <td>{{ "%.2f"|format(p.amount|default(0)) }} USDT</td>
+      <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(p.pnl_value) }} USDT ({{ "%+.2f"|format(p.pnl_percent) }}%)</span></td>
       <td><button onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
     </tr>
     {% endfor %}
@@ -109,7 +109,7 @@ button:active { opacity: 0.8; }
       <td style="font-size:0.8rem;color:#999">{{ t.time }}</td>
       <td><strong>{{ t.symbol }}</strong></td>
       <td>{{ t.direction }}</td>
-      <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format((t.pnl|default(0)) * (usd_to_eur|default(0.92))) }} € ({{ "%+.1f"|format(t.pnl_percent|default(0)) }}%)</span></td>
+      <td class="{% if t.pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(t.pnl|default(0)) }} USDT ({{ "%+.1f"|format(t.pnl_percent|default(0)) }}%)</span></td>
       <td style="font-size:0.8rem">{{ (t.reason|default('-'))[:20] }}</td>
     </tr>
     {% endfor %}
@@ -135,7 +135,7 @@ button:active { opacity: 0.8; }
 </section>
 <script>
 function resetWallet() {
-  if (!confirm('Réinitialiser à 100€ ? Toutes les positions et l\'historique seront supprimés.')) return;
+  if (!confirm('Réinitialiser à 100 USDT ? Toutes les positions et l\'historique seront supprimés.')) return;
   fetch('/api/reset', { method: 'POST' })
     .then(r => r.json())
     .then(d => { if (d.success) location.reload(); else alert(d.error || 'Erreur'); })
