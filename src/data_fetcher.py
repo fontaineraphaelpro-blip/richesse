@@ -337,9 +337,15 @@ def fetch_current_prices(symbols: List[str]) -> Dict[str, float]:
 # MULTI-TIMEFRAME ANALYSIS
 # ─────────────────────────────────────────────────────────────
 
+# Cache MTF (TTL 90 s) pour limiter les appels API
+_MTF_CACHE: Dict[tuple, Tuple[float, Dict]] = {}
+_MTF_CACHE_TTL = 90  # secondes
+
+
 def fetch_multi_timeframe(symbol: str, timeframes: List[str] = None, limit: int = 200) -> Dict[str, pd.DataFrame]:
     """
     Récupère les données pour plusieurs timeframes d'une même paire.
+    Cache 90 s par (symbol, tuple(timeframes)) pour réduire les appels.
     
     Args:
         symbol: La paire (ex: 'BTCUSDT')
@@ -351,15 +357,23 @@ def fetch_multi_timeframe(symbol: str, timeframes: List[str] = None, limit: int 
     """
     if timeframes is None:
         timeframes = ['15m', '1h', '4h']
-    
+    key = (symbol, tuple(sorted(timeframes)), limit)
+    now = time.time()
+    if key in _MTF_CACHE:
+        ts, data = _MTF_CACHE[key]
+        if now - ts < _MTF_CACHE_TTL and data:
+            return data
     data = {}
-    
     for tf in timeframes:
         df = get_binance_klines(symbol, interval=tf, limit=limit)
         if df is not None and not df.empty:
             data[tf] = df
         time.sleep(0.1)  # Éviter rate limit
-    
+    _MTF_CACHE[key] = (now, data)
+    # Limiter la taille du cache (garder 200 entrées max)
+    if len(_MTF_CACHE) > 200:
+        oldest = min(_MTF_CACHE.keys(), key=lambda k: _MTF_CACHE[k][0])
+        del _MTF_CACHE[oldest]
     return data
 
 

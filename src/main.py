@@ -194,6 +194,23 @@ ENTRY_BUFFER_PCT = 0.03           # Slippage simulé à l'entrée (0.03%)
 ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < seuil
 ALERT_WR_MIN_PCT = 40
 
+# Score minimum par régime BTC (qualité des setups)
+MIN_SCORE_RANGING = 65            # RANGING: exiger score plus élevé
+MIN_SCORE_VOLATILE = 70          # VOLATILE: encore plus strict (souvent pas d'ouverture)
+# Drawdown 7j deux paliers (réduction progressive de la taille)
+DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
+DRAWDOWN_7D_SIZE_MULT_TIER1 = 0.85
+# (DRAWDOWN_7D_PCT=5 et DRAWDOWN_7D_SIZE_MULT=0.7 restent le palier 2)
+# ML + Sentiment sur le score d'entrée
+ML_SCORE_BONUS_MAX = 10          # Bonus/malus ML max ±10 pts (prob-50)*0.2
+SENTIMENT_SCORE_BONUS_MAX = 5     # Bonus/malus sentiment max ±5 pts
+# BTC baissier: pénalité LONG sur alts (corrélation)
+BTC_BEAR_LONG_PENALTY = 8        # Si BTC 1h BEARISH, LONG alts -8 pts
+# Cap perte max par position (% du capital)
+MAX_LOSS_PCT_PER_POSITION = 10.0  # Réduire taille si perte potentielle > 10%
+# Cache MTF (secondes)
+MTF_CACHE_TTL_SEC = 90           # Réutiliser 15m/1h/4h pendant 90 s par symbole
+
 # Configuration News & Sentiment
 NEWS_ENABLED = True
 SENTIMENT_SCORE_ADJUST = True
@@ -313,6 +330,9 @@ shared_data = {
     },
     'sentiment_display': None,  # Sentiment marché & réseaux (Fear & Greed, Reddit, trending)
     'last_block_reason': None,  # Pourquoi on n'a pas ouvert (affiché sur les opportunités)
+    'struct_log': [],           # Log structuré (scan_id, symbol, score, action, reason)
+    'daily_highs': {},         # High 7j par date (pour drawdown)
+    'pause_no_new_until': None,  # Pause après 2 pertes (datetime)
 }
 
 app = Flask(__name__)
@@ -332,6 +352,25 @@ def add_bot_log(msg: str, level: str = 'INFO'):
     shared_data['bot_log'] = shared_data['bot_log'][:30]  # Garder les 30 derniers
     level_pad = level.ljust(5)
     print("  [{}] [{}] {}".format(entry['time'], level_pad, msg))
+
+
+def get_effective_min_score(btc_regime: str) -> float:
+    """Score minimum selon le régime BTC (TRENDING / RANGING / VOLATILE)."""
+    if btc_regime == 'VOLATILE':
+        return MIN_SCORE_VOLATILE
+    if btc_regime == 'RANGING':
+        return MIN_SCORE_RANGING
+    return MIN_SCORE_TO_OPEN
+
+
+def add_bot_log_struct(scan_id: int, symbol: str, score: float, action: str, reason: str = ''):
+    """Log structuré pour analyse (scan_id, symbol, score, action, reason)."""
+    entry = {
+        'time': datetime.now().strftime('%H:%M:%S'),
+        'scan_id': scan_id, 'symbol': symbol, 'score': score, 'action': action, 'reason': reason
+    }
+    shared_data.setdefault('struct_log', []).append(entry)
+    shared_data['struct_log'] = shared_data['struct_log'][-100:]  # Garder 100 derniers
 
 
 def fetch_sentiment_for_dashboard():
@@ -426,6 +465,13 @@ def update_performance_stats(trader: PaperTrader):
         'win_rate': round((winners / total * 100) if total > 0 else 0, 1),
         'by_regime': by_regime,
     }
+    # Réentraînement ML périodique (1x par jour ou tous les 20 trades)
+    if total > 0 and (total % 20 == 0 or shared_data.get('last_ml_update_date') != datetime.now().strftime('%Y-%m-%d')):
+        try:
+            ml_predictor.update_weights_from_history()
+            shared_data['last_ml_update_date'] = datetime.now().strftime('%Y-%m-%d')
+        except Exception:
+            pass
     # Alerte si WR sur les N derniers trades < seuil (1x par jour)
     if len(sales) >= ALERT_WR_LAST_N:
         last_n = sales[:ALERT_WR_LAST_N]
@@ -590,7 +636,12 @@ def run_scanner():
         if btc_ind:
             btc_regime = btc_ind.get('market_regime', 'UNKNOWN')
             btc_adx = btc_ind.get('adx') or 0
+            shared_data['btc_momentum_1h'] = btc_ind.get('price_momentum')  # proxy 15m pour filtre LONG alts
             add_bot_log("BTC {} (ADX {:.0f}) — scan adaptatif actif.".format(btc_regime, btc_adx), 'INFO')
+        else:
+            shared_data['btc_momentum_1h'] = None
+    else:
+        shared_data['btc_momentum_1h'] = None
 
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
@@ -779,9 +830,22 @@ def run_scanner():
         )
         final_long = score_long + session_bonus
         final_short = score_short + session_bonus
+        # Bonus/malus sentiment (Extreme Fear → bonus LONG; Extreme Greed → bonus SHORT)
+        if SENTIMENT_SCORE_ADJUST and fear_greed_val is not None:
+            if fear_greed_val < 25:
+                final_long += SENTIMENT_SCORE_BONUS_MAX
+                final_short -= SENTIMENT_SCORE_BONUS_MAX
+            elif fear_greed_val > 75:
+                final_short += SENTIMENT_SCORE_BONUS_MAX
+                final_long -= SENTIMENT_SCORE_BONUS_MAX
+        # BTC baissier: pénalité LONG sur alts (corrélation)
+        btc_mom = shared_data.get('btc_momentum_1h')
+        if symbol != 'BTCUSDT' and btc_mom in ('BEARISH', 'BEAR'):
+            final_long -= BTC_BEAR_LONG_PENALTY
+        effective_min = get_effective_min_score(btc_regime) + _adaptive_state.get('min_score_adjust', 0)
 
         # LONG si score suffisant (+ gate strict optionnel pour mieux lire les signaux)
-        if final_long >= MIN_SCORE_TO_OPEN:
+        if final_long >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
                 pass  # 15m et 1h non alignés haussiers
             elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BULLISH', 'BULL', 'NEUTRAL', None):
@@ -800,6 +864,11 @@ def run_scanner():
                 else:
                     n_long_signal += 1
                     rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                    if atr_pct is not None and atr_pct > 0:
+                        if atr_pct < 1.0:
+                            rr_override = 2.0   # Marché calme → viser R:R plus élevé
+                        elif atr_pct > 2.5:
+                            rr_override = 1.3   # Très volatile → R:R plus bas (TP atteignable)
                     stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG', rr_ratio=rr_override)
                     if stop_loss is None:
                         stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
@@ -828,21 +897,38 @@ def run_scanner():
                         if vol_r and vol_r >= 1.2:
                             why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
                         why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-                        long_opportunities.append({
-                            'symbol': symbol, 'pair': symbol, 'price': price,
-                            'stop_loss': stop_loss, 'take_profit': take_profit,
-                            'sl_pct_effective': sl_pct_eff,
-                            'entry_signal': 'LONG', 'score': final_long,
-                            'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                            'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                            'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                            'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
-                            'is_signal': True, 'regime': regime, 'indicators': indicators,
-                            'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-                        })
+                        score_opp = final_long
+                        do_append_long = True
+                        if ML_ENABLED and ML_SCORE_ADJUST:
+                            try:
+                                sent = shared_data.get('market_sentiment') or {'fear_greed': fear_greed_val}
+                                pred = get_ml_prediction(indicators, 'LONG', sent, 0)
+                                prob = pred.get('probability', 50)
+                                if prob < ML_MIN_PROBABILITY:
+                                    add_bot_log_struct(scan_num, symbol, final_long, 'SKIP_LONG', 'ML prob {:.0f}%'.format(prob))
+                                    do_append_long = False
+                                else:
+                                    bonus = (prob - 50) * 0.2
+                                    bonus = max(-ML_SCORE_BONUS_MAX, min(ML_SCORE_BONUS_MAX, bonus))
+                                    score_opp = final_long + bonus
+                            except Exception:
+                                pass
+                        if do_append_long:
+                            long_opportunities.append({
+                                'symbol': symbol, 'pair': symbol, 'price': price,
+                                'stop_loss': stop_loss, 'take_profit': take_profit,
+                                'sl_pct_effective': sl_pct_eff,
+                                'entry_signal': 'LONG', 'score': score_opp,
+                                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                                'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
+                                'is_signal': True, 'regime': regime, 'indicators': indicators,
+                                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                            })
 
         # SHORT si score suffisant (+ gate strict optionnel)
-        if final_short >= MIN_SCORE_TO_OPEN:
+        if final_short >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
                 pass  # 15m et 1h non alignés baissiers
             elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BEARISH', 'BEAR', 'NEUTRAL', None):
@@ -861,6 +947,11 @@ def run_scanner():
                 else:
                     n_short_signal += 1
                     rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                    if atr_pct is not None and atr_pct > 0:
+                        if atr_pct < 1.0:
+                            rr_override = 2.0
+                        elif atr_pct > 2.5:
+                            rr_override = 1.3
                     stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT', rr_ratio=rr_override)
                     if stop_loss is None:
                         stop_loss = price * (1 + STOP_LOSS_PCT / 100)
@@ -889,18 +980,35 @@ def run_scanner():
                         if vol_r and vol_r >= 1.2:
                             why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
                         why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-                        short_opportunities.append({
-                            'symbol': symbol, 'pair': symbol, 'price': price,
-                            'stop_loss': stop_loss, 'take_profit': take_profit,
-                            'sl_pct_effective': sl_pct_eff,
-                            'entry_signal': 'SHORT', 'score': final_short,
-                            'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                            'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                            'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                            'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
-                            'is_signal': True, 'regime': regime, 'indicators': indicators,
-                            'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-                        })
+                        score_opp_s = final_short
+                        do_append_short = True
+                        if ML_ENABLED and ML_SCORE_ADJUST:
+                            try:
+                                sent = shared_data.get('market_sentiment') or {'fear_greed': fear_greed_val}
+                                pred = get_ml_prediction(indicators, 'SHORT', sent, 0)
+                                prob = pred.get('probability', 50)
+                                if prob < ML_MIN_PROBABILITY:
+                                    add_bot_log_struct(scan_num, symbol, final_short, 'SKIP_SHORT', 'ML prob {:.0f}%'.format(prob))
+                                    do_append_short = False
+                                else:
+                                    bonus = (prob - 50) * 0.2
+                                    bonus = max(-ML_SCORE_BONUS_MAX, min(ML_SCORE_BONUS_MAX, bonus))
+                                    score_opp_s = final_short + bonus
+                            except Exception:
+                                pass
+                        if do_append_short:
+                            short_opportunities.append({
+                                'symbol': symbol, 'pair': symbol, 'price': price,
+                                'stop_loss': stop_loss, 'take_profit': take_profit,
+                                'sl_pct_effective': sl_pct_eff,
+                                'entry_signal': 'SHORT', 'score': score_opp_s,
+                                'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                                'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                                'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                                'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
+                                'is_signal': True, 'regime': regime, 'indicators': indicators,
+                                'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                            })
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
         continue
@@ -995,7 +1103,7 @@ def run_scanner():
     opened_count = 0
 
     MAX_PORTFOLIO_EXPOSURE = 0.85
-    min_score = MIN_SCORE_TO_OPEN + (10 if btc_regime == 'VOLATILE' else (10 if btc_regime == 'RANGING' else 0)) + _adaptive_state.get('min_score_adjust', 0)
+    min_score = get_effective_min_score(btc_regime) + _adaptive_state.get('min_score_adjust', 0)
     if DYNAMIC_SCORE_ENABLED:
         try:
             fg = get_social_fear_greed()
@@ -1100,14 +1208,21 @@ def run_scanner():
         # Heures favorables (Europe + US): bonus taille
         if BEST_HOURS_UTC and datetime.utcnow().hour in BEST_HOURS_UTC:
             size_mult *= BEST_HOURS_SIZE_MULT
-        # Drawdown 7j: si capital < high_7d - 5%, réduire taille
+        # Drawdown 7j deux paliers: -3% → x0.85, -5% → x0.7
         if drawdown_7d_pct >= DRAWDOWN_7D_PCT:
             size_mult *= DRAWDOWN_7D_SIZE_MULT
+        elif drawdown_7d_pct >= DRAWDOWN_7D_PCT_TIER1:
+            size_mult *= DRAWDOWN_7D_SIZE_MULT_TIER1
         opened = False
         if is_long:
             sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
             pos_size = position_size_long_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.long_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
             pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+            # Cap perte max par position (% du capital): perte max = pos_size * lev * sl_pct/100
+            lev = trader.long_leverage
+            if lev and sl_pct and total_capital > 0:
+                cap_margin = total_capital * (MAX_LOSS_PCT_PER_POSITION / 100) / (lev * sl_pct / 100)
+                pos_size = min(pos_size, max(cap_margin, MIN_POSITION_USDT))
             take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
             if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct'), entry_regime=btc_regime):
                 trader.record_trade_time(symbol)
@@ -1118,6 +1233,11 @@ def run_scanner():
             sl_pct = opp.get('sl_pct_effective') or STOP_LOSS_PCT
             pos_size = position_size_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.short_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
             pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))  # size_mult inclut déjà loss_reduction et regime_size_mult
+            # Cap perte max par position (% du capital)
+            lev = trader.short_leverage
+            if lev and sl_pct and total_capital > 0:
+                cap_margin = total_capital * (MAX_LOSS_PCT_PER_POSITION / 100) / (lev * sl_pct / 100)
+                pos_size = min(pos_size, max(cap_margin, MIN_POSITION_USDT))
             take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
             if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct'), entry_regime=btc_regime):
                 trader.record_trade_time(symbol)
@@ -1238,6 +1358,20 @@ def dashboard():
     total_capital = balance + total_invested + total_unrealized_pnl
     perf = shared_data.get('performance') or {'total_trades': 0, 'winning_trades': 0, 'total_pnl': 0, 'win_rate': 0}
 
+    # Métriques risk (drawdown 7j, pertes consécutives, pause)
+    daily_highs = shared_data.get('daily_highs') or {}
+    high_7d = max(daily_highs.values()) if daily_highs else total_capital
+    drawdown_7d_pct = ((high_7d - total_capital) / high_7d * 100) if high_7d > 0 else 0
+    sales = [t for t in trader.get_trades_history() if 'VENTE' in t.get('type', '')]
+    consec = 0
+    for t in sales[:5]:
+        if t.get('pnl', 0) < 0:
+            consec += 1
+        else:
+            break
+    pause_until = shared_data.get('pause_no_new_until')
+    pause_until_str = pause_until.strftime('%H:%M') if pause_until and hasattr(pause_until, 'strftime') else None
+
     all_trades = trader.get_trades_history()
     trades_history = [t for t in all_trades if 'VENTE' in t.get('type', '')][:50]
 
@@ -1255,6 +1389,9 @@ def dashboard():
         bot_log=shared_data['bot_log'],
         perf=perf,
         trades_history=trades_history,
+        drawdown_7d_pct=round(drawdown_7d_pct, 1),
+        consecutive_losses=consec,
+        pause_until_str=pause_until_str,
     )
 
 

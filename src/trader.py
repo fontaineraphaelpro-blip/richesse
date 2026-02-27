@@ -189,44 +189,53 @@ class PaperTrader:
 
     def check_and_apply_breakeven(self, real_prices: dict):
         """
-        Vérifie toutes les positions et applique le break-even automatique.
-        Si une position a un gain >= breakeven_trigger_pct, on déplace le SL au prix d'entrée.
+        Break-even progressif: palier 1 à +0.25% (SL -> entry-0.2%), palier 2 à +0.4% (SL -> entry).
         """
         modified_count = 0
-        
+        be_early_pct = 0.25   # Premier palier
+        be_full_pct = getattr(self, 'breakeven_trigger_pct', 0.4)  # 0.4% = breakeven complet
+
         for symbol, pos in self.wallet['positions'].items():
             current_price = real_prices.get(symbol)
             if not current_price:
                 continue
-            
+
             entry_price = pos['entry_price']
             direction = pos.get('direction', 'LONG')
             current_sl = pos['stop_loss']
-            
-            # Calculer le gain actuel en %
+            be_level = pos.get('breakeven_level', 0)
+
             if direction == 'LONG':
                 gain_pct = ((current_price - entry_price) / entry_price) * 100
-                # Break-even: SL doit être en dessous de entry pour LONG
-                sl_is_below_entry = current_sl < entry_price
-            else:  # SHORT
+                sl_should_raise = current_sl < entry_price
+            else:
                 gain_pct = ((entry_price - current_price) / entry_price) * 100
-                # Break-even: SL doit être au-dessus de entry pour SHORT
-                sl_is_below_entry = current_sl > entry_price
-            
-            if gain_pct >= self.breakeven_trigger_pct and sl_is_below_entry:
-                # SL -> entry + 0.25% = profit garanti
+                sl_should_raise = current_sl > entry_price
+
+            if be_level >= 2:
+                continue
+            if gain_pct >= be_full_pct and sl_should_raise:
                 if direction == 'LONG':
                     be_price = entry_price * 1.0025
                 else:
                     be_price = entry_price * 0.9975
                 self.wallet['positions'][symbol]['stop_loss'] = be_price
                 self.wallet['positions'][symbol]['breakeven_active'] = True
+                self.wallet['positions'][symbol]['breakeven_level'] = 2
                 modified_count += 1
-                print("[LOCK] BREAK-EVEN+ {}: SL -> {:.4f} (gain: +{:.1f}%)".format(symbol, be_price, gain_pct))
-        
+                print("[LOCK] BREAK-EVEN {}: SL -> {:.4f} (gain: +{:.1f}%)".format(symbol, be_price, gain_pct))
+            elif be_level == 0 and gain_pct >= be_early_pct and sl_should_raise:
+                if direction == 'LONG':
+                    be_price = entry_price * 0.998
+                else:
+                    be_price = entry_price * 1.002
+                self.wallet['positions'][symbol]['stop_loss'] = be_price
+                self.wallet['positions'][symbol]['breakeven_level'] = 1
+                modified_count += 1
+                print("[LOCK] BREAK-EVEN early {}: SL -> {:.4f} (gain: +{:.1f}%)".format(symbol, be_price, gain_pct))
+
         if modified_count > 0:
             self.save_wallet()
-        
         return modified_count
 
     def check_and_apply_trailing_stop(self, real_prices: dict):

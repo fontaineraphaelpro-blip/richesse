@@ -59,6 +59,11 @@ button:active { opacity: 0.8; }
     {% endfor %}
   </div>
   {% endif %}
+  <div style="margin-top:10px;font-size:0.8rem;color:#888">
+    <div class="row"><span class="label">DD 7j</span><span>{{ "%.1f"|format(drawdown_7d_pct|default(0)) }}%</span></div>
+    {% if consecutive_losses|default(0) %}<div class="row"><span class="label">Pertes conséc.</span><span>{{ consecutive_losses }}</span></div>{% endif %}
+    {% if pause_until_str %}<div class="row"><span class="label">Reprise à</span><span>{{ pause_until_str }}</span></div>{% endif %}
+  </div>
 </section>
 <section>
   <h2>Positions ({{ positions|length }})</h2>
