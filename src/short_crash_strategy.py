@@ -30,7 +30,7 @@ MIN_RR_RATIO = 1.5         # R:R 1.5:1 (max profit: gain plus gros par trade)
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):
     """
     Calcule SL et TP independamment depuis l'ATR.
-    SL = ATR * 1.5 (plus large), TP = ATR * 1.0 (plus proche = plus de wins).
+    rr_ratio: si fourni, utilise ce R:R min au lieu de MIN_RR_RATIO (ex: 1.8 en tendance forte).
     """
     if price is None or price <= 0:
         return None, None, None
@@ -47,13 +47,13 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
     sl_pct = (sl_distance / price) * 100
     sl_pct = max(ATR_SL_MIN_PCT, min(ATR_SL_MAX_PCT, sl_pct))
     sl_distance = price * (sl_pct / 100.0)
-    # TP distance: au moins MIN_RR_RATIO * sl_distance pour R:R rentable
+    # TP distance: au moins min_rr * sl_distance (rr_ratio passé en param ou MIN_RR_RATIO)
+    min_rr = rr_ratio if rr_ratio is not None else MIN_RR_RATIO
     tp_distance = atr * tp_mult
     tp_pct = (tp_distance / price) * 100
     tp_pct = max(ATR_TP_MIN_PCT, min(ATR_TP_MAX_PCT, tp_pct))
     tp_distance = price * (tp_pct / 100.0)
-    # Garantir R:R minimum (éviter TP trop proche = jamais atteint ou SL toujours touché avant)
-    min_tp_distance = sl_distance * MIN_RR_RATIO
+    min_tp_distance = sl_distance * min_rr
     if tp_distance < min_tp_distance:
         tp_distance = min_tp_distance
         tp_pct = (tp_distance / price) * 100

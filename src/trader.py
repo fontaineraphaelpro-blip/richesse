@@ -37,10 +37,12 @@ class PaperTrader:
         self.max_drawdown_pct = 22.0      # 22% (max profit)
         self.initial_capital = initial_balance
         
-        # Trailing Stop — proteger les gains
+        # Trailing Stop — proteger les gains (plus serré après +1.5%)
         self.trailing_stop_enabled = True
-        self.trailing_stop_activation_pct = 1.2  # Trailing a +1.2% prix
-        self.trailing_stop_distance_pct = 0.6     # Distance 0.6%
+        self.trailing_stop_activation_pct = 1.2   # Trailing a +1.2% prix
+        self.trailing_stop_distance_pct = 0.6     # Distance 0.6% (palier 1)
+        self.trailing_tight_after_pct = 1.5       # Après +1.5% gain: distance 0.4%
+        self.trailing_stop_distance_tight_pct = 0.4
         
         # Partial TP: 50% a TP1, reste vers TP2
         self.partial_tp_enabled = True
@@ -249,6 +251,8 @@ class PaperTrader:
             atr_pct = pos.get('atr_pct')
             act_pct = max(1.0, min(3.0, atr_pct * 0.6)) if atr_pct else self.trailing_stop_activation_pct
             dist_pct = max(0.5, min(2.0, atr_pct * 0.5)) if atr_pct else self.trailing_stop_distance_pct
+            tight_pct = getattr(self, 'trailing_stop_distance_tight_pct', 0.4)
+            tight_after = getattr(self, 'trailing_tight_after_pct', 1.5)
 
             if direction == 'LONG':
                 highest_price = pos.get('highest_price', entry_price)
@@ -257,10 +261,13 @@ class PaperTrader:
                     self.wallet['positions'][symbol]['highest_price'] = highest_price
                 gain_pct = ((current_price - entry_price) / entry_price) * 100
 
-                # Palier 2: gain >= 2x activation -> trailing serre
-                if gain_pct >= act_pct * 2:
-                    effective_dist = dist_pct * 0.5
+                # Palier 2: gain >= 1.5% -> trailing très serré (0.4%); sinon 2x activation -> 0.5*dist
+                if gain_pct >= tight_after:
+                    effective_dist = tight_pct
                     trail_level = 2
+                elif gain_pct >= act_pct * 2:
+                    effective_dist = dist_pct * 0.5
+                    trail_level = 1
                 elif gain_pct >= act_pct:
                     effective_dist = dist_pct
                     trail_level = 1
@@ -282,9 +289,12 @@ class PaperTrader:
                     self.wallet['positions'][symbol]['lowest_price'] = lowest_price
                 gain_pct = ((entry_price - current_price) / entry_price) * 100
 
-                if gain_pct >= act_pct * 2:
-                    effective_dist = dist_pct * 0.5
+                if gain_pct >= tight_after:
+                    effective_dist = tight_pct
                     trail_level = 2
+                elif gain_pct >= act_pct * 2:
+                    effective_dist = dist_pct * 0.5
+                    trail_level = 1
                 elif gain_pct >= act_pct:
                     effective_dist = dist_pct
                     trail_level = 1
@@ -662,6 +672,7 @@ class PaperTrader:
         entry_trend: str = 'UNKNOWN',  # Tendance à l'ouverture
         take_profit_2: float = None,   # TP2 pour scaling out
         atr_pct: float = None,         # ATR % pour trailing stop adaptatif
+        entry_regime: str = None,      # Régime marché à l'entrée (TRENDING/RANGING/VOLATILE)
     ) -> bool:
         """Exécute un ordre d'ACHAT (position LONG)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -695,6 +706,7 @@ class PaperTrader:
             'entry_trend': entry_trend,
             'leverage':    lev,
             'atr_pct': atr_pct,
+            'entry_regime': entry_regime or 'UNKNOWN',
         }
         self.save_wallet()
 
@@ -731,6 +743,7 @@ class PaperTrader:
         entry_trend: str = 'UNKNOWN',
         take_profit_2: float = None,
         atr_pct: float = None,
+        entry_regime: str = None,
     ) -> bool:
         """Exécute un ordre de VENTE À DÉCOUVERT (position SHORT)."""
         if self.wallet['USDT'] < amount_usdt:
@@ -763,6 +776,7 @@ class PaperTrader:
             'entry_trend': entry_trend,
             'leverage':    lev,
             'atr_pct': atr_pct,
+            'entry_regime': entry_regime or 'UNKNOWN',
         }
         self.save_wallet()
 
@@ -854,6 +868,7 @@ class PaperTrader:
             'pnl':         round(pnl_value, 2),
             'pnl_percent': round(pnl_percent, 2),
             'reason':      reason,
+            'regime':      pos.get('entry_regime', 'UNKNOWN'),
         }
         self.log_trade(trade_data)
         try:

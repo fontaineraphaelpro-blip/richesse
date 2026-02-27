@@ -166,6 +166,19 @@ AVOID_HOURS_SIZE_MULT = 0.5       # Taille x0.5 pendant ces heures
 ALERT_DRAWDOWN_PCT = 18           # Alerter si drawdown jour >= 18%
 ALERT_CONSECUTIVE_LOSSES = 2      # Alerter après 2 pertes d'affilée
 
+# Rentabilité: Kelly fractionnel, setups forts, multi-TF, heures favorables
+KELLY_FRACTION = 0.5              # Utiliser 0.5 × Kelly (réduit variance et drawdown)
+STRONG_SETUP_SCORE = 70           # Score >= 70 → bonus taille x1.2
+STRONG_SETUP_SIZE_MULT = 1.2
+REQUIRE_MULTITF_ALIGNED = True    # Exiger 15m ET 1h alignés (LONG=BULLISH, SHORT=BEARISH)
+SCAN_TOP_N_LIQUID = 80            # Ne trader que les N paires les plus liquides
+BEST_HOURS_UTC = [14, 15, 16, 17, 18, 19, 20]  # Heures favorables (Europe + US)
+BEST_HOURS_SIZE_MULT = 1.2        # Taille x1.2 pendant ces heures
+MAX_LONG_POSITIONS = 2            # Max 2 positions LONG en même temps
+MAX_SHORT_POSITIONS = 2            # Max 2 positions SHORT en même temps
+ADX_HIGH_FOR_RR = 30              # Si ADX >= 30, viser R:R 1.8:1 (tendance forte)
+MIN_RR_STRONG_TREND = 1.8
+
 # Configuration News & Sentiment
 NEWS_ENABLED = True
 SENTIMENT_SCORE_ADJUST = True
@@ -378,11 +391,25 @@ def update_performance_stats(trader: PaperTrader):
     winners = sum(1 for t in sales if t.get('pnl', 0) > 0)
     total_pnl = sum(t.get('pnl', 0) for t in sales)
     
+    by_regime = {}
+    for t in sales:
+        r = t.get('regime', 'UNKNOWN')
+        by_regime.setdefault(r, {'n': 0, 'wins': 0, 'pnl': 0.0})
+        by_regime[r]['n'] += 1
+        if t.get('pnl', 0) > 0:
+            by_regime[r]['wins'] += 1
+        by_regime[r]['pnl'] += t.get('pnl', 0)
+    for r in by_regime:
+        n = by_regime[r]['n']
+        by_regime[r]['win_rate'] = round((by_regime[r]['wins'] / n * 100) if n > 0 else 0, 1)
+        by_regime[r]['pnl'] = round(by_regime[r]['pnl'], 2)
+
     shared_data['performance'] = {
         'total_trades': total,
         'winning_trades': winners,
         'total_pnl': round(total_pnl, 2),
-        'win_rate': round((winners / total * 100) if total > 0 else 0, 1)
+        'win_rate': round((winners / total * 100) if total > 0 else 0, 1),
+        'by_regime': by_regime,
     }
 
 
@@ -506,7 +533,7 @@ def run_scanner():
             return []
 
     # Liste des paires (limité en mode test pour exécution rapide)
-    symbols = list(get_top_pairs())
+    symbols = list(get_top_pairs())[:SCAN_TOP_N_LIQUID]
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
     # Toujours inclure les paires des positions ouvertes pour mettre à jour last_prices
@@ -717,11 +744,14 @@ def run_scanner():
 
         # LONG si score suffisant (+ gate strict optionnel pour mieux lire les signaux)
         if final_long >= MIN_SCORE_TO_OPEN:
-            if USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
+            if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
+                pass  # 15m et 1h non alignés haussiers
+            elif USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
                 pass  # score ok mais signal strict non validé → pas d'opp LONG
             else:
                 n_long_signal += 1
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG')
+                rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG', rr_ratio=rr_override)
                 if stop_loss is None:
                     stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
                     take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
@@ -764,11 +794,14 @@ def run_scanner():
 
         # SHORT si score suffisant (+ gate strict optionnel)
         if final_short >= MIN_SCORE_TO_OPEN:
-            if USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
+            if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
+                pass  # 15m et 1h non alignés baissiers
+            elif USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
                 pass  # score ok mais signal strict non validé → pas d'opp SHORT
             else:
                 n_short_signal += 1
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT')
+                rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT', rr_ratio=rr_override)
                 if stop_loss is None:
                     stop_loss = price * (1 + STOP_LOSS_PCT / 100)
                     take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
@@ -902,7 +935,7 @@ def run_scanner():
     opened_count = 0
 
     MAX_PORTFOLIO_EXPOSURE = 0.85
-    min_score = MIN_SCORE_TO_OPEN + (5 if btc_regime == 'VOLATILE' else 0) + _adaptive_state.get('min_score_adjust', 0)
+    min_score = MIN_SCORE_TO_OPEN + (10 if btc_regime == 'VOLATILE' else (10 if btc_regime == 'RANGING' else 0)) + _adaptive_state.get('min_score_adjust', 0)
     if DYNAMIC_SCORE_ENABLED:
         try:
             fg = get_social_fear_greed()
@@ -938,11 +971,17 @@ def run_scanner():
             break
         if opp['symbol'] in already_open_symbols:
             continue
+        is_long = opp.get('entry_signal') == 'LONG'
+        n_long_open = sum(1 for p in current_open.values() if p.get('direction') == 'LONG')
+        n_short_open = sum(1 for p in current_open.values() if p.get('direction') == 'SHORT')
+        if is_long and n_long_open >= MAX_LONG_POSITIONS:
+            continue
+        if not is_long and n_short_open >= MAX_SHORT_POSITIONS:
+            continue
         rr = opp.get('rr_ratio') or 0
         if rr < MIN_RISK_REWARD:
             continue
         best = opp
-        is_long = opp.get('entry_signal') == 'LONG'
         similarity_bonus = _check_setup_similarity(opp, trader)
         opp['score'] = opp.get('score', 0) + similarity_bonus
         if opp['score'] < min_score:
@@ -971,7 +1010,7 @@ def run_scanner():
             continue
         balance = trader.get_usdt_balance()
         if KELLY_RISK_ENABLED:
-            risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, position_sizer.calculate_kelly()))
+            risk_pct = min(KELLY_RISK_MAX_PCT, max(KELLY_RISK_MIN_PCT, position_sizer.calculate_kelly() * KELLY_FRACTION))
         else:
             risk_pct = RISK_PCT_SMALL_ACCOUNT if balance < SMALL_ACCOUNT_THRESHOLD else RISK_PCT_CAPITAL
         atr_pct = opp.get('atr_pct') or 2.0
@@ -995,13 +1034,19 @@ def run_scanner():
         # Heures à faible liquidité (AVOID_HOURS_UTC): réduire taille
         if AVOID_HOURS_UTC and datetime.utcnow().hour in AVOID_HOURS_UTC:
             size_mult *= AVOID_HOURS_SIZE_MULT
+        # Setups forts (score élevé): bonus taille
+        if opp['score'] >= STRONG_SETUP_SCORE:
+            size_mult *= STRONG_SETUP_SIZE_MULT
+        # Heures favorables (Europe + US): bonus taille
+        if BEST_HOURS_UTC and datetime.utcnow().hour in BEST_HOURS_UTC:
+            size_mult *= BEST_HOURS_SIZE_MULT
         opened = False
         if is_long:
             sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
             pos_size = position_size_long_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.long_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
             pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
             take_profit_2 = price + (take_profit - price) * 1.5 if take_profit > price else None
-            if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct')):
+            if pos_size >= MIN_POSITION_USDT and trader.place_buy_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='DIP_LONG', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct'), entry_regime=btc_regime):
                 trader.record_trade_time(symbol)
                 _record_slippage(symbol, opp.get('spread_pct', 0.05))
                 add_bot_log("LONG {} @ {:.4f} | Score {} | SL {:.4f} TP {:.4f}".format(symbol, price, opp['score'], stop_loss, take_profit), 'TRADE')
@@ -1011,7 +1056,7 @@ def run_scanner():
             pos_size = position_size_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.short_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
             pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))  # size_mult inclut déjà loss_reduction et regime_size_mult
             take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
-            if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct')):
+            if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct'), entry_regime=btc_regime):
                 trader.record_trade_time(symbol)
                 _record_slippage(symbol, opp.get('spread_pct', 0.05))
                 add_bot_log("SHORT {} @ {:.4f} | Score {} | SL {:.4f} TP {:.4f}".format(symbol, price, opp['score'], stop_loss, take_profit), 'TRADE')
