@@ -146,6 +146,21 @@ REGIME_RANGING_SIZE_MULT = 0.5     # Taille x0.5 en RANGING (moins d'exposition)
 # Vérification à chaque scan: fermer si le signal s'est inversé (direction opposée plus forte)
 REVERSAL_SCORE_THRESHOLD = 15      # Fermer position si score direction opposée > notre score + 15
 
+# SL/TP vérifiés plus souvent (thread dédié, indépendant du scan)
+SL_TP_CHECK_INTERVAL_SEC = 20     # Vérifier SL/TP toutes les 20 s
+
+# Spread dynamique: réduire taille si spread actuel > 1.5x la moyenne récente
+SPREAD_HISTORY_MAX = 96           # 24h de données (96 x 15 min)
+SPREAD_SPIKE_MULT = 1.5           # Si spread > 1.5x médiane récente → taille x0.5
+
+# Heures UTC à faible liquidité: réduire la taille des positions
+AVOID_HOURS_UTC = []             # Ex: [0,1,2,3,4,5] pour 0h-5h UTC; [] = désactivé
+AVOID_HOURS_SIZE_MULT = 0.5       # Taille x0.5 pendant ces heures
+
+# Alertes Telegram (drawdown, 2 pertes consécutives)
+ALERT_DRAWDOWN_PCT = 18           # Alerter si drawdown jour >= 18%
+ALERT_CONSECUTIVE_LOSSES = 2      # Alerter après 2 pertes d'affilée
+
 # Configuration News & Sentiment
 NEWS_ENABLED = True
 SENTIMENT_SCORE_ADJUST = True
@@ -392,7 +407,7 @@ def _update_adaptive_params():
         pass
 
 def _check_correlation(symbol, open_positions, all_indicators):
-    """Penalise si trop de positions dans la meme direction."""
+    """Pénalise si trop de positions dans la même direction (diversification)."""
     if not open_positions:
         return 1.0
     sym_ind = all_indicators.get(symbol, {})
@@ -400,9 +415,11 @@ def _check_correlation(symbol, open_positions, all_indicators):
     same_dir = sum(1 for ps in open_positions
                    if all_indicators.get(ps, {}).get('price_momentum') == sym_mom and sym_mom != 'NEUTRAL')
     if same_dir >= 3:
-        return 0.5
+        return 0.4
     elif same_dir >= 2:
-        return 0.7
+        return 0.6
+    elif same_dir >= 1:
+        return 0.8
     return 1.0
 
 def _check_setup_similarity(best, trader):
@@ -546,6 +563,12 @@ def run_scanner():
     daily_dd = trader.get_daily_drawdown_pct(total_capital)
     if daily_dd >= MAX_DAILY_DRAWDOWN_PCT:
         add_bot_log(f"Pause: drawdown jour {daily_dd:.1f}% >= {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.", 'WARN')
+        try:
+            from notifier import send_telegram
+            if daily_dd >= ALERT_DRAWDOWN_PCT:
+                send_telegram("⚠️ Drawdown journalier {:.1f}% — pause jusqu'à demain.".format(daily_dd))
+        except Exception:
+            pass
         return []
 
     # Vérifier les 3 DERNIÈRES ventes (trades fermés): si toutes en perte → stop
@@ -566,6 +589,12 @@ def run_scanner():
     loss_reduction = LOSS_REDUCTION_AFTER_2 if consecutive_losses >= 2 else (LOSS_REDUCTION_AFTER_1 if consecutive_losses == 1 else 1.0)
     if consecutive_losses > 0:
         add_bot_log("Protection série: {} perte(s) consécutive(s) — taille x{:.1f}.".format(consecutive_losses, loss_reduction), 'INFO')
+        if consecutive_losses >= ALERT_CONSECUTIVE_LOSSES:
+            try:
+                from notifier import send_telegram
+                send_telegram("⚠️ {} pertes consécutives — prochaine perte = pause trading.".format(consecutive_losses))
+            except Exception:
+                pass
 
     # —— 3. Fear & Greed (une fois par scan) ——
     fear_greed_val = None
@@ -609,6 +638,10 @@ def run_scanner():
         if close_val is None or close_val == 0:
             continue
         spread_pct = (df['high'].iloc[-1] - df['low'].iloc[-1]) / close_val * 100
+        hist = shared_data.setdefault('spread_history', {}).setdefault(symbol, [])
+        hist.append(spread_pct)
+        if len(hist) > SPREAD_HISTORY_MAX:
+            hist.pop(0)
         if spread_pct > SPREAD_MAX_PCT:
             continue
         n_spread_ok += 1
@@ -760,9 +793,10 @@ def run_scanner():
     opportunities_list.sort(key=lambda x: x['score'], reverse=True)
 
     # —— Vérifier que les positions ouvertes suivent encore la bonne direction ——
-    # Si le signal s'est inversé (score opposé > notre score + seuil), on ferme pour éviter de rester contre-tendance
+    # Score opposé > notre score + seuil ET momentum 15m/1h inversé → fermeture plus fiable
     try:
         from adaptive_scorer import score_adaptive
+        from data_fetcher import fetch_multi_timeframe
         open_pos_now = trader.get_open_positions()
         last_ind = shared_data.get('last_indicators') or {}
         to_close_reversal = []
@@ -773,19 +807,32 @@ def run_scanner():
             direction = pos.get('direction', 'LONG')
             spread_pct = 0.08
             atr_pct = ind.get('atr_percent') or 2.0
+            m15, m1h = 'NEUTRAL', 'NEUTRAL'
+            try:
+                tf_data = fetch_multi_timeframe(sym, ['15m', '1h'])
+                if tf_data.get('15m') is not None:
+                    ti = calculate_indicators(tf_data['15m'])
+                    if ti:
+                        m15 = ti.get('price_momentum') or 'NEUTRAL'
+                if tf_data.get('1h') is not None:
+                    ti = calculate_indicators(tf_data['1h'])
+                    if ti:
+                        m1h = ti.get('price_momentum') or 'NEUTRAL'
+            except Exception:
+                pass
             try:
                 score_long, score_short, _ = score_adaptive(
-                    ind, 'NEUTRAL', 'NEUTRAL', None, spread_pct, atr_pct
+                    ind, m15, m1h, None, spread_pct, atr_pct
                 )
             except Exception:
                 continue
             price = real_prices.get(sym, pos.get('entry_price'))
             if direction == 'LONG':
-                if score_short > score_long + REVERSAL_SCORE_THRESHOLD:
-                    to_close_reversal.append((sym, price, "Signal inversé (SHORT > LONG)"))
+                if score_short > score_long + REVERSAL_SCORE_THRESHOLD and (m15 in ('BEARISH', 'BEAR') or m1h in ('BEARISH', 'BEAR')):
+                    to_close_reversal.append((sym, price, "Signal inversé (SHORT > LONG + tendance)"))
             else:
-                if score_long > score_short + REVERSAL_SCORE_THRESHOLD:
-                    to_close_reversal.append((sym, price, "Signal inversé (LONG > SHORT)"))
+                if score_long > score_short + REVERSAL_SCORE_THRESHOLD and (m15 in ('BULLISH', 'BULL') or m1h in ('BULLISH', 'BULL')):
+                    to_close_reversal.append((sym, price, "Signal inversé (LONG > SHORT + tendance)"))
         for sym, price, reason in to_close_reversal:
             trader.close_position(sym, price, reason)
             add_bot_log("Fermeture {} — {} (marché a changé).".format(sym, reason), 'WARN')
@@ -909,6 +956,15 @@ def run_scanner():
         # Protection: réduction après pertes consécutives + régime RANGING
         size_mult *= loss_reduction
         size_mult *= regime_size_mult
+        # Spread dynamique: si spread actuel > 1.5x médiane récente → réduire taille
+        spread_hist = shared_data.get('spread_history', {}).get(symbol, [])
+        if len(spread_hist) >= 5:
+            med = sorted(spread_hist)[len(spread_hist) // 2]
+            if med > 0 and (opp.get('spread_pct') or 0.1) > SPREAD_SPIKE_MULT * med:
+                size_mult *= 0.5
+        # Heures à faible liquidité (AVOID_HOURS_UTC): réduire taille
+        if AVOID_HOURS_UTC and datetime.utcnow().hour in AVOID_HOURS_UTC:
+            size_mult *= AVOID_HOURS_SIZE_MULT
         opened = False
         if is_long:
             sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
@@ -1763,6 +1819,31 @@ fetch('/api/social/fear_greed')
 
 AVOID_WEEKENDS = False  # Day trader pro H24: crypto trade 7j/7
 
+
+def _sl_tp_watcher_loop():
+    """Vérifie SL/TP toutes les 20s (indépendant du scan) pour réagir plus vite."""
+    from trader import PaperTrader
+    while True:
+        try:
+            time.sleep(SL_TP_CHECK_INTERVAL_SEC)
+            trader = PaperTrader()
+            open_pos = trader.get_open_positions()
+            if not open_pos:
+                continue
+            symbols = list(open_pos.keys())
+            try:
+                prices = fetch_current_prices(symbols)
+            except Exception:
+                continue
+            if prices:
+                trader.check_positions(prices)
+        except Exception as e:
+            try:
+                add_bot_log("SL/TP watcher: {}".format(str(e)[:80]), 'WARN')
+            except Exception:
+                pass
+
+
 def _get_scan_interval():
     """Day trader pro H24: 90s en session, 5 min la nuit (volumes plus faibles), 90s sinon."""
     utc_hour = datetime.utcnow().hour
@@ -1821,6 +1902,8 @@ if __name__ == '__main__':
 
     scanner_thread = threading.Thread(target=run_loop, daemon=True)
     scanner_thread.start()
+    sl_tp_thread = threading.Thread(target=_sl_tp_watcher_loop, daemon=True)
+    sl_tp_thread.start()
 
     port = int(os.environ.get('PORT', 8080))
     add_bot_log('Dashboard: http://localhost:{}'.format(port), 'INFO')

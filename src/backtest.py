@@ -21,13 +21,21 @@ from short_crash_strategy import (
 )
 
 # === STRATEGIE TREND - Parametres optimises (WR 63%, proche breakeven) ===
-# 30%/mois = irrealiste. Strategies publiees: 5-12%/mois. Live multi-TF > backtest.
+# Pour aligner au live: BACKTEST_MIN_SCORE=58 BACKTEST_MIN_RR=1.5 python -m src.backtest
+import os as _os
+_min_score_env = _os.environ.get('BACKTEST_MIN_SCORE', '').strip()
+_min_rr_env = _os.environ.get('BACKTEST_MIN_RR', '').strip()
+
 VOLUME_RATIO_MIN = 1.5
 STOP_LOSS_PCT = 0.65
 TAKE_PROFIT_PCT = 0.65       # R:R 1:1, tres serre
 LONG_STOP_LOSS_PCT = 0.65
 LONG_TAKE_PROFIT_PCT = 0.65
-MIN_SCORE_TO_OPEN = 85       # Selectif (90 = tres peu de trades)
+MIN_SCORE_TO_OPEN = int(_min_score_env) if _min_score_env.isdigit() else 85
+try:
+    MIN_RISK_REWARD_BT = float(_min_rr_env) if _min_rr_env else 1.2
+except ValueError:
+    MIN_RISK_REWARD_BT = 1.2
 MIN_ADX = 28
 INITIAL_CAPITAL = 100.0
 POSITION_PCT = 18
@@ -252,7 +260,7 @@ def run_backtest(
                     })
 
         if opportunities and open_position is None and equity > 10:
-            valid = [o for o in opportunities if o.get('sl') and o.get('tp') and (o.get('rr') or 1) >= 1.0]
+            valid = [o for o in opportunities if o.get('sl') and o.get('tp') and (o.get('rr') or 1) >= MIN_RISK_REWARD_BT]
             if not valid:
                 continue
             best = max(valid, key=lambda x: (x['score'], x.get('rr', 0)))
