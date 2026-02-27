@@ -179,6 +179,21 @@ MAX_SHORT_POSITIONS = 2            # Max 2 positions SHORT en même temps
 ADX_HIGH_FOR_RR = 30              # Si ADX >= 30, viser R:R 1.8:1 (tendance forte)
 MIN_RR_STRONG_TREND = 1.8
 
+# Filtres qualité (éviter zones dangereuses, gros chandelier, volume)
+REQUIRE_4H_ALIGNED = True         # 4h doit être alignée ou neutre (LONG: BULL/NEUTRAL, SHORT: BEAR/NEUTRAL)
+BB_LONG_MAX = 0.85                # LONG: ne pas entrer trop proche résistance (bb_percent < 0.85)
+BB_SHORT_MIN = 0.15               # SHORT: ne pas entrer trop proche support (bb_percent > 0.15)
+BIG_CANDLE_BODY_ATR_RATIO = 1.8   # Dernière bougie body > 1.8× ATR → skip (éviter wicks)
+REQUIRE_VOLUME_RISING = True      # obv_slope > 0 (volume en hausse)
+# Sorties & risque
+PARTIAL_TP_EARLY_PCT = 0.40        # Prendre 40% à un 1er palier (R:R 0.8)
+PARTIAL_TP_EARLY_RR = 0.8
+DRAWDOWN_7D_PCT = 5               # Si capital < high_7d - 5% → taille x0.7
+DRAWDOWN_7D_SIZE_MULT = 0.7
+ENTRY_BUFFER_PCT = 0.03           # Slippage simulé à l'entrée (0.03%)
+ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < seuil
+ALERT_WR_MIN_PCT = 40
+
 # Configuration News & Sentiment
 NEWS_ENABLED = True
 SENTIMENT_SCORE_ADJUST = True
@@ -411,6 +426,19 @@ def update_performance_stats(trader: PaperTrader):
         'win_rate': round((winners / total * 100) if total > 0 else 0, 1),
         'by_regime': by_regime,
     }
+    # Alerte si WR sur les N derniers trades < seuil (1x par jour)
+    if len(sales) >= ALERT_WR_LAST_N:
+        last_n = sales[:ALERT_WR_LAST_N]
+        wr_n = (sum(1 for t in last_n if t.get('pnl', 0) > 0) / len(last_n)) * 100
+        if wr_n < ALERT_WR_MIN_PCT:
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            if shared_data.get('last_wr_alert_date') != today_str:
+                try:
+                    from notifier import send_telegram
+                    send_telegram("⚠️ Win rate sur {} derniers trades: {:.0f}% (< {}%) — vérifier la config.".format(ALERT_WR_LAST_N, wr_n, ALERT_WR_MIN_PCT))
+                    shared_data['last_wr_alert_date'] = today_str
+                except Exception:
+                    pass
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -592,6 +620,16 @@ def run_scanner():
 
     total_capital = trader.get_total_capital(real_prices)
     trader.update_daily_start_if_new_day(total_capital)
+    # High 7 jours (pour réduction taille si drawdown)
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    daily_highs = shared_data.setdefault('daily_highs', {})
+    daily_highs[today_str] = max(daily_highs.get(today_str, 0), total_capital)
+    _cut = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    for k in list(daily_highs.keys()):
+        if k < _cut:
+            del daily_highs[k]
+    high_7d = max(daily_highs.values()) if daily_highs else total_capital
+    drawdown_7d_pct = ((high_7d - total_capital) / high_7d * 100) if high_7d > 0 else 0
     daily_dd = trader.get_daily_drawdown_pct(total_capital)
     if daily_dd >= MAX_DAILY_DRAWDOWN_PCT:
         add_bot_log(f"Pause: drawdown jour {daily_dd:.1f}% >= {MAX_DAILY_DRAWDOWN_PCT}% — reprise demain.", 'WARN')
@@ -746,101 +784,123 @@ def run_scanner():
         if final_long >= MIN_SCORE_TO_OPEN:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
                 pass  # 15m et 1h non alignés haussiers
-            elif USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
-                pass  # score ok mais signal strict non validé → pas d'opp LONG
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BULLISH', 'BULL', 'NEUTRAL', None):
+                pass  # 4h pas alignée ou baissière
+            elif (indicators.get('bb_percent') or 0.5) >= BB_LONG_MAX:
+                pass  # Trop proche résistance (Bollinger haute)
+            elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
+                pass  # Volume pas en hausse
             else:
-                n_long_signal += 1
-                rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG', rr_ratio=rr_override)
-                if stop_loss is None:
-                    stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
-                    take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
-                    sl_pct_eff = LONG_STOP_LOSS_PCT
-                rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
-                if rr < MIN_RISK_REWARD:
-                    pass  # R:R insuffisant, ne pas ajouter cette opp
+                body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
+                atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
+                if atr_val and atr_val > 0 and body >= BIG_CANDLE_BODY_ATR_RATIO * atr_val:
+                    pass  # Gros chandelier → attendre
+                elif USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
+                    pass
                 else:
-                    why_parts = []
-                    rsi = indicators.get('rsi14')
-                    if rsi is not None:
-                        if rsi < 35:
-                            why_parts.append("RSI à {:.0f} en zone de survente".format(rsi))
-                        elif rsi < 50:
-                            why_parts.append("RSI à {:.0f} en zone basse".format(rsi))
-                        else:
-                            why_parts.append("RSI à {:.0f}".format(rsi))
-                    adx = indicators.get('adx')
-                    if adx is not None and adx >= 20:
-                        why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
-                    if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
-                        why_parts.append("Tendance 15 minutes haussière")
-                    if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
-                        why_parts.append("Tendance 1 heure haussière")
-                    if vol_r and vol_r >= 1.2:
-                        why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
-                    why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-                    long_opportunities.append({
-                        'symbol': symbol, 'pair': symbol, 'price': price,
-                        'stop_loss': stop_loss, 'take_profit': take_profit,
-                        'sl_pct_effective': sl_pct_eff,
-                        'entry_signal': 'LONG', 'score': final_long,
-                        'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                        'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                        'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                        'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
-                        'is_signal': True, 'regime': regime, 'indicators': indicators,
-                        'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-                    })
+                    n_long_signal += 1
+                    rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                    stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'LONG', rr_ratio=rr_override)
+                    if stop_loss is None:
+                        stop_loss = price * (1 - LONG_STOP_LOSS_PCT / 100)
+                        take_profit = price * (1 + LONG_TAKE_PROFIT_PCT / 100)
+                        sl_pct_eff = LONG_STOP_LOSS_PCT
+                    rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
+                    if rr < MIN_RISK_REWARD:
+                        pass  # R:R insuffisant, ne pas ajouter cette opp
+                    else:
+                        why_parts = []
+                        rsi = indicators.get('rsi14')
+                        if rsi is not None:
+                            if rsi < 35:
+                                why_parts.append("RSI à {:.0f} en zone de survente".format(rsi))
+                            elif rsi < 50:
+                                why_parts.append("RSI à {:.0f} en zone basse".format(rsi))
+                            else:
+                                why_parts.append("RSI à {:.0f}".format(rsi))
+                        adx = indicators.get('adx')
+                        if adx is not None and adx >= 20:
+                            why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
+                        if momentum_15m and momentum_15m in ('BULLISH', 'BULL'):
+                            why_parts.append("Tendance 15 minutes haussière")
+                        if momentum_1h and momentum_1h in ('BULLISH', 'BULL'):
+                            why_parts.append("Tendance 1 heure haussière")
+                        if vol_r and vol_r >= 1.2:
+                            why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+                        why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
+                        long_opportunities.append({
+                            'symbol': symbol, 'pair': symbol, 'price': price,
+                            'stop_loss': stop_loss, 'take_profit': take_profit,
+                            'sl_pct_effective': sl_pct_eff,
+                            'entry_signal': 'LONG', 'score': final_long,
+                            'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                            'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                            'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                            'adx': indicators.get('adx'), 'macd_bullish': indicators.get('macd_hist', 0) > 0,
+                            'is_signal': True, 'regime': regime, 'indicators': indicators,
+                            'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                        })
 
         # SHORT si score suffisant (+ gate strict optionnel)
         if final_short >= MIN_SCORE_TO_OPEN:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
                 pass  # 15m et 1h non alignés baissiers
-            elif USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
-                pass  # score ok mais signal strict non validé → pas d'opp SHORT
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BEARISH', 'BEAR', 'NEUTRAL', None):
+                pass  # 4h pas alignée ou haussière
+            elif (indicators.get('bb_percent') or 0.5) <= BB_SHORT_MIN:
+                pass  # Trop proche support (Bollinger basse)
+            elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
+                pass  # Volume pas en hausse
             else:
-                n_short_signal += 1
-                rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
-                stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT', rr_ratio=rr_override)
-                if stop_loss is None:
-                    stop_loss = price * (1 + STOP_LOSS_PCT / 100)
-                    take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
-                    sl_pct_eff = STOP_LOSS_PCT
-                rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
-                if rr < MIN_RISK_REWARD:
+                body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
+                atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
+                if atr_val and atr_val > 0 and body >= BIG_CANDLE_BODY_ATR_RATIO * atr_val:
+                    pass  # Gros chandelier → attendre
+                elif USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
                     pass
                 else:
-                    why_parts = []
-                    rsi = indicators.get('rsi14')
-                    if rsi is not None:
-                        if rsi > 65:
-                            why_parts.append("RSI à {:.0f} en zone de surachat".format(rsi))
-                        elif rsi > 50:
-                            why_parts.append("RSI à {:.0f} en zone haute".format(rsi))
-                        else:
-                            why_parts.append("RSI à {:.0f}".format(rsi))
-                    adx = indicators.get('adx')
-                    if adx is not None and adx >= 20:
-                        why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
-                    if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
-                        why_parts.append("Tendance 15 minutes baissière")
-                    if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
-                        why_parts.append("Tendance 1 heure baissière")
-                    if vol_r and vol_r >= 1.2:
-                        why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
-                    why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
-                    short_opportunities.append({
-                        'symbol': symbol, 'pair': symbol, 'price': price,
-                        'stop_loss': stop_loss, 'take_profit': take_profit,
-                        'sl_pct_effective': sl_pct_eff,
-                        'entry_signal': 'SHORT', 'score': final_short,
-                        'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
-                        'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
-                        'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
-                        'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
-                        'is_signal': True, 'regime': regime, 'indicators': indicators,
-                        'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
-                    })
+                    n_short_signal += 1
+                    rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
+                    stop_loss, take_profit, sl_pct_eff = compute_sl_tp_from_chart(price, indicators, 'SHORT', rr_ratio=rr_override)
+                    if stop_loss is None:
+                        stop_loss = price * (1 + STOP_LOSS_PCT / 100)
+                        take_profit = price * (1 - TAKE_PROFIT_PCT / 100)
+                        sl_pct_eff = STOP_LOSS_PCT
+                    rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
+                    if rr < MIN_RISK_REWARD:
+                        pass
+                    else:
+                        why_parts = []
+                        rsi = indicators.get('rsi14')
+                        if rsi is not None:
+                            if rsi > 65:
+                                why_parts.append("RSI à {:.0f} en zone de surachat".format(rsi))
+                            elif rsi > 50:
+                                why_parts.append("RSI à {:.0f} en zone haute".format(rsi))
+                            else:
+                                why_parts.append("RSI à {:.0f}".format(rsi))
+                        adx = indicators.get('adx')
+                        if adx is not None and adx >= 20:
+                            why_parts.append("Force de tendance ADX à {:.0f}".format(adx))
+                        if momentum_15m and momentum_15m in ('BEARISH', 'BEAR'):
+                            why_parts.append("Tendance 15 minutes baissière")
+                        if momentum_1h and momentum_1h in ('BEARISH', 'BEAR'):
+                            why_parts.append("Tendance 1 heure baissière")
+                        if vol_r and vol_r >= 1.2:
+                            why_parts.append("Volume {:.1f} fois la moyenne".format(vol_r))
+                        why_parts.append("Ratio risque-rendement {:.1f} pour 1".format(rr))
+                        short_opportunities.append({
+                            'symbol': symbol, 'pair': symbol, 'price': price,
+                            'stop_loss': stop_loss, 'take_profit': take_profit,
+                            'sl_pct_effective': sl_pct_eff,
+                            'entry_signal': 'SHORT', 'score': final_short,
+                            'rsi': indicators.get('rsi14'), 'volume_ratio': vol_r,
+                            'momentum_5m': momentum_5m, 'momentum_15m': momentum_15m or '-', 'momentum_1h': momentum_1h or '-', 'momentum_4h': momentum_4h,
+                            'spread_pct': spread_pct, 'atr_pct': atr_pct, 'rr_ratio': round(rr, 1),
+                            'adx': indicators.get('adx'), 'macd_bearish': indicators.get('macd_hist', 0) < 0,
+                            'is_signal': True, 'regime': regime, 'indicators': indicators,
+                            'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
+                        })
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
         continue
@@ -1040,6 +1100,9 @@ def run_scanner():
         # Heures favorables (Europe + US): bonus taille
         if BEST_HOURS_UTC and datetime.utcnow().hour in BEST_HOURS_UTC:
             size_mult *= BEST_HOURS_SIZE_MULT
+        # Drawdown 7j: si capital < high_7d - 5%, réduire taille
+        if drawdown_7d_pct >= DRAWDOWN_7D_PCT:
+            size_mult *= DRAWDOWN_7D_SIZE_MULT
         opened = False
         if is_long:
             sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT

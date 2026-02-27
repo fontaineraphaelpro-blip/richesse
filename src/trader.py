@@ -33,7 +33,7 @@ class PaperTrader:
             self.slippage_pct = 0.0005
         
         # Configuration Break-Even & Drawdown
-        self.breakeven_trigger_pct = 0.5   # Break-even a +0.5%
+        self.breakeven_trigger_pct = 0.4   # Break-even a +0.4%
         self.max_drawdown_pct = 22.0      # 22% (max profit)
         self.initial_capital = initial_balance
         
@@ -263,13 +263,13 @@ class PaperTrader:
 
                 # Palier 2: gain >= 1.5% -> trailing très serré (0.4%); sinon 2x activation -> 0.5*dist
                 if gain_pct >= tight_after:
-                    effective_dist = tight_pct
+                    effective_dist = min(tight_pct, atr_pct * 0.5) if atr_pct else tight_pct
                     trail_level = 2
                 elif gain_pct >= act_pct * 2:
-                    effective_dist = dist_pct * 0.5
+                    effective_dist = min(dist_pct * 0.5, atr_pct * 0.5) if atr_pct else dist_pct * 0.5
                     trail_level = 1
                 elif gain_pct >= act_pct:
-                    effective_dist = dist_pct
+                    effective_dist = min(dist_pct, atr_pct * 0.5) if atr_pct else dist_pct
                     trail_level = 1
                 else:
                     continue
@@ -290,13 +290,13 @@ class PaperTrader:
                 gain_pct = ((entry_price - current_price) / entry_price) * 100
 
                 if gain_pct >= tight_after:
-                    effective_dist = tight_pct
+                    effective_dist = min(tight_pct, atr_pct * 0.5) if atr_pct else tight_pct
                     trail_level = 2
                 elif gain_pct >= act_pct * 2:
-                    effective_dist = dist_pct * 0.5
+                    effective_dist = min(dist_pct * 0.5, atr_pct * 0.5) if atr_pct else dist_pct * 0.5
                     trail_level = 1
                 elif gain_pct >= act_pct:
-                    effective_dist = dist_pct
+                    effective_dist = min(dist_pct, atr_pct * 0.5) if atr_pct else dist_pct
                     trail_level = 1
                 else:
                     continue
@@ -406,6 +406,37 @@ class PaperTrader:
             take_profit_2 = pos.get('take_profit_2')
             entry_price = pos['entry_price']
             tp_level = pos.get('tp_level', 0)
+            partial_early_done = pos.get('partial_early_done', False)
+
+            # TP partiel "early" : 40% à 0.8× la distance vers TP1 (une seule fois)
+            _early_rr = float(os.environ.get('PARTIAL_TP_EARLY_RR', '0.8').strip())
+            _early_pct = float(os.environ.get('PARTIAL_TP_EARLY_PCT', '0.40').strip())
+            if not partial_early_done and take_profit and _early_pct > 0:
+                if direction == 'LONG':
+                    dist_tp1 = take_profit - entry_price
+                    early_trigger = entry_price + _early_rr * dist_tp1
+                    early_reached = current_price >= early_trigger
+                else:
+                    dist_tp1 = entry_price - take_profit
+                    early_trigger = entry_price - _early_rr * dist_tp1
+                    early_reached = current_price <= early_trigger
+                if early_reached:
+                    quantity = pos['quantity']
+                    partial_qty = quantity * _early_pct
+                    remaining_qty = quantity - partial_qty
+                    if direction == 'LONG':
+                        partial_pnl = (current_price - entry_price) * partial_qty
+                    else:
+                        partial_pnl = (entry_price - current_price) * partial_qty
+                    partial_value = pos['amount_usdt'] * (partial_qty / quantity) + partial_pnl
+                    self.wallet['USDT'] += partial_value
+                    self.wallet['positions'][symbol]['quantity'] = remaining_qty
+                    self.wallet['positions'][symbol]['amount_usdt'] = pos['amount_usdt'] * (1.0 - _early_pct)
+                    self.wallet['positions'][symbol]['partial_early_done'] = True
+                    partial_count += 1
+                    print("TP early {} {:.0f}% vendu @ {:.4f} (R:R {:.1f}) (+{:.2f}$)".format(
+                        symbol, _early_pct * 100, current_price, _early_rr, partial_pnl))
+                    continue
 
             tp1_reached = False
             tp2_reached = False
@@ -684,8 +715,9 @@ class PaperTrader:
             print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
-        # Pas de slippage à l'entrée (PnL = 0% au dashboard)
-        entry_price = current_price
+        # Buffer entrée (slippage simulé, ex. 0.03%)
+        _buf = float(os.environ.get('ENTRY_BUFFER_PCT', '0.03').strip()) / 100.0
+        entry_price = current_price * (1.0 + _buf)
         lev = self.long_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev
@@ -754,8 +786,9 @@ class PaperTrader:
             print(f"[WARN] Position déjà ouverte sur {symbol}")
             return False
 
-        # Pas de slippage à l'entrée (PnL = 0% au dashboard)
-        entry_price = current_price
+        # Buffer entrée (slippage simulé, ex. 0.03%)
+        _buf = float(os.environ.get('ENTRY_BUFFER_PCT', '0.03').strip()) / 100.0
+        entry_price = current_price * (1.0 - _buf)
         lev = self.short_leverage
         quantity = (amount_usdt * lev) / entry_price
         notional = amount_usdt * lev

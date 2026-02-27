@@ -51,6 +51,14 @@ button:active { opacity: 0.8; }
   <div class="row"><span class="label">Dispo</span><span>{{ "%.2f"|format(balance) }} USDT</span></div>
   <div class="row"><span class="label">PnL latent</span><span class="{% if total_unrealized_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(total_unrealized_pnl) }} USDT</span></span></div>
   <div class="row"><span class="label">PnL réalisé</span><span class="{% if perf.total_pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(perf.total_pnl) }} USDT</span> ({{ perf.win_rate }}% WR, {{ perf.total_trades }} trades)</span></div>
+  {% if perf.get('by_regime') %}
+  <div style="margin-top:10px;font-size:0.85rem">
+    <span class="label">Par régime:</span>
+    {% for regime, stat in perf.by_regime.items() %}
+    <div class="row"><span class="label">{{ regime }}</span><span>{{ stat.n }} trades, WR {{ stat.win_rate }}%, PnL <span class="{% if stat.pnl >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(stat.pnl) }}</span> USDT</span></span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
 </section>
 <section>
   <h2>Positions ({{ positions|length }})</h2>
