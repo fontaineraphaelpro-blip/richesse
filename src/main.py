@@ -66,8 +66,8 @@ SCAN_INTERVAL    = 300
 SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
-MAX_CONSECUTIVE_LOSSES = 2
-COOLDOWN_MINUTES = 10          # 10 min entre trades
+MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes avant pause (max profit: plus de chances)
+COOLDOWN_MINUTES = 5           # 5 min entre trades (max profit: plus d'entrées)
 SPREAD_MAX_PCT   = 0.10
 VOLUME_RATIO_MIN = 1.3
 VOLATILITY_MAX   = 5.0
@@ -82,31 +82,31 @@ TREND_1H_LONG_ALLOW_NEUTRAL = True
 TREND_4H_ENABLED = True
 TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
-POSITION_PCT_BALANCE   = 0.35   # 35% par position (levier 10x, equilibre risque/rendement)
+POSITION_PCT_BALANCE   = 0.45   # 45% par position (max profit: positions plus grosses)
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
 SESSION_BONUS_UTC_END = 22
 SESSION_BONUS_PTS = 3
-RISK_PCT_CAPITAL       = 0.06   # 6% risk par trade (agressif)
-RISK_PCT_SMALL_ACCOUNT = 0.06
+RISK_PCT_CAPITAL       = 0.08   # 8% risk par trade (max profit)
+RISK_PCT_SMALL_ACCOUNT = 0.08
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
-MAX_DAILY_DRAWDOWN_PCT = 15.0   # Tolerance 15% (levier 10x)
+MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 62          # Score 62+ = opportunités adaptatives (multi-indicateurs)
+MIN_SCORE_TO_OPEN = 58          # 58+ (max profit: plus d'opportunités, était 62)
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
 
 # Risk management: utiliser Kelly pour adapter la taille au win rate (max gains long terme)
 KELLY_RISK_ENABLED = True
-KELLY_RISK_MIN_PCT = 0.02      # Minimum 2%
-KELLY_RISK_MAX_PCT = 0.08      # Maximum 8% (levier 10x)
+KELLY_RISK_MIN_PCT = 0.03      # Minimum 3% (max profit)
+KELLY_RISK_MAX_PCT = 0.10      # Maximum 10% (max profit)
 
 # Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '90'))   # 90s H24 day trader pro
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '60'))   # 60s (max profit: plus de scans)
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -133,8 +133,15 @@ SCORE_BULLISH_MARKET = 75    # Bull: setups corrects
 SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
-MIN_RISK_REWARD = 1.2        # R:R 1.2:1 minimum (profitable a 55% WR)
-USE_STRICT_SIGNAL_GATE = True  # Exiger signal_long_buy_dip / signal_short_big_drop en plus du score (meilleure lecture signaux)
+MIN_RISK_REWARD = 1.5        # R:R 1.5:1 (max profit: gain plus gros par trade)
+USE_STRICT_SIGNAL_GATE = False  # Désactivé pour max profit: plus d'opportunités (score seul)
+
+# Protection séries de pertes: réduction de la taille après 1 ou 2 pertes d'affilée
+LOSS_REDUCTION_AFTER_1 = 0.7   # Taille x0.7 après 1 perte consécutive
+LOSS_REDUCTION_AFTER_2 = 0.5   # Taille x0.5 après 2 pertes consécutives
+# Régime de marché: moins/pas de trades en conditions difficiles
+NO_NEW_TRADES_IN_VOLATILE = True   # Aucune nouvelle position si BTC en VOLATILE
+REGIME_RANGING_SIZE_MULT = 0.5     # Taille x0.5 en RANGING (moins d'exposition)
 
 # Configuration News & Sentiment
 NEWS_ENABLED = True
@@ -546,6 +553,17 @@ def run_scanner():
         add_bot_log(f"STOP: {MAX_CONSECUTIVE_LOSSES} pertes consécutives, trading suspendu.", 'ERROR')
         return []
 
+    # Nombre de pertes consécutives (pour réduire la taille des positions)
+    consecutive_losses = 0
+    for t in sales[:5]:
+        if t.get('pnl', 0) < 0:
+            consecutive_losses += 1
+        else:
+            break
+    loss_reduction = LOSS_REDUCTION_AFTER_2 if consecutive_losses >= 2 else (LOSS_REDUCTION_AFTER_1 if consecutive_losses == 1 else 1.0)
+    if consecutive_losses > 0:
+        add_bot_log("Protection série: {} perte(s) consécutive(s) — taille x{:.1f}.".format(consecutive_losses, loss_reduction), 'INFO')
+
     # —— 3. Fear & Greed (une fois par scan) ——
     fear_greed_val = None
     try:
@@ -789,7 +807,18 @@ def run_scanner():
         except Exception:
             pass
 
+    # En VOLATILE: pas de nouvelle position (marché trop imprévisible)
+    if NO_NEW_TRADES_IN_VOLATILE and btc_regime == 'VOLATILE':
+        add_bot_log("Marché VOLATILE — aucune nouvelle position ce scan.", 'INFO')
+        shared_data['last_block_reason'] = shared_data.get('last_block_reason') or "Marché VOLATILE"
+
+    regime_size_mult = REGIME_RANGING_SIZE_MULT if btc_regime == 'RANGING' else 1.0
+    if btc_regime == 'RANGING':
+        add_bot_log("Marché RANGING — taille des positions réduite (x{:.1f}).".format(regime_size_mult), 'INFO')
+
     for opp in opportunities_list:
+        if NO_NEW_TRADES_IN_VOLATILE and btc_regime == 'VOLATILE':
+            break
         if len(current_open) >= MAX_POSITIONS:
             break
         deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
@@ -841,6 +870,9 @@ def run_scanner():
         avg_slip = _get_avg_slippage(symbol) or 0
         slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
         size_mult = (position_sizer.calculate_atr_adjustment(atr_pct) or 1.0) * (position_sizer.calculate_score_adjustment(opp['score'], 50) or 1.0) * (position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0) * multi_pos_factor * corr_factor * slip_factor
+        # Protection: réduction après pertes consécutives + régime RANGING
+        size_mult *= loss_reduction
+        size_mult *= regime_size_mult
         opened = False
         if is_long:
             sl_pct = opp.get('sl_pct_effective') or LONG_STOP_LOSS_PCT
@@ -855,7 +887,7 @@ def run_scanner():
         else:
             sl_pct = opp.get('sl_pct_effective') or STOP_LOSS_PCT
             pos_size = position_size_usdt(balance, risk_pct=risk_pct, sl_pct=sl_pct, leverage=trader.short_leverage, max_pct_balance=POSITION_PCT_BALANCE, min_usdt=MIN_POSITION_USDT)
-            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))
+            pos_size = min(pos_size * size_mult, pos_size * 1.5, max(0, balance * 0.98))  # size_mult inclut déjà loss_reduction et regime_size_mult
             take_profit_2 = price - (price - take_profit) * 1.5 if take_profit < price else None
             if pos_size >= MIN_POSITION_USDT and trader.place_short_order(symbol, pos_size, price, stop_loss, take_profit, entry_trend='CRASH_SHORT', take_profit_2=take_profit_2, atr_pct=opp.get('atr_pct')):
                 trader.record_trade_time(symbol)
@@ -875,7 +907,7 @@ def run_scanner():
     if not opportunities_list:
         shared_data['last_block_reason'] = "Aucune opportunite detectee"
         add_bot_log("Aucune opportunité détectée sur ce scan.", 'INFO')
-    elif opened_count == 0 and best is None:
+    elif opened_count == 0 and best is None and shared_data.get('last_block_reason') != "Marché VOLATILE":
         shared_data['last_block_reason'] = "Aucune opp avec R:R>={:.1f} et score>={}".format(MIN_RISK_REWARD, MIN_SCORE_TO_OPEN)
         add_bot_log("{} opps mais aucune avec R:R>={:.1f} ET score>={} — pas d'ouverture.".format(
             len(opportunities_list), MIN_RISK_REWARD, MIN_SCORE_TO_OPEN), 'INFO')

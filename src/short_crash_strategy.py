@@ -24,7 +24,7 @@ ATR_SL_MIN_PCT = 0.7       # Éviter SL trop serré (0.4% = trop de stop-out)
 ATR_SL_MAX_PCT = 1.5
 ATR_TP_MIN_PCT = 0.6
 ATR_TP_MAX_PCT = 2.0
-MIN_RR_RATIO = 1.2         # R:R minimum garanti (TP distance >= SL * 1.2)
+MIN_RR_RATIO = 1.5         # R:R 1.5:1 (max profit: gain plus gros par trade)
 
 
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):

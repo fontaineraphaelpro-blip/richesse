@@ -21,8 +21,8 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class PaperTrader:
     def __init__(self, initial_balance=100):
         self.protector = ReversalProtector()  # Protection contre reversals
-        self.short_leverage = 10.0  # Levier 10x SHORT
-        self.long_leverage = 10.0  # Levier 10x LONG
+        self.short_leverage = 15.0  # Levier 15x (max profit — risque plus élevé)
+        self.long_leverage = 15.0  # Levier 15x LONG
         # Frais simulés 0.05% par côté (open/close)
         self.fee_pct = 0.0005
         # Slippage simulé en paper (0.05% par défaut, ex: SLIPPAGE_PCT=0.1 pour 0.1%)
@@ -34,7 +34,7 @@ class PaperTrader:
         
         # Configuration Break-Even & Drawdown
         self.breakeven_trigger_pct = 0.5   # Break-even a +0.5%
-        self.max_drawdown_pct = 15.0      # Tolerance 15% (levier 10x)
+        self.max_drawdown_pct = 22.0      # 22% (max profit)
         self.initial_capital = initial_balance
         
         # Trailing Stop — proteger les gains
