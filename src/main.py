@@ -18,7 +18,7 @@ import time
 import math
 import threading
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template_string, jsonify, request, Response
 
 # Import des modules internes (seulement ceux utilisés par le flux principal + API dashboard)
@@ -66,7 +66,7 @@ SCAN_INTERVAL    = 300
 SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
-MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes avant pause (max profit: plus de chances)
+MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
 COOLDOWN_MINUTES = 5           # 5 min entre trades (max profit: plus d'entrées)
 SPREAD_MAX_PCT   = 0.10
 VOLUME_RATIO_MIN = 1.3
@@ -136,9 +136,14 @@ SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 MIN_RISK_REWARD = 1.5        # R:R 1.5:1 (max profit: gain plus gros par trade)
 USE_STRICT_SIGNAL_GATE = False  # Désactivé pour max profit: plus d'opportunités (score seul)
 
-# Protection séries de pertes: réduction de la taille après 1 ou 2 pertes d'affilée
-LOSS_REDUCTION_AFTER_1 = 0.7   # Taille x0.7 après 1 perte consécutive
-LOSS_REDUCTION_AFTER_2 = 0.5   # Taille x0.5 après 2 pertes consécutives
+# Protection séries de pertes (super préparé contre mauvaises séries)
+LOSS_REDUCTION_AFTER_1 = 0.6   # Taille x0.6 après 1 perte consécutive
+LOSS_REDUCTION_AFTER_2 = 0.35  # Taille x0.35 après 2 pertes consécutives
+LAST_LOSS_SIZE_MULT = 0.85     # Dernier trade était une perte → prochaine taille x0.85
+MAX_POSITIONS_AFTER_1_LOSS = 3   # Après 1 perte consécutive: max 3 positions
+MAX_POSITIONS_AFTER_2_LOSSES = 1 # Après 2 pertes consécutives: max 1 position
+PAUSE_AFTER_2_LOSSES_MINUTES = 30  # Après 2 pertes d'affilée: aucune ouverture pendant 30 min
+DAILY_LOSS_LIMIT_NO_NEW_PCT = 10  # Si perte jour >= 10%: plus de nouvelle position jusqu'à demain
 # Régime de marché: moins/pas de trades en conditions difficiles
 NO_NEW_TRADES_IN_VOLATILE = True   # Aucune nouvelle position si BTC en VOLATILE
 REGIME_RANGING_SIZE_MULT = 0.5     # Taille x0.5 en RANGING (moins d'exposition)
@@ -570,8 +575,11 @@ def run_scanner():
         except Exception:
             pass
         return []
+    if daily_dd >= DAILY_LOSS_LIMIT_NO_NEW_PCT:
+        add_bot_log("Perte jour {:.1f}% >= {}% — plus de nouvelle position aujourd'hui.".format(daily_dd, DAILY_LOSS_LIMIT_NO_NEW_PCT), 'WARN')
+        return []
 
-    # Vérifier les 3 DERNIÈRES ventes (trades fermés): si toutes en perte → stop
+    # Vérifier les 3 DERNIÈRES ventes (trades fermés): si toutes en perte → stop total
     recent = trader.get_trades_history()
     sales = [t for t in recent if 'VENTE' in t.get('type', '')]
     last_3_sales = sales[:3]
@@ -595,6 +603,22 @@ def run_scanner():
                 send_telegram("⚠️ {} pertes consécutives — prochaine perte = pause trading.".format(consecutive_losses))
             except Exception:
                 pass
+
+    # Après 2 pertes d'affilée: pause 30 min (aucune nouvelle position); réinitialiser après un gain
+    if consecutive_losses == 0:
+        shared_data['pause_no_new_until'] = None
+    elif consecutive_losses >= 2:
+        now = datetime.now()
+        if shared_data.get('pause_no_new_until') is None:
+            shared_data['pause_no_new_until'] = now + timedelta(minutes=PAUSE_AFTER_2_LOSSES_MINUTES)
+        if now < shared_data.get('pause_no_new_until', now):
+            add_bot_log("Pause {} min après 2 pertes — reprise à {}.".format(
+                PAUSE_AFTER_2_LOSSES_MINUTES,
+                shared_data['pause_no_new_until'].strftime('%H:%M')), 'WARN')
+            return []
+
+    # Dernier trade était une perte → réduire la prochaine taille (même si pas consécutif)
+    last_was_loss = len(sales) > 0 and sales[0].get('pnl', 0) < 0
 
     # —— 3. Fear & Greed (une fois par scan) ——
     fear_greed_val = None
@@ -899,10 +923,14 @@ def run_scanner():
     if btc_regime == 'RANGING':
         add_bot_log("Marché RANGING — taille des positions réduite (x{:.1f}).".format(regime_size_mult), 'INFO')
 
+    effective_max_positions = MAX_POSITIONS if consecutive_losses == 0 else (MAX_POSITIONS_AFTER_1_LOSS if consecutive_losses == 1 else MAX_POSITIONS_AFTER_2_LOSSES)
+    if consecutive_losses > 0:
+        add_bot_log("Max positions ce scan: {} (après {} perte(s) conséc.).".format(effective_max_positions, consecutive_losses), 'INFO')
+
     for opp in opportunities_list:
         if NO_NEW_TRADES_IN_VOLATILE and btc_regime == 'VOLATILE':
             break
-        if len(current_open) >= MAX_POSITIONS:
+        if len(current_open) >= effective_max_positions:
             break
         deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
         if total_capital > 0 and (deployed_capital / total_capital) >= MAX_PORTFOLIO_EXPOSURE:
@@ -956,6 +984,8 @@ def run_scanner():
         # Protection: réduction après pertes consécutives + régime RANGING
         size_mult *= loss_reduction
         size_mult *= regime_size_mult
+        if last_was_loss:
+            size_mult *= LAST_LOSS_SIZE_MULT
         # Spread dynamique: si spread actuel > 1.5x médiane récente → réduire taille
         spread_hist = shared_data.get('spread_history', {}).get(symbol, [])
         if len(spread_hist) >= 5:
