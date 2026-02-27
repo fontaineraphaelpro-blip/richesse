@@ -143,6 +143,9 @@ LOSS_REDUCTION_AFTER_2 = 0.5   # Taille x0.5 après 2 pertes consécutives
 NO_NEW_TRADES_IN_VOLATILE = True   # Aucune nouvelle position si BTC en VOLATILE
 REGIME_RANGING_SIZE_MULT = 0.5     # Taille x0.5 en RANGING (moins d'exposition)
 
+# Vérification à chaque scan: fermer si le signal s'est inversé (direction opposée plus forte)
+REVERSAL_SCORE_THRESHOLD = 15      # Fermer position si score direction opposée > notre score + 15
+
 # Configuration News & Sentiment
 NEWS_ENABLED = True
 SENTIMENT_SCORE_ADJUST = True
@@ -755,6 +758,39 @@ def run_scanner():
     # Fusionner et trier par score (meilleure opportunité en premier)
     opportunities_list = list(long_opportunities) + list(short_opportunities)
     opportunities_list.sort(key=lambda x: x['score'], reverse=True)
+
+    # —— Vérifier que les positions ouvertes suivent encore la bonne direction ——
+    # Si le signal s'est inversé (score opposé > notre score + seuil), on ferme pour éviter de rester contre-tendance
+    try:
+        from adaptive_scorer import score_adaptive
+        open_pos_now = trader.get_open_positions()
+        last_ind = shared_data.get('last_indicators') or {}
+        to_close_reversal = []
+        for sym, pos in open_pos_now.items():
+            if sym not in last_ind:
+                continue
+            ind = last_ind[sym]
+            direction = pos.get('direction', 'LONG')
+            spread_pct = 0.08
+            atr_pct = ind.get('atr_percent') or 2.0
+            try:
+                score_long, score_short, _ = score_adaptive(
+                    ind, 'NEUTRAL', 'NEUTRAL', None, spread_pct, atr_pct
+                )
+            except Exception:
+                continue
+            price = real_prices.get(sym, pos.get('entry_price'))
+            if direction == 'LONG':
+                if score_short > score_long + REVERSAL_SCORE_THRESHOLD:
+                    to_close_reversal.append((sym, price, "Signal inversé (SHORT > LONG)"))
+            else:
+                if score_long > score_short + REVERSAL_SCORE_THRESHOLD:
+                    to_close_reversal.append((sym, price, "Signal inversé (LONG > SHORT)"))
+        for sym, price, reason in to_close_reversal:
+            trader.close_position(sym, price, reason)
+            add_bot_log("Fermeture {} — {} (marché a changé).".format(sym, reason), 'WARN')
+    except Exception as e:
+        add_bot_log("Erreur vérif. direction positions: {}".format(e), 'ERROR')
 
     # Confluence bonus: order flow + depth pour top 20 (day trader pro)
     TOP_FOR_CONFLUENCE = 20
