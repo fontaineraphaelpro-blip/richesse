@@ -62,12 +62,12 @@ STOP_LOSS_PCT    = 1.5        # SL 1.5% (SHORT — était 1.2% trop serré)
 TAKE_PROFIT_PCT  = 2.25       # TP 2.25% (R:R 1.5:1 maintenu)
 LONG_STOP_LOSS_PCT   = 1.5      # 1.5% (était 1.2% — trop serré, stop-out fréquents)
 LONG_TAKE_PROFIT_PCT = 2.25     # R:R 1.5:1 maintenu
-SCAN_INTERVAL    = 300
-SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
-SCAN_INTERVAL_NIGHT = 900
+SCAN_INTERVAL    = 45         # Robot pro: scan continu, pas de fatigue — 45s partout
+SCAN_INTERVAL_SESSION = 45    # Même fréquence 24/7 (crypto ne dort jamais)
+SCAN_INTERVAL_NIGHT = 45      # Pas de ralentissement nuit — robot chasse en continu
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
-COOLDOWN_MINUTES = 3           # 3 min entre trades — day trader pro: plus d'entrées quotidiennes
+COOLDOWN_MINUTES = 2           # 2 min — robot: pas d'hésitation, réaction rapide
 SPREAD_MAX_PCT   = 0.09       # Spread max 0.09% — plus de paires liquides
 VOLUME_RATIO_MIN = 1.3        # Volume 1.3x moyenne — plus d'opportunités
 MIN_QUOTE_VOLUME_24H_USDT = 1_000_000  # Volume 24h min en USDT — filtre liquidité (fetch dynamique)
@@ -104,10 +104,12 @@ KELLY_RISK_ENABLED = True
 KELLY_RISK_MIN_PCT = 0.03      # Minimum 3% (max profit)
 KELLY_RISK_MAX_PCT = 0.10      # Maximum 10% (max profit)
 
-# Nombre de paires à scanner: None = TOUTES les paires (max opportunités). Sinon mettre SCAN_PAIRS_LIMIT=50 en env pour limiter.
+# Nombre de paires à scanner: None = TOUTES (SCAN_TOP_N_LIQUID). SCAN_PAIRS_LIMIT en env pour limiter (min 200).
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
 SCAN_PAIRS_LIMIT = int(_scan_limit) if (_scan_limit and _scan_limit.isdigit()) else None
-SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '60'))   # 60s (max profit: plus de scans)
+if SCAN_PAIRS_LIMIT is not None and SCAN_PAIRS_LIMIT < 200:
+    SCAN_PAIRS_LIMIT = 200  # Minimum 200 paires — éviter scan trop limité (ex: SCAN_PAIRS_LIMIT=3)
+SCAN_INTERVAL = int(os.environ.get('SCAN_INTERVAL', '45'))   # 45s — robot pro: chasse continue
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOUVELLES CONFIGURATIONS RENTABILITÃ‰
@@ -143,7 +145,7 @@ LOSS_REDUCTION_AFTER_2 = 0.35  # Taille x0.35 après 2 pertes consécutives
 LAST_LOSS_SIZE_MULT = 0.85     # Dernier trade était une perte → prochaine taille x0.85
 MAX_POSITIONS_AFTER_1_LOSS = 3   # Après 1 perte consécutive: max 3 positions
 MAX_POSITIONS_AFTER_2_LOSSES = 1 # Après 2 pertes consécutives: max 1 position
-PAUSE_AFTER_2_LOSSES_MINUTES = 30  # Après 2 pertes d'affilée: aucune ouverture pendant 30 min
+PAUSE_AFTER_2_LOSSES_MINUTES = 15  # Robot: 15 min — pas d'émotion, reprise rapide
 DAILY_LOSS_LIMIT_NO_NEW_PCT = 10  # Si perte jour >= 10%: plus de nouvelle position jusqu'à demain
 # Régime de marché: moins/pas de trades en conditions difficiles
 NO_NEW_TRADES_IN_VOLATILE = False  # Day trader pro: trade aussi en VOLATILE (taille réduite)
@@ -154,7 +156,7 @@ REGIME_RANGING_SIZE_MULT = 0.6     # Taille x0.6 en RANGING (plus d'exposition q
 REVERSAL_SCORE_THRESHOLD = 15      # Fermer position si score direction opposée > notre score + 15
 
 # SL/TP vérifiés plus souvent (thread dédié, indépendant du scan)
-SL_TP_CHECK_INTERVAL_SEC = 20     # Vérifier SL/TP toutes les 20 s
+SL_TP_CHECK_INTERVAL_SEC = 15     # Robot: réaction rapide SL/TP — 15 s
 
 # Spread dynamique: réduire taille si spread actuel > 1.5x la moyenne récente
 SPREAD_HISTORY_MAX = 96           # 24h de données (96 x 15 min)
@@ -612,6 +614,8 @@ def run_scanner():
     symbols = list(get_top_pairs(limit=SCAN_TOP_N_LIQUID, min_quote_volume_usdt=MIN_QUOTE_VOLUME_24H_USDT))
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
+    if len(symbols) < 50:
+        add_bot_log("ATTENTION: seulement {} paires à scanner — vérifier API Binance ou SCAN_PAIRS_LIMIT.".format(len(symbols)), 'WARN')
     # Toujours inclure les paires des positions ouvertes pour mettre à jour last_prices
     try:
         from trader import PaperTrader
@@ -2164,18 +2168,18 @@ def _sl_tp_watcher_loop():
 
 
 def _get_scan_interval():
-    """Day trader pro H24: 90s en session, 5 min la nuit (volumes plus faibles), 90s sinon."""
+    """Robot pro: scan 45s 24/7 — pas de fatigue, pas de ralentissement nuit."""
     utc_hour = datetime.utcnow().hour
     if SESSION_BONUS_ENABLED and SESSION_BONUS_UTC_START <= utc_hour < SESSION_BONUS_UTC_END:
         return SCAN_INTERVAL_SESSION  # 90s
     elif utc_hour < 6 or utc_hour >= 23:
-        return SCAN_INTERVAL_NIGHT  # 900s
+        return SCAN_INTERVAL_NIGHT  # 45s — robot: même fréquence 24/7
     return SCAN_INTERVAL  # 90s
 
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("Day Trader Pro H24 | Score>={} | R:R>={} | Max {} pos | 7j/7".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD, MAX_POSITIONS), 'INFO')
+    add_bot_log("Robot Pro — chasse continue 24/7 | Score>={} | R:R>={} | Scan 45s | Pas de fatigue/émotion".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:
