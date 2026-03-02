@@ -293,10 +293,13 @@ def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit
     print("{}/{} paires OK.".format(success_count, total))
     return data, real_prices
 
-def fetch_usdt_pairs_from_binance(limit: int = 400) -> List[str]:
+def fetch_usdt_pairs_from_binance(
+    limit: int = 400,
+    min_quote_volume_usdt: float = 0,
+) -> List[str]:
     """
     Récupère dynamiquement les paires USDT depuis Binance, triées par volume 24h.
-    Permet de scanner plus de 200 paires (jusqu'à ~400+ disponibles).
+    Filtre liquidité: exclut les paires avec volume 24h < min_quote_volume_usdt.
     """
     urls = [
         "https://api.binance.com/api/v3/ticker/24hr",
@@ -310,16 +313,18 @@ def fetch_usdt_pairs_from_binance(limit: int = 400) -> List[str]:
             data = r.json()
             if not isinstance(data, list):
                 continue
-            # Filtrer USDT, trier par quoteVolume (volume en USDT)
+            # Filtrer USDT, appliquer seuil liquidité, trier par quoteVolume
             usdt_pairs = [
                 (s["symbol"], float(s.get("quoteVolume", 0)))
                 for s in data
                 if s.get("symbol", "").endswith("USDT")
+                and float(s.get("quoteVolume", 0)) >= min_quote_volume_usdt
             ]
             usdt_pairs.sort(key=lambda x: x[1], reverse=True)
             symbols = [s[0] for s in usdt_pairs[:limit]]
             if symbols:
-                print("[BINANCE] {} paires USDT chargées dynamiquement (top volume 24h)".format(len(symbols)))
+                print("[BINANCE] {} paires USDT (vol 24h >= ${:,.0f})".format(
+                    len(symbols), min_quote_volume_usdt))
                 return symbols
         except Exception as e:
             print("[WARN] fetch_usdt_pairs_from_binance: {}".format(str(e)[:80]))
@@ -327,14 +332,14 @@ def fetch_usdt_pairs_from_binance(limit: int = 400) -> List[str]:
     return TOP_USDT_PAIRS  # Fallback
 
 
-def get_top_pairs(limit: int = None) -> List[str]:
+def get_top_pairs(limit: int = None, min_quote_volume_usdt: float = 0) -> List[str]:
     """
     Retourne les paires à scanner.
-    Si limit > 200: fetch dynamique depuis Binance (trié par volume).
+    Si limit > 200: fetch dynamique depuis Binance (trié par volume, filtre liquidité).
     Sinon: liste statique TOP_USDT_PAIRS.
     """
     if limit is not None and limit > 200:
-        return fetch_usdt_pairs_from_binance(limit=limit)
+        return fetch_usdt_pairs_from_binance(limit=limit, min_quote_volume_usdt=min_quote_volume_usdt)
     base = TOP_USDT_PAIRS
     return base[:limit] if limit else base
 

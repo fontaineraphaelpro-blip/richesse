@@ -68,8 +68,9 @@ SCAN_INTERVAL_NIGHT = 900
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
 COOLDOWN_MINUTES = 5           # 5 min entre trades (max profit: plus d'entrées)
-SPREAD_MAX_PCT   = 0.10
-VOLUME_RATIO_MIN = 1.3
+SPREAD_MAX_PCT   = 0.08       # Spread max 0.08% — PRO: paires très liquides uniquement
+VOLUME_RATIO_MIN = 1.5        # Volume 1.5x moyenne — PRO: confirmation forte
+MIN_QUOTE_VOLUME_24H_USDT = 1_000_000  # Volume 24h min en USDT — filtre liquidité (fetch dynamique)
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
 TREND_15M_MUST_BEARISH = True
@@ -93,7 +94,7 @@ SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 65          # 65+ (qualité > quantité — 58 laissait passer trop de mauvais setups)
+MIN_SCORE_TO_OPEN = 70          # 70+ PRO: signaux de qualité maximale, zéro faille
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -133,7 +134,7 @@ SCORE_BULLISH_MARKET = 75    # Bull: setups corrects
 SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
-MIN_RISK_REWARD = 1.5        # R:R 1.5:1 (max profit: gain plus gros par trade)
+MIN_RISK_REWARD = 1.8        # R:R 1.8:1 PRO: gain > risque systématiquement
 USE_STRICT_SIGNAL_GATE = True   # Activé: exiger 7/10 conditions (signal_long_buy_dip / signal_short_big_drop) — moins de trades mais meilleure qualité
 
 # Protection séries de pertes (super préparé contre mauvaises séries)
@@ -168,7 +169,7 @@ ALERT_CONSECUTIVE_LOSSES = 2      # Alerter après 2 pertes d'affilée
 
 # Rentabilité: Kelly fractionnel, setups forts, multi-TF, heures favorables
 KELLY_FRACTION = 0.5              # Utiliser 0.5 × Kelly (réduit variance et drawdown)
-STRONG_SETUP_SCORE = 70           # Score >= 70 → bonus taille x1.2
+STRONG_SETUP_SCORE = 75           # Score >= 75 → bonus taille x1.2 PRO
 STRONG_SETUP_SIZE_MULT = 1.2
 REQUIRE_MULTITF_ALIGNED = True    # Exiger 15m ET 1h alignés (LONG=BULLISH, SHORT=BEARISH)
 SCAN_TOP_N_LIQUID = 400           # Scanner les 400 paires USDT les plus liquides (fetch dynamique Binance si > 200)
@@ -183,7 +184,7 @@ MIN_RR_STRONG_TREND = 1.8
 REQUIRE_4H_ALIGNED = True         # 4h doit être alignée ou neutre (LONG: BULL/NEUTRAL, SHORT: BEAR/NEUTRAL)
 BB_LONG_MAX = 0.85                # LONG: ne pas entrer trop proche résistance (bb_percent < 0.85)
 BB_SHORT_MIN = 0.15               # SHORT: ne pas entrer trop proche support (bb_percent > 0.15)
-BIG_CANDLE_BODY_ATR_RATIO = 1.8   # Dernière bougie body > 1.8× ATR → skip (éviter wicks)
+BIG_CANDLE_BODY_ATR_RATIO = 1.4   # Dernière bougie body > 1.4× ATR → skip PRO: éviter wicks et FOMO
 REQUIRE_VOLUME_RISING = True      # obv_slope > 0 (volume en hausse)
 # Sorties & risque
 PARTIAL_TP_EARLY_PCT = 0.40        # Prendre 40% à un 1er palier (R:R 0.8)
@@ -195,8 +196,8 @@ ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < se
 ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
-MIN_SCORE_RANGING = 68            # RANGING: exiger score plus élevé (setups plus difficiles)
-MIN_SCORE_VOLATILE = 70          # VOLATILE: encore plus strict (souvent pas d'ouverture)
+MIN_SCORE_RANGING = 75            # RANGING: 75+ (gate strict bloque souvent = peu de trades)
+MIN_SCORE_VOLATILE = 78           # VOLATILE: 78+ PRO (quasi aucune ouverture = sécurité)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
 DRAWDOWN_7D_SIZE_MULT_TIER1 = 0.85
@@ -218,7 +219,7 @@ PAUSE_ON_EVENTS = True
 
 # Configuration Machine Learning
 ML_ENABLED = True
-ML_MIN_PROBABILITY = 60
+ML_MIN_PROBABILITY = 65           # ML 65%+ PRO (était 60)
 ML_SCORE_ADJUST = True
 
 # Configuration On-Chain
@@ -606,8 +607,8 @@ def run_scanner():
             add_bot_log("Weekend — volumes faibles, pas de trading.", 'INFO')
             return []
 
-    # Liste des paires (si > 200: fetch dynamique Binance trié par volume 24h)
-    symbols = list(get_top_pairs(limit=SCAN_TOP_N_LIQUID))
+    # Liste des paires (si > 200: fetch dynamique Binance, filtre liquidité volume 24h + spread)
+    symbols = list(get_top_pairs(limit=SCAN_TOP_N_LIQUID, min_quote_volume_usdt=MIN_QUOTE_VOLUME_24H_USDT))
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
     # Toujours inclure les paires des positions ouvertes pour mettre à jour last_prices
@@ -859,12 +860,15 @@ def run_scanner():
         if final_long >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
                 pass  # 15m et 1h non alignés haussiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BULLISH', 'BULL', 'NEUTRAL', None):
-                pass  # 4h pas alignée ou baissière
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BULLISH', 'BULL'):
+                pass  # PRO: 4h DOIT être haussière (pas NEUTRAL = faux signaux)
             elif (indicators.get('bb_percent') or 0.5) >= BB_LONG_MAX:
                 pass  # Trop proche résistance (Bollinger haute)
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
                 pass  # Volume pas en hausse
+            elif (indicators.get('ema9') and indicators.get('ema21') and indicators['ema21'] > 0 and
+                  abs(indicators['ema9'] - indicators['ema21']) / indicators['ema21'] * 100 < 0.3):
+                pass  # PRO: EMA9/21 trop proches = marché chop, skip
             else:
                 body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
                 atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
@@ -942,12 +946,15 @@ def run_scanner():
         if final_short >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
                 pass  # 15m et 1h non alignés baissiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BEARISH', 'BEAR', 'NEUTRAL', None):
-                pass  # 4h pas alignée ou haussière
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BEARISH', 'BEAR'):
+                pass  # PRO: 4h DOIT être baissière (pas NEUTRAL)
             elif (indicators.get('bb_percent') or 0.5) <= BB_SHORT_MIN:
                 pass  # Trop proche support (Bollinger basse)
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
                 pass  # Volume pas en hausse
+            elif (indicators.get('ema9') and indicators.get('ema21') and indicators['ema21'] > 0 and
+                  abs(indicators['ema9'] - indicators['ema21']) / indicators['ema21'] * 100 < 0.3):
+                pass  # PRO: EMA9/21 trop proches = marché chop, skip
             else:
                 body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
                 atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
@@ -1181,8 +1188,10 @@ def run_scanner():
         try:
             of = fetch_order_flow(symbol)
             pressure = of.get('pressure', 'NEUTRAL')
-            if is_long and pressure == 'SELL': opp['score'] -= 8
-            elif not is_long and pressure == 'BUY': opp['score'] -= 8
+            if is_long and pressure == 'SELL':
+                continue  # PRO: order flow contre nous = skip (pas de -8, exclusion totale)
+            elif not is_long and pressure == 'BUY':
+                continue  # PRO: order flow contre nous = skip
         except Exception:
             pass
         if opp['score'] < min_score:

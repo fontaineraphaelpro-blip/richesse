@@ -8,13 +8,13 @@ Le bot suit la tendance et n'entre pas sur les rebonds (pas d'achat oversold, pa
 """
 
 
-# === CONFIG 60% WR ===
-ADX_MIN_FOR_TREND = 25     # ADX 25+ = tendance FORTE confirmee
-RSI_LONG_MIN = 50          # Continuation clean (RSI 50-62)
-RSI_LONG_MAX = 62          # Hard cap
-RSI_SHORT_MIN = 35         # Pas de short sous 35 (trop oversold)
-RSI_SHORT_MAX = 50         # Short zone: 35-50
-LONG_PRICE_ABOVE_EMA_PCT = 0.05   # Prix juste au-dessus EMA21 (entry optimale)
+# === CONFIG PRO DAY TRADER — Qualité maximale ===
+ADX_MIN_FOR_TREND = 28     # ADX 28+ = tendance TRÈS forte (était 25)
+RSI_LONG_MIN = 52          # Zone continuation stricte (52-60)
+RSI_LONG_MAX = 60          # Éviter surachat
+RSI_SHORT_MIN = 38         # Pas de short sous 38 (trop oversold = rebond)
+RSI_SHORT_MAX = 48         # Short zone stricte: 38-48
+LONG_PRICE_ABOVE_EMA_PCT = 0.08   # Prix clairement au-dessus EMA21 (éviter faux signaux)
 
 # SL/TP mieux positionnés: SL plus large pour éviter stop-out sur le bruit crypto
 # Crypto 15m: ATR typique 1.5-3% — SL 1.0-2.0% évite les faux stop-out
@@ -25,7 +25,7 @@ ATR_SL_MIN_PCT = 1.0       # Min 1.0% (était 0.7% = trop serré, stop-out fréq
 ATR_SL_MAX_PCT = 2.0       # Max 2.0% (crypto volatile)
 ATR_TP_MIN_PCT = 1.0
 ATR_TP_MAX_PCT = 3.0
-MIN_RR_RATIO = 1.5         # R:R 1.5:1 (max profit: gain plus gros par trade)
+MIN_RR_RATIO = 1.8         # R:R 1.8:1 PRO (gain systématiquement > risque)
 
 
 def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_ratio=None):
@@ -70,7 +70,7 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
-SIGNAL_MIN_CONDITIONS = 7  # 7/10 conditions = ULTRA strict pour 60% WR
+SIGNAL_MIN_CONDITIONS = 8  # 8/10 conditions = PRO — qualité maximale, zéro faille
 
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """
@@ -87,13 +87,15 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     # HARD STOPS (disqualifient immediatement)
     rsi = indicators.get('rsi14')
     if rsi is not None and rsi >= RSI_LONG_MAX:
-        return False  # surachete = trop tard
+        return False  # surachat = trop tard
     adx = indicators.get('adx')
-    if adx is not None and adx < 20:
-        return False  # pas de tendance = range
+    if adx is not None and adx < 22:
+        return False  # tendance trop faible (était 20)
     regime = indicators.get('market_regime')
     if regime == 'VOLATILE':
-        return False  # trop imprevisible
+        return False  # trop imprévisible
+    if regime == 'RANGING':
+        return False  # PRO: pas de LONG en ranging (trop de faux signaux)
 
     # 1. Momentum haussier
     if indicators.get('price_momentum') == 'BULLISH':
@@ -107,7 +109,7 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     if adx is not None and adx >= ADX_MIN_FOR_TREND:
         conditions_met += 1
 
-    # 4. RSI zone continuation (50-62)
+    # 4. RSI zone continuation (52-60)
     if rsi is not None and RSI_LONG_MIN <= rsi < RSI_LONG_MAX:
         conditions_met += 1
 
@@ -132,13 +134,19 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     if macd_hist is not None and macd_hist > 0:
         conditions_met += 1
 
-    # 9. Bollinger: prix entre 40% et 70% (pas oversold, pas overbought)
+    # 9. Bollinger: prix entre 45% et 65% (zone optimale, pas extrêmes)
     bb_pct = indicators.get('bb_percent')
-    if bb_pct is not None and 0.4 <= bb_pct <= 0.7:
+    if bb_pct is not None and 0.45 <= bb_pct <= 0.65:
         conditions_met += 1
 
     # 10. Marche en tendance (regime TRENDING)
     if regime == 'TRENDING':
+        conditions_met += 1
+
+    # 11. DI+ > DI- (momentum directionnel confirmé)
+    di_plus = indicators.get('di_plus')
+    di_minus = indicators.get('di_minus')
+    if di_plus is not None and di_minus is not None and di_plus > di_minus + 2:
         conditions_met += 1
 
     return conditions_met >= SIGNAL_MIN_CONDITIONS
@@ -329,14 +337,16 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     if rsi is not None and rsi < RSI_SHORT_MIN:
         return False  # oversold = rebond probable
     rsi_prev = indicators.get('rsi14_prev')
-    if rsi_prev is not None and rsi is not None and rsi > rsi_prev + 6:
-        return False  # RSI remonte = rebond en cours
+    if rsi_prev is not None and rsi is not None and rsi > rsi_prev + 5:
+        return False  # RSI remonte = rebond en cours (était 6)
     adx = indicators.get('adx')
-    if adx is not None and adx < 20:
-        return False
+    if adx is not None and adx < 22:
+        return False  # tendance trop faible
     regime = indicators.get('market_regime')
     if regime == 'VOLATILE':
         return False
+    if regime == 'RANGING':
+        return False  # PRO: pas de SHORT en ranging
 
     # 1. Momentum baissier
     if indicators.get('price_momentum') == 'BEARISH':
@@ -350,7 +360,7 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     if adx is not None and adx >= ADX_MIN_FOR_TREND:
         conditions_met += 1
 
-    # 4. RSI zone continuation (35-50)
+    # 4. RSI zone continuation (38-48)
     if rsi is not None and RSI_SHORT_MIN <= rsi <= RSI_SHORT_MAX:
         conditions_met += 1
 
@@ -375,13 +385,19 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     if macd_hist is not None and macd_hist < 0:
         conditions_met += 1
 
-    # 9. Bollinger: prix entre 30% et 60% (tendance baissiere, pas de rebond)
+    # 9. Bollinger: prix entre 35% et 55% (tendance baissière, pas de rebond)
     bb_pct = indicators.get('bb_percent')
-    if bb_pct is not None and 0.3 <= bb_pct <= 0.6:
+    if bb_pct is not None and 0.35 <= bb_pct <= 0.55:
         conditions_met += 1
 
     # 10. Marche en tendance
     if regime == 'TRENDING':
+        conditions_met += 1
+
+    # 11. DI- > DI+ (momentum baissier confirmé)
+    di_plus = indicators.get('di_plus')
+    di_minus = indicators.get('di_minus')
+    if di_plus is not None and di_minus is not None and di_minus > di_plus + 2:
         conditions_met += 1
 
     return conditions_met >= SIGNAL_MIN_CONDITIONS
