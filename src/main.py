@@ -646,6 +646,17 @@ def run_scanner():
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
     trader = PaperTrader()
+    # Positions ouvertes: utiliser prix en direct (klines = dernier close 15m, peut être figé 15 min)
+    open_pos_for_prices = trader.get_open_positions()
+    if open_pos_for_prices:
+        try:
+            fresh_pos_prices = fetch_current_prices(list(open_pos_for_prices.keys()))
+            if fresh_pos_prices:
+                real_prices.update(fresh_pos_prices)
+                shared_data.setdefault('last_prices', {})
+                shared_data['last_prices'].update(fresh_pos_prices)
+        except Exception:
+            pass
     try:
         trader.check_and_apply_breakeven(real_prices)
     except Exception as e:
@@ -2096,7 +2107,7 @@ AVOID_WEEKENDS = False  # Day trader pro H24: crypto trade 7j/7
 
 
 def _sl_tp_watcher_loop():
-    """Vérifie SL/TP toutes les 20s (indépendant du scan) pour réagir plus vite."""
+    """Vérifie SL/TP toutes les 20s avec prix en direct (breakeven, trailing, partial TP, SL/TP)."""
     from trader import PaperTrader
     while True:
         try:
@@ -2110,8 +2121,29 @@ def _sl_tp_watcher_loop():
                 prices = fetch_current_prices(symbols)
             except Exception:
                 continue
-            if prices:
-                trader.check_positions(prices)
+            if not prices:
+                continue
+            # Mettre à jour last_prices pour que le dashboard et le capital restent à jour
+            shared_data.setdefault('last_prices', {})
+            shared_data['last_prices'].update(prices)
+            # Toute la gestion des positions avec prix frais (pas de prix figé)
+            try:
+                trader.check_and_apply_breakeven(prices)
+            except Exception:
+                pass
+            try:
+                trader.check_and_apply_trailing_stop(prices)
+            except Exception:
+                pass
+            try:
+                trader.check_and_apply_partial_tp(prices)
+            except Exception:
+                pass
+            try:
+                trader.check_time_based_exits(prices, max_hold_hours=24)
+            except Exception:
+                pass
+            trader.check_positions(prices)
         except Exception as e:
             try:
                 add_bot_log("SL/TP watcher: {}".format(str(e)[:80]), 'WARN')
