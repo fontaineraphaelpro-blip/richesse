@@ -293,9 +293,50 @@ def fetch_multiple_pairs(symbols: List[str] = None, interval: str = '15m', limit
     print("{}/{} paires OK.".format(success_count, total))
     return data, real_prices
 
-def get_top_pairs() -> List[str]:
-    """Retourne simplement la liste des paires configurées."""
-    return TOP_USDT_PAIRS
+def fetch_usdt_pairs_from_binance(limit: int = 400) -> List[str]:
+    """
+    Récupère dynamiquement les paires USDT depuis Binance, triées par volume 24h.
+    Permet de scanner plus de 200 paires (jusqu'à ~400+ disponibles).
+    """
+    urls = [
+        "https://api.binance.com/api/v3/ticker/24hr",
+        "https://api.binance.us/api/v3/ticker/24hr",
+    ]
+    for base in urls:
+        try:
+            r = requests.get(base, timeout=10)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            if not isinstance(data, list):
+                continue
+            # Filtrer USDT, trier par quoteVolume (volume en USDT)
+            usdt_pairs = [
+                (s["symbol"], float(s.get("quoteVolume", 0)))
+                for s in data
+                if s.get("symbol", "").endswith("USDT")
+            ]
+            usdt_pairs.sort(key=lambda x: x[1], reverse=True)
+            symbols = [s[0] for s in usdt_pairs[:limit]]
+            if symbols:
+                print("[BINANCE] {} paires USDT chargées dynamiquement (top volume 24h)".format(len(symbols)))
+                return symbols
+        except Exception as e:
+            print("[WARN] fetch_usdt_pairs_from_binance: {}".format(str(e)[:80]))
+            continue
+    return TOP_USDT_PAIRS  # Fallback
+
+
+def get_top_pairs(limit: int = None) -> List[str]:
+    """
+    Retourne les paires à scanner.
+    Si limit > 200: fetch dynamique depuis Binance (trié par volume).
+    Sinon: liste statique TOP_USDT_PAIRS.
+    """
+    if limit is not None and limit > 200:
+        return fetch_usdt_pairs_from_binance(limit=limit)
+    base = TOP_USDT_PAIRS
+    return base[:limit] if limit else base
 
 
 def fetch_current_prices(symbols: List[str]) -> Dict[str, float]:

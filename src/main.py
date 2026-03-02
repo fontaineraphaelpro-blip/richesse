@@ -171,7 +171,7 @@ KELLY_FRACTION = 0.5              # Utiliser 0.5 × Kelly (réduit variance et d
 STRONG_SETUP_SCORE = 70           # Score >= 70 → bonus taille x1.2
 STRONG_SETUP_SIZE_MULT = 1.2
 REQUIRE_MULTITF_ALIGNED = True    # Exiger 15m ET 1h alignés (LONG=BULLISH, SHORT=BEARISH)
-SCAN_TOP_N_LIQUID = 200           # Scanner les 200 paires USDT les plus liquides (était 80)
+SCAN_TOP_N_LIQUID = 400           # Scanner les 400 paires USDT les plus liquides (fetch dynamique Binance si > 200)
 BEST_HOURS_UTC = [14, 15, 16, 17, 18, 19, 20]  # Heures favorables (Europe + US)
 BEST_HOURS_SIZE_MULT = 1.2        # Taille x1.2 pendant ces heures
 MAX_LONG_POSITIONS = 2            # Max 2 positions LONG en même temps
@@ -606,8 +606,8 @@ def run_scanner():
             add_bot_log("Weekend — volumes faibles, pas de trading.", 'INFO')
             return []
 
-    # Liste des paires (limité en mode test pour exécution rapide)
-    symbols = list(get_top_pairs())[:SCAN_TOP_N_LIQUID]
+    # Liste des paires (si > 200: fetch dynamique Binance trié par volume 24h)
+    symbols = list(get_top_pairs(limit=SCAN_TOP_N_LIQUID))
     if SCAN_PAIRS_LIMIT:
         symbols = symbols[:SCAN_PAIRS_LIMIT]
     # Toujours inclure les paires des positions ouvertes pour mettre à jour last_prices
