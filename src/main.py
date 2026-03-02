@@ -70,7 +70,7 @@ MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucu
 COOLDOWN_MINUTES = 1           # 1 min — plus de trades pour viser 10€/j
 SPREAD_MAX_PCT   = 0.09       # Spread max 0.09% — plus de paires liquides
 VOLUME_RATIO_MIN = 1.3        # Volume 1.3x moyenne — plus d'opportunités
-MIN_QUOTE_VOLUME_24H_USDT = 100_000  # Volume 24h min en USDT — plus de paires (avant: 1_000_000)
+MIN_QUOTE_VOLUME_24H_USDT = 0  # Aucune limite de liquidité sur volume 24h (scan max de paires)
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
 TREND_15M_MUST_BEARISH = True
