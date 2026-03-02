@@ -70,7 +70,7 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
-SIGNAL_MIN_CONDITIONS = 7  # 7/10 conditions — day trader pro: plus d'opportunités quotidiennes
+SIGNAL_MIN_CONDITIONS = 6  # 6/10 conditions — objectif 10€/j: plus de trades
 
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """

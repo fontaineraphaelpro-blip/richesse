@@ -57,7 +57,7 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 # ─────────────────────────────────────────────────────────
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
-# === CIBLE 30%/mois: levier 10x, sizing agressif, R:R 1.5:1 ===
+# === OBJECTIF ~10€/jour sur 100€ (config agressive — risque élevé, drawdowns possibles) ===
 STOP_LOSS_PCT    = 1.5        # SL 1.5% (SHORT — était 1.2% trop serré)
 TAKE_PROFIT_PCT  = 2.25       # TP 2.25% (R:R 1.5:1 maintenu)
 LONG_STOP_LOSS_PCT   = 1.5      # 1.5% (était 1.2% — trop serré, stop-out fréquents)
@@ -67,7 +67,7 @@ SCAN_INTERVAL_SESSION = 45    # Même fréquence 24/7 (crypto ne dort jamais)
 SCAN_INTERVAL_NIGHT = 45      # Pas de ralentissement nuit — robot chasse en continu
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
-COOLDOWN_MINUTES = 2           # 2 min — robot: pas d'hésitation, réaction rapide
+COOLDOWN_MINUTES = 1           # 1 min — plus de trades pour viser 10€/j
 SPREAD_MAX_PCT   = 0.09       # Spread max 0.09% — plus de paires liquides
 VOLUME_RATIO_MIN = 1.3        # Volume 1.3x moyenne — plus d'opportunités
 MIN_QUOTE_VOLUME_24H_USDT = 1_000_000  # Volume 24h min en USDT — filtre liquidité (fetch dynamique)
@@ -83,26 +83,26 @@ TREND_1H_LONG_ALLOW_NEUTRAL = True
 TREND_4H_ENABLED = True
 TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
-POSITION_PCT_BALANCE   = 0.45   # 45% par position (max profit: positions plus grosses)
+POSITION_PCT_BALANCE   = 0.55   # 55% par position — objectif ~10€/j sur 100€ (risque élevé)
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
 SESSION_BONUS_UTC_END = 22
 SESSION_BONUS_PTS = 3
-RISK_PCT_CAPITAL       = 0.08   # 8% risk par trade (max profit)
-RISK_PCT_SMALL_ACCOUNT = 0.08
+RISK_PCT_CAPITAL       = 0.12   # 12% risk — objectif 10€/j (risque élevé, drawdowns possibles)
+RISK_PCT_SMALL_ACCOUNT = 0.12
 SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 68          # 68+ — day trader pro: plus de trades quotidiens
+MIN_SCORE_TO_OPEN = 65          # 65+ — plus de trades pour viser 10€/j
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
 
 # Risk management: utiliser Kelly pour adapter la taille au win rate (max gains long terme)
 KELLY_RISK_ENABLED = True
-KELLY_RISK_MIN_PCT = 0.03      # Minimum 3% (max profit)
-KELLY_RISK_MAX_PCT = 0.10      # Maximum 10% (max profit)
+KELLY_RISK_MIN_PCT = 0.05      # Minimum 5% — objectif 10€/j
+KELLY_RISK_MAX_PCT = 0.14      # Maximum 14% — positions plus grosses
 
 # Nombre de paires à scanner: None = TOUTES (SCAN_TOP_N_LIQUID). SCAN_PAIRS_LIMIT en env pour limiter (min 200).
 _scan_limit = os.environ.get('SCAN_PAIRS_LIMIT', '').strip()
@@ -171,15 +171,15 @@ ALERT_DRAWDOWN_PCT = 18           # Alerter si drawdown jour >= 18%
 ALERT_CONSECUTIVE_LOSSES = 2      # Alerter après 2 pertes d'affilée
 
 # Rentabilité: Kelly fractionnel, setups forts, multi-TF, heures favorables
-KELLY_FRACTION = 0.5              # Utiliser 0.5 × Kelly (réduit variance et drawdown)
-STRONG_SETUP_SCORE = 75           # Score >= 75 → bonus taille x1.2 PRO
-STRONG_SETUP_SIZE_MULT = 1.2
+KELLY_FRACTION = 0.7              # 0.7 × Kelly — plus agressif pour 10€/j
+STRONG_SETUP_SCORE = 72           # Score >= 72 → bonus taille x1.3
+STRONG_SETUP_SIZE_MULT = 1.3
 REQUIRE_MULTITF_ALIGNED = True    # Exiger 15m ET 1h alignés (LONG=BULLISH, SHORT=BEARISH)
 SCAN_TOP_N_LIQUID = 2000          # Scanner les 2000 paires USDT les plus liquides
 BEST_HOURS_UTC = [14, 15, 16, 17, 18, 19, 20]  # Heures favorables (Europe + US)
 BEST_HOURS_SIZE_MULT = 1.2        # Taille x1.2 pendant ces heures
-MAX_LONG_POSITIONS = 2            # Max 2 positions LONG en même temps
-MAX_SHORT_POSITIONS = 2            # Max 2 positions SHORT en même temps
+MAX_LONG_POSITIONS = 3            # Max 3 LONG — plus d'exposition pour 10€/j
+MAX_SHORT_POSITIONS = 3           # Max 3 SHORT
 ADX_HIGH_FOR_RR = 30              # Si ADX >= 30, viser R:R 1.8:1 (tendance forte)
 MIN_RR_STRONG_TREND = 1.8
 
@@ -2179,7 +2179,7 @@ def _get_scan_interval():
 def run_loop():
     """Boucle infinie qui lance le scanner periodiquement."""
     add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: " + TIMEFRAME, 'INFO')
-    add_bot_log("Robot Pro — chasse continue 24/7 | Score>={} | R:R>={} | Scan 45s | Pas de fatigue/émotion".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD), 'INFO')
+    add_bot_log("Objectif ~10€/j sur 100€ | Score>={} | R:R>={} | Risk 12% | Config agressive".format(MIN_SCORE_TO_OPEN, MIN_RISK_REWARD), 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:
