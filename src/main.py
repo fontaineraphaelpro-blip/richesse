@@ -58,10 +58,10 @@ from trade_journal_ai import get_trade_journal, get_journal_stats
 TIMEFRAME        = '15m'
 CANDLE_LIMIT     = 200
 # === CIBLE 30%/mois: levier 10x, sizing agressif, R:R 1.5:1 ===
-STOP_LOSS_PCT    = 1.2        # SL controle
-TAKE_PROFIT_PCT  = 1.8        # TP 1.5x SL (R:R 1.5:1)
-LONG_STOP_LOSS_PCT   = 1.2
-LONG_TAKE_PROFIT_PCT = 1.8
+STOP_LOSS_PCT    = 1.5        # SL 1.5% (SHORT — était 1.2% trop serré)
+TAKE_PROFIT_PCT  = 2.25       # TP 2.25% (R:R 1.5:1 maintenu)
+LONG_STOP_LOSS_PCT   = 1.5      # 1.5% (était 1.2% — trop serré, stop-out fréquents)
+LONG_TAKE_PROFIT_PCT = 2.25     # R:R 1.5:1 maintenu
 SCAN_INTERVAL    = 300
 SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
@@ -93,7 +93,7 @@ SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 58          # 58+ (max profit: plus d'opportunités, était 62)
+MIN_SCORE_TO_OPEN = 65          # 65+ (qualité > quantité — 58 laissait passer trop de mauvais setups)
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -134,7 +134,7 @@ SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
 MIN_RISK_REWARD = 1.5        # R:R 1.5:1 (max profit: gain plus gros par trade)
-USE_STRICT_SIGNAL_GATE = False  # Désactivé pour max profit: plus d'opportunités (score seul)
+USE_STRICT_SIGNAL_GATE = True   # Activé: exiger 7/10 conditions (signal_long_buy_dip / signal_short_big_drop) — moins de trades mais meilleure qualité
 
 # Protection séries de pertes (super préparé contre mauvaises séries)
 LOSS_REDUCTION_AFTER_1 = 0.6   # Taille x0.6 après 1 perte consécutive
@@ -195,7 +195,7 @@ ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < se
 ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
-MIN_SCORE_RANGING = 65            # RANGING: exiger score plus élevé
+MIN_SCORE_RANGING = 68            # RANGING: exiger score plus élevé (setups plus difficiles)
 MIN_SCORE_VOLATILE = 70          # VOLATILE: encore plus strict (souvent pas d'ouverture)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85

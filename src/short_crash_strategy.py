@@ -16,14 +16,15 @@ RSI_SHORT_MIN = 35         # Pas de short sous 35 (trop oversold)
 RSI_SHORT_MAX = 50         # Short zone: 35-50
 LONG_PRICE_ABOVE_EMA_PCT = 0.05   # Prix juste au-dessus EMA21 (entry optimale)
 
-# SL/TP mieux positionnés: SL plus large pour éviter stop-out sur le bruit
-ATR_SL_MULTIPLIER = 1.0    # SL = ATR * 1.0
-ATR_TP_MULTIPLIER = 1.2    # TP = ATR * 1.2 (R:R 1.2:1 minimum)
+# SL/TP mieux positionnés: SL plus large pour éviter stop-out sur le bruit crypto
+# Crypto 15m: ATR typique 1.5-3% — SL 1.0-2.0% évite les faux stop-out
+ATR_SL_MULTIPLIER = 1.2    # SL = ATR * 1.2 (plus de marge)
+ATR_TP_MULTIPLIER = 1.5    # TP = ATR * 1.5
 ATR_TP_RR_RATIO = None
-ATR_SL_MIN_PCT = 0.7       # Éviter SL trop serré (0.4% = trop de stop-out)
-ATR_SL_MAX_PCT = 1.5
-ATR_TP_MIN_PCT = 0.6
-ATR_TP_MAX_PCT = 2.0
+ATR_SL_MIN_PCT = 1.0       # Min 1.0% (était 0.7% = trop serré, stop-out fréquents)
+ATR_SL_MAX_PCT = 2.0       # Max 2.0% (crypto volatile)
+ATR_TP_MIN_PCT = 1.0
+ATR_TP_MAX_PCT = 3.0
 MIN_RR_RATIO = 1.5         # R:R 1.5:1 (max profit: gain plus gros par trade)
 
 
