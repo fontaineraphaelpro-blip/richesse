@@ -70,7 +70,7 @@ def compute_sl_tp_from_chart(price, indicators, direction, sl_atr_mult=None, rr_
 
 # ─── LONG (continuation haussière, pas d'achat de rebond) ────────────────────
 
-SIGNAL_MIN_CONDITIONS = 8  # 8/10 conditions = PRO — qualité maximale, zéro faille
+SIGNAL_MIN_CONDITIONS = 7  # 7/10 conditions — day trader pro: plus d'opportunités quotidiennes
 
 def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     """
@@ -94,8 +94,7 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
     regime = indicators.get('market_regime')
     if regime == 'VOLATILE':
         return False  # trop imprévisible
-    if regime == 'RANGING':
-        return False  # PRO: pas de LONG en ranging (trop de faux signaux)
+    # RANGING autorisé — day trader pro trade aussi en range (breakouts, mean reversion)
 
     # 1. Momentum haussier
     if indicators.get('price_momentum') == 'BULLISH':
@@ -345,8 +344,7 @@ def signal_short_big_drop(df, indicators, volume_ratio_min=1.0):
     regime = indicators.get('market_regime')
     if regime == 'VOLATILE':
         return False
-    if regime == 'RANGING':
-        return False  # PRO: pas de SHORT en ranging
+    # RANGING autorisé — day trader pro trade aussi en range
 
     # 1. Momentum baissier
     if indicators.get('price_momentum') == 'BEARISH':

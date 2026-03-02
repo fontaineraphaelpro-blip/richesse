@@ -67,9 +67,9 @@ SCAN_INTERVAL_SESSION = 90    # 1.5 min en session (plus d'opportunites)
 SCAN_INTERVAL_NIGHT = 900
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
-COOLDOWN_MINUTES = 5           # 5 min entre trades (max profit: plus d'entrées)
-SPREAD_MAX_PCT   = 0.08       # Spread max 0.08% — PRO: paires très liquides uniquement
-VOLUME_RATIO_MIN = 1.5        # Volume 1.5x moyenne — PRO: confirmation forte
+COOLDOWN_MINUTES = 3           # 3 min entre trades — day trader pro: plus d'entrées quotidiennes
+SPREAD_MAX_PCT   = 0.09       # Spread max 0.09% — plus de paires liquides
+VOLUME_RATIO_MIN = 1.3        # Volume 1.3x moyenne — plus d'opportunités
 MIN_QUOTE_VOLUME_24H_USDT = 1_000_000  # Volume 24h min en USDT — filtre liquidité (fetch dynamique)
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
@@ -94,7 +94,7 @@ SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 70          # 70+ PRO: signaux de qualité maximale, zéro faille
+MIN_SCORE_TO_OPEN = 68          # 68+ — day trader pro: plus de trades quotidiens
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -135,7 +135,7 @@ SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
 MIN_RISK_REWARD = 1.8        # R:R 1.8:1 PRO: gain > risque systématiquement
-USE_STRICT_SIGNAL_GATE = True   # Activé: exiger 7/10 conditions (signal_long_buy_dip / signal_short_big_drop) — moins de trades mais meilleure qualité
+USE_STRICT_SIGNAL_GATE = True   # Exiger 7/10 conditions — day trader pro: qualité + opportunités quotidiennes
 
 # Protection séries de pertes (super préparé contre mauvaises séries)
 LOSS_REDUCTION_AFTER_1 = 0.6   # Taille x0.6 après 1 perte consécutive
@@ -146,8 +146,9 @@ MAX_POSITIONS_AFTER_2_LOSSES = 1 # Après 2 pertes consécutives: max 1 position
 PAUSE_AFTER_2_LOSSES_MINUTES = 30  # Après 2 pertes d'affilée: aucune ouverture pendant 30 min
 DAILY_LOSS_LIMIT_NO_NEW_PCT = 10  # Si perte jour >= 10%: plus de nouvelle position jusqu'à demain
 # Régime de marché: moins/pas de trades en conditions difficiles
-NO_NEW_TRADES_IN_VOLATILE = True   # Aucune nouvelle position si BTC en VOLATILE
-REGIME_RANGING_SIZE_MULT = 0.5     # Taille x0.5 en RANGING (moins d'exposition)
+NO_NEW_TRADES_IN_VOLATILE = False  # Day trader pro: trade aussi en VOLATILE (taille réduite)
+REGIME_VOLATILE_SIZE_MULT = 0.4    # Taille x0.4 en VOLATILE
+REGIME_RANGING_SIZE_MULT = 0.6     # Taille x0.6 en RANGING (plus d'exposition qu'avant)
 
 # Vérification à chaque scan: fermer si le signal s'est inversé (direction opposée plus forte)
 REVERSAL_SCORE_THRESHOLD = 15      # Fermer position si score direction opposée > notre score + 15
@@ -172,7 +173,7 @@ KELLY_FRACTION = 0.5              # Utiliser 0.5 × Kelly (réduit variance et d
 STRONG_SETUP_SCORE = 75           # Score >= 75 → bonus taille x1.2 PRO
 STRONG_SETUP_SIZE_MULT = 1.2
 REQUIRE_MULTITF_ALIGNED = True    # Exiger 15m ET 1h alignés (LONG=BULLISH, SHORT=BEARISH)
-SCAN_TOP_N_LIQUID = 400           # Scanner les 400 paires USDT les plus liquides (fetch dynamique Binance si > 200)
+SCAN_TOP_N_LIQUID = 2000          # Scanner les 2000 paires USDT les plus liquides
 BEST_HOURS_UTC = [14, 15, 16, 17, 18, 19, 20]  # Heures favorables (Europe + US)
 BEST_HOURS_SIZE_MULT = 1.2        # Taille x1.2 pendant ces heures
 MAX_LONG_POSITIONS = 2            # Max 2 positions LONG en même temps
@@ -196,7 +197,7 @@ ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < se
 ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
-MIN_SCORE_RANGING = 75            # RANGING: 75+ (gate strict bloque souvent = peu de trades)
+MIN_SCORE_RANGING = 70            # RANGING: 70+ — day trader pro: plus de trades en range
 MIN_SCORE_VOLATILE = 78           # VOLATILE: 78+ PRO (quasi aucune ouverture = sécurité)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
@@ -1133,22 +1134,22 @@ def run_scanner():
         except Exception:
             pass
 
-    # En VOLATILE: pas de nouvelle position (marché trop imprévisible)
+    # Day trader pro: trade aussi en VOLATILE (taille réduite)
     if NO_NEW_TRADES_IN_VOLATILE and btc_regime == 'VOLATILE':
         add_bot_log("Marché VOLATILE — aucune nouvelle position ce scan.", 'INFO')
         shared_data['last_block_reason'] = shared_data.get('last_block_reason') or "Marché VOLATILE"
 
-    regime_size_mult = REGIME_RANGING_SIZE_MULT if btc_regime == 'RANGING' else 1.0
+    regime_size_mult = REGIME_VOLATILE_SIZE_MULT if btc_regime == 'VOLATILE' else (REGIME_RANGING_SIZE_MULT if btc_regime == 'RANGING' else 1.0)
     if btc_regime == 'RANGING':
         add_bot_log("Marché RANGING — taille des positions réduite (x{:.1f}).".format(regime_size_mult), 'INFO')
+    elif btc_regime == 'VOLATILE':
+        add_bot_log("Marché VOLATILE — taille des positions réduite (x{:.1f}).".format(regime_size_mult), 'INFO')
 
     effective_max_positions = MAX_POSITIONS if consecutive_losses == 0 else (MAX_POSITIONS_AFTER_1_LOSS if consecutive_losses == 1 else MAX_POSITIONS_AFTER_2_LOSSES)
     if consecutive_losses > 0:
         add_bot_log("Max positions ce scan: {} (après {} perte(s) conséc.).".format(effective_max_positions, consecutive_losses), 'INFO')
 
     for opp in opportunities_list:
-        if NO_NEW_TRADES_IN_VOLATILE and btc_regime == 'VOLATILE':
-            break
         if len(current_open) >= effective_max_positions:
             break
         deployed_capital = sum(p.get('amount_usdt', 0) for p in current_open.values())
@@ -1185,13 +1186,14 @@ def run_scanner():
         price = opp['price']
         stop_loss = opp['stop_loss']
         take_profit = opp['take_profit']
+        order_flow_against_mult = 1.0
         try:
             of = fetch_order_flow(symbol)
             pressure = of.get('pressure', 'NEUTRAL')
             if is_long and pressure == 'SELL':
-                continue  # PRO: order flow contre nous = skip (pas de -8, exclusion totale)
+                order_flow_against_mult = 0.6  # Day trader pro: pénalité taille au lieu de skip
             elif not is_long and pressure == 'BUY':
-                continue  # PRO: order flow contre nous = skip
+                order_flow_against_mult = 0.6
         except Exception:
             pass
         if opp['score'] < min_score:
@@ -1208,9 +1210,10 @@ def run_scanner():
         avg_slip = _get_avg_slippage(symbol) or 0
         slip_factor = max(0.7, 1.0 - avg_slip * 2) if avg_slip > 0.1 else 1.0
         size_mult = (position_sizer.calculate_atr_adjustment(atr_pct) or 1.0) * (position_sizer.calculate_score_adjustment(opp['score'], 50) or 1.0) * (position_sizer.calculate_drawdown_adjustment(total_capital) or 1.0) * multi_pos_factor * corr_factor * slip_factor
-        # Protection: réduction après pertes consécutives + régime RANGING
+        # Protection: réduction après pertes consécutives + régime + order flow
         size_mult *= loss_reduction
         size_mult *= regime_size_mult
+        size_mult *= order_flow_against_mult
         if last_was_loss:
             size_mult *= LAST_LOSS_SIZE_MULT
         # Spread dynamique: si spread actuel > 1.5x médiane récente → réduire taille
