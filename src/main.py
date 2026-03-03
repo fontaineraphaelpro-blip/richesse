@@ -199,8 +199,8 @@ ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < se
 ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
-MIN_SCORE_RANGING = 63            # RANGING: 63+ — plus de trades
-MIN_SCORE_VOLATILE = 70           # VOLATILE: 70+ (assoupli pour avoir des trades)
+MIN_SCORE_RANGING = 66            # RANGING: 66+ — plus de trades (70 = trop rare)
+MIN_SCORE_VOLATILE = 75           # VOLATILE: 75+ (78 = quasi jamais)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
 DRAWDOWN_7D_SIZE_MULT_TIER1 = 0.85

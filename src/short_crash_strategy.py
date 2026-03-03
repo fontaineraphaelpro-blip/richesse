@@ -90,7 +90,7 @@ def signal_long_buy_dip(df, indicators, volume_ratio_min=1.0):
         return False  # surachat = trop tard
     adx = indicators.get('adx')
     if adx is not None and adx < 20:
-        return False  # tendance trop faible (20 = un peu plus d'opportunités)
+        return False  # tendance trop faible (20 = plus d'opportunités)
     regime = indicators.get('market_regime')
     if regime == 'VOLATILE':
         return False  # trop imprévisible
