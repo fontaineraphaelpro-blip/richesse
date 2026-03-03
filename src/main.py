@@ -94,7 +94,7 @@ SMALL_ACCOUNT_THRESHOLD = 200
 MIN_POSITION_USDT      = 10
 MAX_DAILY_DRAWDOWN_PCT = 22.0   # 22% (max profit: laisser plus de marge avant pause)
 
-MIN_SCORE_TO_OPEN = 65          # 65+ — plus de trades pour viser 10€/j
+MIN_SCORE_TO_OPEN = 58          # 58+ — assoupli pour avoir des trades (était 65 = trop strict)
 SENTIMENT_FILTER_ENABLED = False  # DÉSACTIVÉ — ne plus bloquer par Fear/Greed
 FEAR_GREED_MIN_TO_SHORT = 22
 FEAR_GREED_MAX_TO_LONG  = 78
@@ -137,7 +137,7 @@ SCORE_BEARISH_MARKET = 82    # Bear: plus strict
 SCORE_NEUTRAL_MARKET = 78    # Neutre: equilibre
 
 MIN_RISK_REWARD = 1.8        # R:R 1.8:1 PRO: gain > risque systématiquement
-USE_STRICT_SIGNAL_GATE = True   # Exiger 7/10 conditions — day trader pro: qualité + opportunités quotidiennes
+USE_STRICT_SIGNAL_GATE = False  # Désactivé pour plus d'opportunités (était True = quasi aucun trade)
 
 # Protection séries de pertes (super préparé contre mauvaises séries)
 LOSS_REDUCTION_AFTER_1 = 0.6   # Taille x0.6 après 1 perte consécutive
@@ -199,8 +199,8 @@ ALERT_WR_LAST_N = 20              # Alerter si WR sur les N derniers trades < se
 ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
-MIN_SCORE_RANGING = 70            # RANGING: 70+ — day trader pro: plus de trades en range
-MIN_SCORE_VOLATILE = 78           # VOLATILE: 78+ PRO (quasi aucune ouverture = sécurité)
+MIN_SCORE_RANGING = 63            # RANGING: 63+ — plus de trades
+MIN_SCORE_VOLATILE = 70           # VOLATILE: 70+ (assoupli pour avoir des trades)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
 DRAWDOWN_7D_SIZE_MULT_TIER1 = 0.85
@@ -222,7 +222,7 @@ PAUSE_ON_EVENTS = True
 
 # Configuration Machine Learning
 ML_ENABLED = True
-ML_MIN_PROBABILITY = 65           # ML 65%+ PRO (était 60)
+ML_MIN_PROBABILITY = 52           # ML 52%+ (assoupli pour ne pas bloquer tout, était 65)
 ML_SCORE_ADJUST = True
 
 # Configuration On-Chain
@@ -624,7 +624,8 @@ def run_scanner():
                 symbols.append(sym)
     except Exception:
         pass
-    add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT — risk mgt optimal ===".format(scan_num, len(symbols)), 'INFO')
+    effective_min_scan = get_effective_min_score(btc_regime) + _adaptive_state.get('min_score_adjust', 0)
+    add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT — score>={:.0f} (régime {}) ===".format(scan_num, len(symbols), effective_min_scan, btc_regime), 'INFO')
 
     # —— 1. Données marché (15m) ——
     data, real_prices = fetch_multiple_pairs(symbols, interval=TIMEFRAME, limit=CANDLE_LIMIT)
@@ -865,8 +866,10 @@ def run_scanner():
         if final_long >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
                 pass  # 15m et 1h non alignés haussiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BULLISH', 'BULL'):
-                pass  # PRO: 4h DOIT être haussière (pas NEUTRAL = faux signaux)
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED:
+                allowed_4h_long = ('BULLISH', 'BULL', 'NEUTRAL') if TREND_4H_LONG_BULLISH_OR_NEUTRAL else ('BULLISH', 'BULL')
+                if momentum_4h not in allowed_4h_long:
+                    pass  # 4h non alignée (LONG: BULL ou NEUTRAL si config)
             elif (indicators.get('bb_percent') or 0.5) >= BB_LONG_MAX:
                 pass  # Trop proche résistance (Bollinger haute)
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
@@ -951,8 +954,10 @@ def run_scanner():
         if final_short >= effective_min:
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
                 pass  # 15m et 1h non alignés baissiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in ('BEARISH', 'BEAR'):
-                pass  # PRO: 4h DOIT être baissière (pas NEUTRAL)
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED:
+                allowed_4h_short = ('BEARISH', 'BEAR', 'NEUTRAL') if TREND_4H_SHORT_BEARISH_OR_NEUTRAL else ('BEARISH', 'BEAR')
+                if momentum_4h not in allowed_4h_short:
+                    pass  # 4h non alignée (SHORT: BEAR ou NEUTRAL si config)
             elif (indicators.get('bb_percent') or 0.5) <= BB_SHORT_MIN:
                 pass  # Trop proche support (Bollinger basse)
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
@@ -1283,7 +1288,7 @@ def run_scanner():
 
     if not opportunities_list:
         shared_data['last_block_reason'] = "Aucune opportunite detectee"
-        add_bot_log("Aucune opportunité détectée sur ce scan.", 'INFO')
+        add_bot_log("Aucune opportunité ce scan. Critères: score>={:.0f}, 15m+1h alignés, 4h OK, gate 6/10, volume croissant, R:R>={}.".format(effective_min_scan, MIN_RISK_REWARD), 'INFO')
     elif opened_count == 0 and best is None and shared_data.get('last_block_reason') != "Marché VOLATILE":
         shared_data['last_block_reason'] = "Aucune opp avec R:R>={:.1f} et score>={}".format(MIN_RISK_REWARD, MIN_SCORE_TO_OPEN)
         add_bot_log("{} opps mais aucune avec R:R>={:.1f} ET score>={} — pas d'ouverture.".format(
