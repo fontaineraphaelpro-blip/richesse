@@ -624,8 +624,7 @@ def run_scanner():
                 symbols.append(sym)
     except Exception:
         pass
-    effective_min_scan = get_effective_min_score(btc_regime) + _adaptive_state.get('min_score_adjust', 0)
-    add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT — score>={:.0f} (régime {}) ===".format(scan_num, len(symbols), effective_min_scan, btc_regime), 'INFO')
+    add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT ===".format(scan_num, len(symbols)), 'INFO')
 
     # —— 1. Données marché (15m) ——
     data, real_prices = fetch_multiple_pairs(symbols, interval=TIMEFRAME, limit=CANDLE_LIMIT)
@@ -649,6 +648,9 @@ def run_scanner():
             shared_data['btc_momentum_1h'] = None
     else:
         shared_data['btc_momentum_1h'] = None
+
+    effective_min_scan = get_effective_min_score(btc_regime) + _adaptive_state.get('min_score_adjust', 0)
+    add_bot_log("Score min ce scan: {:.0f} (régime {})".format(effective_min_scan, btc_regime), 'INFO')
 
     # —— 2. État du trader + vérif SL/TP ——
     from trader import PaperTrader
