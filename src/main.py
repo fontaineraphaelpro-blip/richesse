@@ -771,6 +771,28 @@ def run_scanner():
     n_pairs = len(data)
     n_volume_ok = 0
     n_spread_ok = 0
+    n_volatility_ok = 0
+    n_cooldown_skip = 0
+    n_long_fail_score = 0
+    n_long_fail_multitf = 0
+    n_long_fail_4h = 0
+    n_long_fail_bb = 0
+    n_long_fail_obv = 0
+    n_long_fail_ema = 0
+    n_long_fail_candle = 0
+    n_long_fail_gate = 0
+    n_long_fail_rr = 0
+    n_long_fail_ml = 0
+    n_short_fail_score = 0
+    n_short_fail_multitf = 0
+    n_short_fail_4h = 0
+    n_short_fail_bb = 0
+    n_short_fail_obv = 0
+    n_short_fail_ema = 0
+    n_short_fail_candle = 0
+    n_short_fail_gate = 0
+    n_short_fail_rr = 0
+    n_short_fail_ml = 0
     n_short_signal = 0
     n_long_signal = 0
     n_no_indicators = 0
@@ -810,6 +832,7 @@ def run_scanner():
             atr_pct = 0
         if atr_pct > VOLATILITY_MAX:
             continue
+        n_volatility_ok += 1
 
         # Recuperer tendances 5m, 15m, 1h et optionnellement 4h (multi-TF day trader pro)
         momentum_5m = None
@@ -839,6 +862,7 @@ def run_scanner():
 
         in_cooldown, _ = trader.is_in_cooldown(symbol)
         if in_cooldown:
+            n_cooldown_skip += 1
             continue
 
         # Score adaptatif: combine RSI, MACD, ADX, Bollinger, Ichimoku, Stoch, VWAP, OBV, MFI, regime...
@@ -866,26 +890,25 @@ def run_scanner():
 
         # LONG si score suffisant (+ gate strict optionnel pour mieux lire les signaux)
         if final_long >= effective_min:
+            allowed_4h_long = ('BULLISH', 'BULL', 'NEUTRAL') if TREND_4H_LONG_BULLISH_OR_NEUTRAL else ('BULLISH', 'BULL')
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
-                pass  # 15m et 1h non alignés haussiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED:
-                allowed_4h_long = ('BULLISH', 'BULL', 'NEUTRAL') if TREND_4H_LONG_BULLISH_OR_NEUTRAL else ('BULLISH', 'BULL')
-                if momentum_4h not in allowed_4h_long:
-                    pass  # 4h non alignée (LONG: BULL ou NEUTRAL si config)
+                n_long_fail_multitf += 1
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in allowed_4h_long:
+                n_long_fail_4h += 1
             elif (indicators.get('bb_percent') or 0.5) >= BB_LONG_MAX:
-                pass  # Trop proche résistance (Bollinger haute)
+                n_long_fail_bb += 1
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
-                pass  # Volume pas en hausse
+                n_long_fail_obv += 1
             elif (indicators.get('ema9') and indicators.get('ema21') and indicators['ema21'] > 0 and
                   abs(indicators['ema9'] - indicators['ema21']) / indicators['ema21'] * 100 < 0.3):
-                pass  # PRO: EMA9/21 trop proches = marché chop, skip
+                n_long_fail_ema += 1
             else:
                 body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
                 atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
                 if atr_val and atr_val > 0 and body >= BIG_CANDLE_BODY_ATR_RATIO * atr_val:
-                    pass  # Gros chandelier → attendre
+                    n_long_fail_candle += 1
                 elif USE_STRICT_SIGNAL_GATE and not signal_long_buy_dip(df, indicators):
-                    pass
+                    n_long_fail_gate += 1
                 else:
                     n_long_signal += 1
                     rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
@@ -901,7 +924,7 @@ def run_scanner():
                         sl_pct_eff = LONG_STOP_LOSS_PCT
                     rr = abs(take_profit - price) / abs(price - stop_loss) if (stop_loss != price) else 1.5
                     if rr < MIN_RISK_REWARD:
-                        pass  # R:R insuffisant, ne pas ajouter cette opp
+                        n_long_fail_rr += 1
                     else:
                         why_parts = []
                         rsi = indicators.get('rsi14')
@@ -932,6 +955,7 @@ def run_scanner():
                                 if prob < ML_MIN_PROBABILITY:
                                     add_bot_log_struct(scan_num, symbol, final_long, 'SKIP_LONG', 'ML prob {:.0f}%'.format(prob))
                                     do_append_long = False
+                                    n_long_fail_ml += 1
                                 else:
                                     bonus = (prob - 50) * 0.2
                                     bonus = max(-ML_SCORE_BONUS_MAX, min(ML_SCORE_BONUS_MAX, bonus))
@@ -951,29 +975,30 @@ def run_scanner():
                                 'is_signal': True, 'regime': regime, 'indicators': indicators,
                                 'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
                             })
+        else:
+            n_long_fail_score += 1
 
         # SHORT si score suffisant (+ gate strict optionnel)
         if final_short >= effective_min:
+            allowed_4h_short = ('BEARISH', 'BEAR', 'NEUTRAL') if TREND_4H_SHORT_BEARISH_OR_NEUTRAL else ('BEARISH', 'BEAR')
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
-                pass  # 15m et 1h non alignés baissiers
-            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED:
-                allowed_4h_short = ('BEARISH', 'BEAR', 'NEUTRAL') if TREND_4H_SHORT_BEARISH_OR_NEUTRAL else ('BEARISH', 'BEAR')
-                if momentum_4h not in allowed_4h_short:
-                    pass  # 4h non alignée (SHORT: BEAR ou NEUTRAL si config)
+                n_short_fail_multitf += 1
+            elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in allowed_4h_short:
+                n_short_fail_4h += 1
             elif (indicators.get('bb_percent') or 0.5) <= BB_SHORT_MIN:
-                pass  # Trop proche support (Bollinger basse)
+                n_short_fail_bb += 1
             elif REQUIRE_VOLUME_RISING and (indicators.get('obv_slope') or 0) <= 0:
-                pass  # Volume pas en hausse
+                n_short_fail_obv += 1
             elif (indicators.get('ema9') and indicators.get('ema21') and indicators['ema21'] > 0 and
                   abs(indicators['ema9'] - indicators['ema21']) / indicators['ema21'] * 100 < 0.3):
-                pass  # PRO: EMA9/21 trop proches = marché chop, skip
+                n_short_fail_ema += 1
             else:
                 body = abs(float(df['close'].iloc[-1]) - float(df['open'].iloc[-1]))
                 atr_val = indicators.get('atr') or (price * (atr_pct or 2) / 100)
                 if atr_val and atr_val > 0 and body >= BIG_CANDLE_BODY_ATR_RATIO * atr_val:
-                    pass  # Gros chandelier → attendre
+                    n_short_fail_candle += 1
                 elif USE_STRICT_SIGNAL_GATE and not signal_short_big_drop(df, indicators):
-                    pass
+                    n_short_fail_gate += 1
                 else:
                     n_short_signal += 1
                     rr_override = MIN_RR_STRONG_TREND if (indicators.get('adx') or 0) >= ADX_HIGH_FOR_RR else None
@@ -989,7 +1014,7 @@ def run_scanner():
                         sl_pct_eff = STOP_LOSS_PCT
                     rr = abs(take_profit - price) / abs(stop_loss - price) if (stop_loss != price) else 1.5
                     if rr < MIN_RISK_REWARD:
-                        pass
+                        n_short_fail_rr += 1
                     else:
                         why_parts = []
                         rsi = indicators.get('rsi14')
@@ -1020,6 +1045,7 @@ def run_scanner():
                                 if prob < ML_MIN_PROBABILITY:
                                     add_bot_log_struct(scan_num, symbol, final_short, 'SKIP_SHORT', 'ML prob {:.0f}%'.format(prob))
                                     do_append_short = False
+                                    n_short_fail_ml += 1
                                 else:
                                     bonus = (prob - 50) * 0.2
                                     bonus = max(-ML_SCORE_BONUS_MAX, min(ML_SCORE_BONUS_MAX, bonus))
@@ -1039,6 +1065,8 @@ def run_scanner():
                                 'is_signal': True, 'regime': regime, 'indicators': indicators,
                                 'why': ', '.join(why_parts) if why_parts else regime or 'confluence',
                             })
+        else:
+            n_short_fail_score += 1
       except Exception as pair_err:
         add_bot_log("Erreur paire {}: {}".format(symbol, pair_err), 'ERROR')
         continue
@@ -1125,6 +1153,15 @@ def run_scanner():
         add_bot_log("{} paire(s) sans indicateurs (donnees insuffisantes ou < 200 bougies).".format(n_no_indicators), 'INFO')
     add_bot_log("Scan #{}: {} paires | volume OK: {} | spread OK: {} | LONG: {} | SHORT: {} -> {} opportunite(s).".format(
         scan_num, n_pairs, n_volume_ok, n_spread_ok, n_long_signal, n_short_signal, len(opportunities_list)), 'INFO')
+    # Détail des rejets à partir de spread (pourquoi les paires ne sont pas tradées)
+    add_bot_log("Detail filtres (apres spread): volatilite OK: {} | cooldown skip: {} | "
+                "LONG: score_fail {} | multitf {} | 4h {} | bb {} | obv {} | ema {} | candle {} | gate {} | rr {} | ml {} | "
+                "SHORT: score_fail {} | multitf {} | 4h {} | bb {} | obv {} | ema {} | candle {} | gate {} | rr {} | ml {}.".format(
+        n_volatility_ok, n_cooldown_skip,
+        n_long_fail_score, n_long_fail_multitf, n_long_fail_4h, n_long_fail_bb, n_long_fail_obv, n_long_fail_ema,
+        n_long_fail_candle, n_long_fail_gate, n_long_fail_rr, n_long_fail_ml,
+        n_short_fail_score, n_short_fail_multitf, n_short_fail_4h, n_short_fail_bb, n_short_fail_obv, n_short_fail_ema,
+        n_short_fail_candle, n_short_fail_gate, n_short_fail_rr, n_short_fail_ml), 'INFO')
 
     # —— 4. Ouvrir plusieurs opportunités (pas qu'une seule par scan) ——
     current_open = trader.get_open_positions()
