@@ -68,8 +68,8 @@ SCAN_INTERVAL_NIGHT = 45      # Pas de ralentissement nuit — robot chasse en c
 MAX_POSITIONS    = 999         # Pas de limite (était 4)
 MAX_CONSECUTIVE_LOSSES = 3      # 3 pertes consécutives = stop total (plus aucune ouverture)
 COOLDOWN_MINUTES = 1           # 1 min — plus de trades pour viser 10€/j
-SPREAD_MAX_PCT   = 0.09       # Spread max 0.09% — plus de paires liquides
-VOLUME_RATIO_MIN = 1.3        # Volume 1.3x moyenne — plus d'opportunités
+SPREAD_MAX_PCT   = 0.12       # 0.12% — assoupli (0.09 = seulement 2–3 paires passaient)
+VOLUME_RATIO_MIN = 1.0        # 1.0x = au moins la moyenne (1.3 = 4 paires seulement)
 MIN_QUOTE_VOLUME_24H_USDT = 0  # Aucune limite de liquidité sur volume 24h (scan max de paires)
 VOLATILITY_MAX   = 5.0
 TOP_OPPORTUNITIES_DISPLAY = 10
@@ -188,7 +188,7 @@ REQUIRE_4H_ALIGNED = True         # 4h doit être alignée ou neutre (LONG: BULL
 BB_LONG_MAX = 0.85                # LONG: ne pas entrer trop proche résistance (bb_percent < 0.85)
 BB_SHORT_MIN = 0.15               # SHORT: ne pas entrer trop proche support (bb_percent > 0.15)
 BIG_CANDLE_BODY_ATR_RATIO = 1.4   # Dernière bougie body > 1.4× ATR → skip PRO: éviter wicks et FOMO
-REQUIRE_VOLUME_RISING = True      # obv_slope > 0 (volume en hausse)
+REQUIRE_VOLUME_RISING = False     # Désactivé — trop strict, 0 opp (obv_slope > 0)
 # Sorties & risque
 PARTIAL_TP_EARLY_PCT = 0.40        # Prendre 40% à un 1er palier (R:R 0.8)
 PARTIAL_TP_EARLY_RR = 0.8
