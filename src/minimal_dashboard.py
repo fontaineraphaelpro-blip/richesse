@@ -76,7 +76,7 @@ button:active { opacity: 0.8; }
       <td><strong>{{ p.symbol }}</strong></td>
       <td>{{ p.direction }}</td>
       <td>{{ "%.2f"|format(p.amount|default(0)) }} USDT</td>
-      <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(p.pnl_value) }} USDT ({{ "%+.2f"|format(p.pnl_percent) }}%)</span></td>
+      <td class="{% if p.pnl_percent >= 0 %}green{% else %}red{% endif %}"><span class="val">{{ "%+.2f"|format(p.pnl_value) }} USDT ({{ "%+.2f"|format(p.pnl_percent) }}%)</span>{% if p.get('price_stale') %} <span style="color:#f80;font-size:0.8rem">(Prix en attente)</span>{% endif %}</td>
       <td><button onclick="closePos('{{ p.symbol }}')">Fermer</button></td>
     </tr>
     {% endfor %}

@@ -281,6 +281,7 @@ shared_data = {
     'opportunities': [],        # Top opportunités du dernier scan
     'all_scanned': [],          # Toutes les paires analysées
     'last_prices': {},          # Prix actuels
+    'last_prices_updated_at': 0,  # timestamp (time.time()) du dernier update — éviter PnL stale
     'last_indicators': {},      # Derniers indicateurs par symbole (pour API)
     'is_scanning': False,
     'last_update': 'Jamais',
@@ -626,12 +627,36 @@ def run_scanner():
         pass
     add_bot_log("=== SCAN #{} ({} paires) LONG + SHORT ===".format(scan_num, len(symbols)), 'INFO')
 
+    # —— 0. Rafraîchir tout de suite les prix des positions ouvertes (PnL à jour à chaque scan) ——
+    try:
+        _trader = PaperTrader()
+        _open = _trader.get_open_positions()
+        if _open:
+            _sym_list = list(_open.keys())
+            _fresh = fetch_current_prices(_sym_list)
+            if _fresh:
+                shared_data.setdefault('last_prices', {})
+                shared_data['last_prices'].update(_fresh)
+                shared_data['last_prices_updated_at'] = time.time()
+            else:
+                for _s in _sym_list:
+                    try:
+                        _one = fetch_current_prices([_s])
+                        if _one.get(_s):
+                            shared_data.setdefault('last_prices', {})[_s] = _one[_s]
+                            shared_data['last_prices_updated_at'] = time.time()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
     # —— 1. Données marché (15m) ——
     data, real_prices = fetch_multiple_pairs(symbols, interval=TIMEFRAME, limit=CANDLE_LIMIT)
     if not data:
         add_bot_log("Aucune donnée reçue de Binance", 'ERROR')
         return []
     shared_data['last_prices'] = real_prices
+    shared_data['last_prices_updated_at'] = time.time()
     shared_data['last_indicators'] = {}
 
     # —— 1b. BTC contexte (info seulement, pas de blocage) ——
@@ -659,11 +684,23 @@ def run_scanner():
     open_pos_for_prices = trader.get_open_positions()
     if open_pos_for_prices:
         try:
-            fresh_pos_prices = fetch_current_prices(list(open_pos_for_prices.keys()))
+            _pos_syms = list(open_pos_for_prices.keys())
+            fresh_pos_prices = fetch_current_prices(_pos_syms)
             if fresh_pos_prices:
                 real_prices.update(fresh_pos_prices)
                 shared_data.setdefault('last_prices', {})
                 shared_data['last_prices'].update(fresh_pos_prices)
+                shared_data['last_prices_updated_at'] = time.time()
+            for _s in _pos_syms:
+                if _s not in fresh_pos_prices:
+                    try:
+                        _one = fetch_current_prices([_s])
+                        if _one.get(_s):
+                            real_prices[_s] = _one[_s]
+                            shared_data.setdefault('last_prices', {})[_s] = _one[_s]
+                            shared_data['last_prices_updated_at'] = time.time()
+                    except Exception:
+                        pass
         except Exception:
             pass
     try:
@@ -1343,25 +1380,59 @@ def run_scanner():
 # ROUTES FLASK
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+# Âge max (secondes) pour considérer un prix encore valide pour le PnL (évite affichage figé puis gros saut)
+PRICE_STALE_SECONDS = 120
+
 def _prices_for_dashboard(open_positions):
-    """Prix à jour: pour les positions ouvertes, on fetch TOUJOURS les prix en direct
-    pour que le PnL affiché soit correct (évite affichage 0 quand last_prices est stale)."""
+    """Prix à jour pour le dashboard. Fetch toujours les prix en direct pour les positions.
+    Retourne (prices_dict, stale_symbols): les symboles dans stale_symbols ont un prix trop vieux
+    ou indisponible — utiliser entry pour le PnL pour éviter faux affichage."""
     last = dict(shared_data.get('last_prices') or {})
     symbols_to_fetch = list(open_positions.keys()) if open_positions else []
+    stale_symbols = set()
+    now = time.time()
+    last_updated = shared_data.get('last_prices_updated_at') or 0
+    fetched_this_call = set()
+
     if symbols_to_fetch:
         try:
             fresh = fetch_current_prices(symbols_to_fetch)
             if fresh:
                 last.update(fresh)
+                fetched_this_call |= set(fresh.keys())
                 shared_data.setdefault('last_prices', {})
                 shared_data['last_prices'].update(fresh)
-            # Si un symbole n'a pas été récupéré, on garde last_prices en fallback
+                shared_data['last_prices_updated_at'] = now
+            missing = [s for s in symbols_to_fetch if s not in last]
+            for s in missing:
+                try:
+                    one = fetch_current_prices([s])
+                    if one.get(s):
+                        last[s] = one[s]
+                        shared_data.setdefault('last_prices', {})[s] = one[s]
+                        shared_data['last_prices_updated_at'] = time.time()
+                        fetched_this_call.add(s)
+                except Exception:
+                    pass
+            for s in symbols_to_fetch:
+                if s not in last:
+                    stale_symbols.add(s)
+                elif s not in fetched_this_call and last_updated > 0 and (now - last_updated) > PRICE_STALE_SECONDS:
+                    if s in (shared_data.get('last_prices') or {}):
+                        last[s] = shared_data['last_prices'][s]
+                    stale_symbols.add(s)
             for s in symbols_to_fetch:
                 if s not in last and s in (shared_data.get('last_prices') or {}):
                     last[s] = shared_data['last_prices'][s]
+                    stale_symbols.add(s)
         except Exception as e:
             add_bot_log("Dashboard: fetch prix positions échoué: {}".format(e), 'WARN')
-    return last
+            for s in symbols_to_fetch:
+                if s not in last and s in (shared_data.get('last_prices') or {}):
+                    last[s] = shared_data['last_prices'][s]
+                if s not in last or (last_updated > 0 and (now - last_updated) > PRICE_STALE_SECONDS):
+                    stale_symbols.add(s)
+    return last, stale_symbols
 
 
 @app.route('/')
@@ -1371,12 +1442,14 @@ def dashboard():
     update_performance_stats(trader)
     balance = trader.get_usdt_balance()
     open_positions = trader.get_open_positions()
-    prices = _prices_for_dashboard(open_positions)
+    prices, stale_symbols = _prices_for_dashboard(open_positions)
     positions_view = []
     total_unrealized_pnl = 0
     for symbol, pos_data in open_positions.items():
         entry = pos_data['entry_price']
         current = prices.get(symbol, entry)
+        if symbol in stale_symbols:
+            current = entry  # prix périmé ou indisponible — ne pas afficher un PnL trompeur
         direction = pos_data.get('direction', 'LONG')
         
         # Calcul PnL selon direction
@@ -1414,15 +1487,7 @@ def dashboard():
             'entry_time':  pos_data.get('entry_time', 'N/A'),
             'progress':    progress,
             'leverage':    pos_data.get('leverage', 1),
-            'amount':      pos_data['amount_usdt'],
-            'quantity':    pos_data['quantity'],
-            'pnl_value':   pnl_value,
-            'pnl_percent': pnl_percent,
-            'sl':          sl,
-            'tp':          tp,
-            'entry_time':  pos_data.get('entry_time', 'N/A'),
-            'progress':    progress,
-            'leverage':    pos_data.get('leverage', 1),
+            'price_stale': symbol in stale_symbols,
         })
 
     total_invested = sum(p['amount'] for p in positions_view)
@@ -1476,12 +1541,14 @@ def api_data():
         all_trades = trader.get_trades_history()
         history = [t for t in all_trades if 'VENTE' in t.get('type', '')]
 
-        prices = _prices_for_dashboard(open_positions)
+        prices, stale_symbols = _prices_for_dashboard(open_positions)
         positions_view = []
         total_unrealized_pnl = 0
         for symbol, pos_data in open_positions.items():
             entry = pos_data['entry_price']
             current = prices.get(symbol, entry)
+            if symbol in stale_symbols:
+                current = entry
             direction = pos_data.get('direction', 'LONG')
             if direction == 'LONG':
                 pnl_value = (current - entry) * pos_data['quantity']
@@ -1503,7 +1570,7 @@ def api_data():
                 'amount': pos_data['amount_usdt'], 'quantity': pos_data['quantity'],
                 'pnl_value': round(pnl_value, 2), 'pnl_percent': round(pnl_percent, 2),
                 'sl': sl, 'tp': tp, 'entry_time': pos_data.get('entry_time', 'N/A'), 'progress': progress,
-                'leverage': pos_data.get('leverage', 1),
+                'leverage': pos_data.get('leverage', 1), 'price_stale': symbol in stale_symbols,
             })
 
         # Sanitize opportunities for JSON serialization
