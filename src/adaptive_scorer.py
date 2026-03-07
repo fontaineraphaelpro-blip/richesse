@@ -22,9 +22,9 @@ def score_adaptive(
     fear_greed: Optional[int] = None,
 ) -> Tuple[float, float, str]:
     """
-    Score composite LONG et SHORT (0-100) base sur tous les indicateurs.
-    S'adapte au regime: TRENDING, RANGING, VOLATILE.
-    Confluence maximale: OBV, MFI, order flow, depth, Fear&Greed, multi-TF.
+    Score composite LONG et SHORT (0-100).
+    Base explicite: RSI, MACD, Bollinger Bands, VWAP, ATR (core).
+    Puis regime, confluence, autres indicateurs.
     Returns: (score_long, score_short, regime)
     """
     regime = indicators.get('market_regime', 'UNKNOWN')
@@ -70,6 +70,69 @@ def score_adaptive(
     elif spread_pct > 0.10:
         score_long -= 5
         score_short -= 5
+
+    # ═══ CORE: RSI, MACD, Bollinger Bands, VWAP, ATR (base de la décision) ═══
+    # 1) RSI (Relative Strength Index)
+    if rsi is not None:
+        if rsi < 30:
+            score_long += 12
+            score_short -= 8
+        elif rsi < 40:
+            score_long += 6
+            score_short -= 3
+        elif 45 <= rsi <= 58:
+            score_long += 4
+        elif 42 <= rsi <= 55:
+            score_short += 4
+        elif rsi > 70:
+            score_short += 12
+            score_long -= 8
+        elif rsi > 60:
+            score_short += 6
+            score_long -= 3
+    # 2) MACD (Moving Average Convergence Divergence) — histogramme
+    if macd_hist is not None:
+        if macd_hist > 0:
+            score_long += 10
+            score_short -= 6
+        else:
+            score_short += 10
+            score_long -= 6
+    # 3) Bollinger Bands (position du prix dans les bandes)
+    if bb_pct is not None:
+        if bb_pct < 0.2:
+            score_long += 10
+            score_short -= 6
+        elif bb_pct < 0.4:
+            score_long += 4
+        elif bb_pct > 0.8:
+            score_short += 10
+            score_long -= 6
+        elif bb_pct > 0.6:
+            score_short += 4
+    # 4) VWAP (Volume Weighted Average Price) — prix au-dessus / en-dessous
+    if vwap_dist is not None:
+        if vwap_dist > 0.5:
+            score_long += 8
+            score_short -= 5
+        elif vwap_dist > 0.15:
+            score_long += 3
+        elif vwap_dist < -0.5:
+            score_short += 8
+            score_long -= 5
+        elif vwap_dist < -0.15:
+            score_short += 3
+    # 5) ATR (Average True Range) — volatilité: zone raisonnable = confiance
+    if atr_pct is not None and atr_pct > 0:
+        if 0.8 <= atr_pct <= 4.0:
+            score_long += 4
+            score_short += 4
+        elif atr_pct > 6:
+            score_long -= 6
+            score_short -= 6
+        elif atr_pct > 4:
+            score_long -= 2
+            score_short -= 2
 
     # --- REGIME ADAPTATIF ---
     if regime == 'TRENDING':
@@ -145,16 +208,12 @@ def score_adaptive(
                 score_long -= 5
                 score_short -= 5  # zone neutre = moins d'edge
 
-    # --- RSI (toujours) ---
+    # --- RSI (complément zones continuation, déjà traité en CORE) ---
     if rsi is not None:
-        if 45 <= rsi <= 60:
-            score_long += 3
-        if 40 <= rsi <= 55:
-            score_short += 3
-        if rsi < 30:
-            score_long += 5
-        if rsi > 70:
-            score_short += 5
+        if 48 <= rsi <= 58:
+            score_long += 2
+        if 42 <= rsi <= 52:
+            score_short += 2
 
     # --- PRICE MOMENTUM (15m) + force du momentum ---
     price_mom = indicators.get('price_momentum')
@@ -182,11 +241,10 @@ def score_adaptive(
     elif intraday == 'BEARISH':
         score_short += 2
 
-    # --- BOLLINGER ---
-    if bb_pct is not None:
-        if 0.3 <= bb_pct <= 0.7:
-            score_long += 2
-            score_short += 2
+    # --- BOLLINGER (milieu de bande = neutre, déjà traité en CORE) ---
+    if bb_pct is not None and 0.35 <= bb_pct <= 0.65:
+        score_long += 1
+        score_short += 1
 
     # --- ICHIMOKU ---
     if tenkan is not None and kijun is not None and price:
@@ -214,17 +272,10 @@ def score_adaptive(
             score_long -= 5
             score_short -= 5
 
-    # --- VWAP (direction + proximité) ---
-    if vwap_dist is not None:
-        if -0.5 < vwap_dist < 0.5:
-            score_long += 2
-            score_short += 2
-        elif vwap_dist > 0.3:
-            score_long += 5
-            score_short -= 3
-        elif vwap_dist < -0.3:
-            score_short += 5
-            score_long -= 3
+    # --- VWAP (proximité neutre uniquement, direction déjà en CORE) ---
+    if vwap_dist is not None and -0.4 < vwap_dist < 0.4:
+        score_long += 2
+        score_short += 2
 
     # --- DIVERGENCES ---
     if rsi_bull_div:
@@ -350,14 +401,10 @@ def score_adaptive(
         score_long -= 2
         score_short -= 2
 
-    # --- ATR (volatilite raisonnable) ---
-    if atr_pct is not None and atr_pct > 0:
-        if atr_pct > 6:
-            score_long -= 10
-            score_short -= 10
-        elif 1 < atr_pct < 4:
-            score_long += 2
-            score_short += 2
+    # --- ATR (seuil extrême uniquement, reste déjà en CORE) ---
+    if atr_pct is not None and atr_pct > 7:
+        score_long -= 4
+        score_short -= 4
 
     score_long = max(0, min(100, score_long))
     score_short = max(0, min(100, score_short))
