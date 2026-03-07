@@ -47,6 +47,12 @@ def score_adaptive(
     volume_poc = indicators.get('volume_poc')
     di_plus = indicators.get('di_plus')
     di_minus = indicators.get('di_minus')
+    momentum_strength = indicators.get('momentum_strength') or 0
+    value_area_high = indicators.get('value_area_high')
+    value_area_low = indicators.get('value_area_low')
+    open_price = indicators.get('open_price')
+    in_vol_cluster = indicators.get('in_vol_cluster', False)
+    vol_cluster_ratio = indicators.get('vol_cluster_ratio') or 1.0
 
     score_long = 50.0
     score_short = 50.0
@@ -150,14 +156,24 @@ def score_adaptive(
         if rsi > 70:
             score_short += 5
 
-    # --- PRICE MOMENTUM (15m) ---
+    # --- PRICE MOMENTUM (15m) + force du momentum ---
     price_mom = indicators.get('price_momentum')
     if price_mom == 'BULLISH':
         score_long += 4
         score_short -= 3
+        if momentum_strength >= 50:
+            score_long += 3
+            score_short -= 2
+        elif momentum_strength >= 30:
+            score_long += 1
     elif price_mom == 'BEARISH':
         score_short += 4
         score_long -= 3
+        if momentum_strength >= 50:
+            score_short += 3
+            score_long -= 2
+        elif momentum_strength >= 30:
+            score_short += 1
 
     # --- INTRADAY BIAS ---
     intraday = indicators.get('intraday_bias')
@@ -198,11 +214,17 @@ def score_adaptive(
             score_long -= 5
             score_short -= 5
 
-    # --- VWAP ---
+    # --- VWAP (direction + proximité) ---
     if vwap_dist is not None:
         if -0.5 < vwap_dist < 0.5:
             score_long += 2
             score_short += 2
+        elif vwap_dist > 0.3:
+            score_long += 5
+            score_short -= 3
+        elif vwap_dist < -0.3:
+            score_short += 5
+            score_long -= 3
 
     # --- DIVERGENCES ---
     if rsi_bull_div:
@@ -213,11 +235,11 @@ def score_adaptive(
     # --- OBV (On-Balance Volume) ---
     if obv_slope is not None:
         if obv_slope > 0:
-            score_long += 5
-            score_short -= 3
+            score_long += 6
+            score_short -= 4
         else:
-            score_short += 5
-            score_long -= 3
+            score_short += 6
+            score_long -= 4
 
     # --- MFI (Money Flow Index) ---
     if mfi is not None:
@@ -241,12 +263,20 @@ def score_adaptive(
             score_short += 4
             score_long -= 2
 
-    # --- VOLUME POC (proximite support/resistance) ---
+    # --- VOLUME POC + VALUE AREA (zones de valeur) ---
     if volume_poc and price and volume_poc > 0:
         dist_poc = abs(price - volume_poc) / volume_poc * 100
-        if dist_poc < 0.5:  # Tres proche du POC = zone de valeur
+        if dist_poc < 0.5:
             score_long += 3
             score_short += 3
+    if value_area_low and value_area_high and price and value_area_high > value_area_low:
+        pct_in_range = (price - value_area_low) / (value_area_high - value_area_low)
+        if pct_in_range < 0.2:
+            score_long += 5
+            score_short -= 2
+        elif pct_in_range > 0.8:
+            score_short += 5
+            score_long -= 2
 
     # --- MOMENTUM 5m (scalping rapide) ---
     if momentum_5m == 'BULLISH':
@@ -277,12 +307,48 @@ def score_adaptive(
 
     # --- FEAR & GREED (sentiment) ---
     if fear_greed is not None:
-        if fear_greed < 30:  # Fear
+        if fear_greed < 30:
             score_long += 4
             score_short -= 2
-        elif fear_greed > 70:  # Greed
+        elif fear_greed > 70:
             score_short += 4
             score_long -= 2
+
+    # --- Dernière bougie (confirmations) ---
+    if open_price and price and open_price > 0:
+        if price > open_price:
+            score_long += 2
+            score_short -= 1
+        elif price < open_price:
+            score_short += 2
+            score_long -= 1
+
+    # --- Confluence bonus: plusieurs signaux alignés ---
+    bull_signals = sum([
+        1 if (price_mom == 'BULLISH' and momentum_strength >= 30) else 0,
+        1 if (obv_slope is not None and obv_slope > 0) else 0,
+        1 if (mfi is not None and mfi < 50) else 0,
+        1 if (di_plus is not None and di_minus is not None and di_plus > di_minus) else 0,
+        1 if (vwap_dist is not None and vwap_dist > 0) else 0,
+    ])
+    bear_signals = sum([
+        1 if (price_mom == 'BEARISH' and momentum_strength >= 30) else 0,
+        1 if (obv_slope is not None and obv_slope <= 0) else 0,
+        1 if (mfi is not None and mfi > 50) else 0,
+        1 if (di_plus is not None and di_minus is not None and di_minus > di_plus) else 0,
+        1 if (vwap_dist is not None and vwap_dist < 0) else 0,
+    ])
+    if bull_signals >= 3:
+        score_long += 5
+        score_short -= 3
+    if bear_signals >= 3:
+        score_short += 5
+        score_long -= 3
+
+    # --- Vol cluster (éviter surpondérer en forte incertitude) ---
+    if in_vol_cluster and vol_cluster_ratio > 1.5:
+        score_long -= 2
+        score_short -= 2
 
     # --- ATR (volatilite raisonnable) ---
     if atr_pct is not None and atr_pct > 0:

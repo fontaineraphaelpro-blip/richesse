@@ -81,8 +81,10 @@ TREND_1H_LONG_BULLISH  = True
 TREND_1H_LONG_ALLOW_NEUTRAL = True
 # Confirmation 4h (optionnel — meilleure qualité)
 TREND_4H_ENABLED = True
-TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL
+TREND_4H_LONG_BULLISH_OR_NEUTRAL = True   # LONG si 4h BULLISH ou NEUTRAL (sauf en TRENDING, voir ci‑dessous)
 TREND_4H_SHORT_BEARISH_OR_NEUTRAL = True  # SHORT si 4h BEARISH ou NEUTRAL
+# En TRENDING: exiger 4h strict (désactivé = on garde NEUTRAL pour plus de flexibilité)
+TREND_4H_STRICT_IN_TRENDING = False  # False = plus de trades, le score utilise déjà tous les indicateurs
 POSITION_PCT_BALANCE   = 0.55   # 55% par position — objectif ~10€/j sur 100€ (risque élevé)
 SESSION_BONUS_ENABLED = True
 SESSION_BONUS_UTC_START = 14
@@ -200,6 +202,7 @@ ALERT_WR_MIN_PCT = 40
 
 # Score minimum par régime BTC (qualité des setups)
 MIN_SCORE_RANGING = 66            # RANGING: 66+ — plus de trades (70 = trop rare)
+MIN_SCORE_TRENDING = 58           # TRENDING: même barre que MIN_SCORE_TO_OPEN (décision par indicateurs)
 MIN_SCORE_VOLATILE = 75           # VOLATILE: 75+ (78 = quasi jamais)
 # Drawdown 7j deux paliers (réduction progressive de la taille)
 DRAWDOWN_7D_PCT_TIER1 = 3        # À -3% du high 7j → taille x0.85
@@ -365,6 +368,8 @@ def get_effective_min_score(btc_regime: str) -> float:
         return MIN_SCORE_VOLATILE
     if btc_regime == 'RANGING':
         return MIN_SCORE_RANGING
+    if btc_regime == 'TRENDING':
+        return MIN_SCORE_TRENDING
     return MIN_SCORE_TO_OPEN
 
 
@@ -927,7 +932,10 @@ def run_scanner():
 
         # LONG si score suffisant (+ gate strict optionnel pour mieux lire les signaux)
         if final_long >= effective_min:
-            allowed_4h_long = ('BULLISH', 'BULL', 'NEUTRAL') if TREND_4H_LONG_BULLISH_OR_NEUTRAL else ('BULLISH', 'BULL')
+            if TREND_4H_STRICT_IN_TRENDING and regime == 'TRENDING':
+                allowed_4h_long = ('BULLISH', 'BULL')  # En tendance: pas de LONG si 4h NEUTRAL (évite mauvaise direction)
+            else:
+                allowed_4h_long = ('BULLISH', 'BULL', 'NEUTRAL') if TREND_4H_LONG_BULLISH_OR_NEUTRAL else ('BULLISH', 'BULL')
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BULLISH', 'BULL') or momentum_1h not in ('BULLISH', 'BULL')):
                 n_long_fail_multitf += 1
             elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in allowed_4h_long:
@@ -1017,7 +1025,10 @@ def run_scanner():
 
         # SHORT si score suffisant (+ gate strict optionnel)
         if final_short >= effective_min:
-            allowed_4h_short = ('BEARISH', 'BEAR', 'NEUTRAL') if TREND_4H_SHORT_BEARISH_OR_NEUTRAL else ('BEARISH', 'BEAR')
+            if TREND_4H_STRICT_IN_TRENDING and regime == 'TRENDING':
+                allowed_4h_short = ('BEARISH', 'BEAR')  # En tendance: pas de SHORT si 4h NEUTRAL
+            else:
+                allowed_4h_short = ('BEARISH', 'BEAR', 'NEUTRAL') if TREND_4H_SHORT_BEARISH_OR_NEUTRAL else ('BEARISH', 'BEAR')
             if REQUIRE_MULTITF_ALIGNED and (momentum_15m not in ('BEARISH', 'BEAR') or momentum_1h not in ('BEARISH', 'BEAR')):
                 n_short_fail_multitf += 1
             elif REQUIRE_4H_ALIGNED and TREND_4H_ENABLED and momentum_4h not in allowed_4h_short:
