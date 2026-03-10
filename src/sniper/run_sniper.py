@@ -1,0 +1,165 @@
+"""
+Main scan loop: fetch symbols → filter liquidity → calc indicators → detect pullbacks →
+evaluate breakouts → compute score → rank signals → execute top trades → manage positions.
+Runs asynchronously; evaluate at candle close (on primary TF).
+"""
+
+import sys
+import os
+import time
+
+_src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _src not in sys.path:
+    sys.path.insert(0, _src)
+
+from . import config as cfg
+from .market_scanner import scan_markets
+from .btc_regime import get_btc_regime
+from .setup_detector import detect_setup
+from .scoring_engine import score_setup
+from .ranking_engine import rank_setups
+from .trade_executor import execute_setup
+from .position_manager import PositionManager
+from .logging_system import (
+    log_setup_detected,
+    log_setup_rejected,
+    log_scan_start,
+    log_scan_done,
+    log_trade_entry,
+    log_trade_exit,
+)
+
+
+def run_sniper_cycle(
+    paper_trader=None,
+    position_manager: PositionManager = None,
+    symbols: list = None,
+) -> dict:
+    """
+    One full cycle: scan → detect → score → rank → execute.
+    Returns stats: { 'candidates', 'passed', 'executed', 'setups', 'errors' }.
+    """
+    if position_manager is None:
+        position_manager = PositionManager()
+
+    # Sync: if paper_trader closed a position (SL/TP), remove from position_manager (and set cooldown)
+    if paper_trader is not None:
+        try:
+            open_pos = paper_trader.get_open_positions()
+            for sym in list(position_manager.get_open_symbols()):
+                if sym not in open_pos:
+                    position_manager.remove_position(sym)
+        except Exception:
+            pass
+
+    stats = {"candidates": 0, "passed": 0, "executed": 0, "setups": [], "errors": []}
+
+    try:
+        data_primary, data_higher, last_prices = scan_markets(symbols=symbols)
+        log_scan_start(len(data_primary))
+    except Exception as e:
+        stats["errors"].append("scan_markets: " + str(e))
+        return stats
+
+    btc_regime = get_btc_regime()
+    if not btc_regime.get("is_bullish") and not btc_regime.get("close"):
+        # Still continue to detect setups; scoring will penalize missing BTC confirmation
+        pass
+
+    setups_with_symbol = []
+    for symbol, df in data_primary.items():
+        if df is None or len(df) < 200:
+            continue
+        try:
+            setup = detect_setup(
+                df_primary=df,
+                df_higher=data_higher.get(symbol),
+                btc_regime=btc_regime,
+                btc_price_now=btc_regime.get("close"),
+                btc_price_50_ago=btc_regime.get("close_50_ago"),
+            )
+            if setup is None:
+                continue
+            setup = score_setup(setup)
+            setup["_symbol"] = symbol
+            setups_with_symbol.append(setup)
+            stats["candidates"] += 1
+            log_setup_detected(symbol, setup, setup.get("score", 0), setup.get("passed", False))
+        except Exception as e:
+            stats["errors"].append("{} detect: {}".format(symbol, str(e)))
+            log_setup_rejected(symbol, str(e))
+
+    passed = [s for s in setups_with_symbol if s.get("passed")]
+    stats["passed"] = len(passed)
+    ranked = rank_setups(passed)
+
+    # Account equity from paper trader or default
+    account_equity = 100.0
+    if paper_trader is not None:
+        try:
+            from trader import PaperTrader
+            prices = last_prices or {}
+            account_equity = paper_trader.get_total_capital(prices)
+        except Exception:
+            pass
+
+    for setup in ranked:
+        symbol = setup.get("_symbol")
+        if not symbol:
+            continue
+        try:
+            result = execute_setup(
+                symbol=symbol,
+                setup=setup,
+                account_equity=account_equity,
+                position_manager=position_manager,
+                paper_trader=paper_trader,
+            )
+            if result.get("success"):
+                stats["executed"] += 1
+                log_trade_entry(
+                    symbol=result["symbol"],
+                    entry=result["entry"],
+                    sl=result["stop_loss"],
+                    tp=result["take_profit"],
+                    amount_usdt=result["amount_usdt"],
+                    quantity=result["quantity"],
+                    score=setup.get("score", 0),
+                )
+                stats["setups"].append({"symbol": symbol, "score": setup.get("score"), "entry": result["entry"]})
+            else:
+                log_setup_rejected(symbol, result.get("reason", "execute failed"))
+        except Exception as e:
+            stats["errors"].append("{} execute: {}".format(symbol, str(e)))
+
+    log_scan_done(stats["candidates"], stats["passed"], stats["executed"])
+    return stats
+
+
+def run_sniper_loop(
+    paper_trader=None,
+    interval_sec: int = None,
+):
+    """
+    Infinite loop: run_sniper_cycle every interval_sec (default from config).
+    """
+    if interval_sec is None:
+        interval_sec = cfg.SCAN_INTERVAL_SEC
+    position_manager = PositionManager()
+
+    while True:
+        try:
+            run_sniper_cycle(paper_trader=paper_trader, position_manager=position_manager)
+        except Exception as e:
+            print("[SNIPER ERROR]", str(e))
+        time.sleep(interval_sec)
+
+
+if __name__ == "__main__":
+    print("Crypto Setup Sniper — starting (paper trading)...")
+    try:
+        from trader import PaperTrader
+        _trader = PaperTrader(initial_balance=100)
+        run_sniper_loop(paper_trader=_trader)
+    except ImportError:
+        run_sniper_loop(paper_trader=None)
