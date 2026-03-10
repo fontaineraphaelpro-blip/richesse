@@ -86,7 +86,7 @@ TAKE_PROFIT_RR = 2.0  # 2:1
 TRAILING_STOP_AFTER_R = 1.0  # Optional trailing when profit > 1R
 
 # Position sizing & risk
-RISK_PCT_PER_TRADE = 0.01  # 1% of account equity
+RISK_PCT_PER_TRADE = 0.10  # 10% of account equity per trade
 MAX_SIMULTANEOUS_TRADES = 5
 ONE_TRADE_PER_ASSET = True
 COOLDOWN_MINUTES_PER_ASSET = 30
