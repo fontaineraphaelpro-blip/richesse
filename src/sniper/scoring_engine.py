@@ -33,7 +33,8 @@ def score_setup(setup: Dict[str, Any]) -> Dict[str, Any]:
     else:
         breakdown["trend"] = 0
 
-    if setup.get("btc_bullish"):
+    # LONG: btc_bullish; SHORT: btc_bearish
+    if setup.get("btc_bullish") or setup.get("btc_bearish"):
         points += cfg.SCORE_BTC_CONFIRMATION
         breakdown["btc"] = cfg.SCORE_BTC_CONFIRMATION
     else:

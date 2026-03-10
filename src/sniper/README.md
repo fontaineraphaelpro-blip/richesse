@@ -6,7 +6,7 @@ High-probability multi-filter strategy on Binance: **low trade frequency, high-q
 
 - **Markets**: Binance USDT pairs, 24h volume > 20M USD (fetched dynamically).
 - **Timeframes**: Primary 15m, higher filter 1h. Signals evaluated **at candle close**.
-- **BTC regime**: Alt longs only when BTC is bullish (close > EMA200, RSI(14) > 50).
+- **BTC regime**: LONG when BTC bullish (close > EMA200, RSI > 50); SHORT when BTC bearish (close < EMA200 or RSI < 50).
 - **Filters**: Trend (EMA50 > EMA200, price > EMA50, ADX > 20), pullback (low touches EMA20, close > EMA50, &lt; 3% from EMA50), volatility contraction (ATR5 &lt; ATR20), momentum breakout (RSI > 55, bullish close, close > prev high, volume > VolMA20), volume spike/accumulation, relative strength vs BTC, anti–fake breakout (body &gt; 60% range, close above 5–20 high, volume spike).
 - **Scoring**: Trade only if **score ≥ 7** (max 10). Rank by score, trend strength, relative strength, volume; take **top N** (default 3).
 - **Entry**: Breakout of previous candle high (market or stop slightly above).
@@ -28,7 +28,7 @@ High-probability multi-filter strategy on Binance: **low trade frequency, high-q
 | `ranking_engine` | Rank by score, ADX, relative strength, volume; return top N. |
 | `risk_manager` | SL/TP, position size (1% risk), max trades, cooldown. |
 | `position_manager` | Track open positions and cooldowns. |
-| `trade_executor` | Place long at breakout (paper or live). |
+| `trade_executor` | Place LONG or SHORT at breakout (paper or live). |
 | `logging_system` | Log setups, scores, entries, exits. |
 | `run_sniper` | Scan loop: scan → detect → score → rank → execute. |
 

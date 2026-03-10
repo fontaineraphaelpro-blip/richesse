@@ -29,32 +29,28 @@ def execute_setup(
     paper_trader=None,
 ) -> Dict[str, Any]:
     """
-    Execute a long entry for the given setup.
-    - Entry: current close (or breakout level = previous high)
-    - SL: entry - ATR(14)*1.5
-    - TP: entry + (entry - SL)*2
+    Execute LONG or SHORT entry for the given setup.
+    - LONG: SL = entry - ATR(14)*1.5, TP = entry + (entry - SL)*2
+    - SHORT: SL = entry + ATR(14)*1.5, TP = entry - (SL - entry)*2
     - Size: 1% risk
 
-    If paper_trader is provided (existing PaperTrader instance), place_buy_order is used.
-    Otherwise only returns the order params for backtest/external execution.
-
     Returns:
-        { 'success': bool, 'reason': str, 'entry', 'sl', 'tp', 'amount_usdt', 'quantity' }
+        { 'success', 'reason', 'symbol', 'direction', 'entry', 'stop_loss', 'take_profit', 'amount_usdt', 'quantity' }
     """
+    direction = (setup.get("direction") or "LONG").upper()
     ind = setup.get("indicators") or {}
     entry_price = ind.get("close")
     atr14 = ind.get("atr14")
     if not entry_price or entry_price <= 0:
-        return {"success": False, "reason": "No entry price"}
+        return {"success": False, "reason": "No entry price", "direction": direction}
 
-    stop_loss = compute_stop_loss(entry_price, atr14, "LONG")
-    take_profit = compute_take_profit(entry_price, stop_loss, "LONG")
+    stop_loss = compute_stop_loss(entry_price, atr14, direction)
+    take_profit = compute_take_profit(entry_price, stop_loss, direction)
 
     pos_usdt, quantity = position_size_usdt(account_equity, entry_price, stop_loss)
     if pos_usdt <= 0 or quantity <= 0:
-        return {"success": False, "reason": "Position size zero"}
+        return {"success": False, "reason": "Position size zero", "direction": direction}
 
-    # Check capacity
     cooldown_ts = position_manager.get_cooldown_timestamps()
     ok, msg = can_open_new_trade(
         position_manager.open_positions_count(),
@@ -62,15 +58,16 @@ def execute_setup(
         cooldown_ts,
     )
     if not ok:
-        return {"success": False, "reason": msg}
+        return {"success": False, "reason": msg, "direction": direction}
 
     if position_manager.has_position(symbol):
-        return {"success": False, "reason": "Already in position on {}".format(symbol)}
+        return {"success": False, "reason": "Already in position on {}".format(symbol), "direction": direction}
 
     result = {
         "success": True,
         "reason": "OK",
         "symbol": symbol,
+        "direction": direction,
         "entry": entry_price,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
@@ -80,15 +77,26 @@ def execute_setup(
 
     if paper_trader is not None:
         try:
-            placed = paper_trader.place_buy_order(
-                symbol=symbol,
-                amount_usdt=pos_usdt,
-                current_price=entry_price,
-                stop_loss_price=stop_loss,
-                take_profit_price=take_profit,
-                entry_trend="SNIPER_SETUP",
-                atr_pct=(atr14 / entry_price * 100) if atr14 else None,
-            )
+            if direction == "LONG":
+                placed = paper_trader.place_buy_order(
+                    symbol=symbol,
+                    amount_usdt=pos_usdt,
+                    current_price=entry_price,
+                    stop_loss_price=stop_loss,
+                    take_profit_price=take_profit,
+                    entry_trend="SNIPER_SETUP",
+                    atr_pct=(atr14 / entry_price * 100) if atr14 else None,
+                )
+            else:
+                placed = paper_trader.place_short_order(
+                    symbol=symbol,
+                    amount_usdt=pos_usdt,
+                    current_price=entry_price,
+                    stop_loss_price=stop_loss,
+                    take_profit_price=take_profit,
+                    entry_trend="SNIPER_SETUP",
+                    atr_pct=(atr14 / entry_price * 100) if atr14 else None,
+                )
             if not placed:
                 result["success"] = False
                 result["reason"] = "PaperTrader refused (insufficient balance or already position)"
@@ -100,13 +108,12 @@ def execute_setup(
                     take_profit=take_profit,
                     quantity=quantity,
                     amount_usdt=pos_usdt,
-                    metadata={"score": setup.get("score"), "setup": "sniper"},
+                    metadata={"score": setup.get("score"), "setup": "sniper", "direction": direction},
                 )
         except Exception as e:
             result["success"] = False
             result["reason"] = str(e)
     else:
-        # Backtest / dry run: just record in position_manager if desired
         position_manager.add_position(
             symbol=symbol,
             entry_price=entry_price,
@@ -114,7 +121,7 @@ def execute_setup(
             take_profit=take_profit,
             quantity=quantity,
             amount_usdt=pos_usdt,
-            metadata={"score": setup.get("score")},
+            metadata={"score": setup.get("score"), "direction": direction},
         )
 
     return result

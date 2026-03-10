@@ -40,8 +40,10 @@ ATR_LONG = 20
 
 # Momentum breakout
 RSI_PERIOD = 14
-RSI_MIN = 55
-# Candle close > open, close > prev candle high, volume > VolumeMA(20)
+RSI_MIN = 55       # LONG: RSI(14) > 55
+RSI_MAX_BEARISH = 45  # SHORT: RSI(14) < 45
+# LONG: close > open, close > prev high, volume > VolumeMA(20)
+# SHORT: close < open, close < prev low, volume > VolumeMA(20)
 
 # Accumulation / volume
 VOLUME_MA_PERIOD = 20

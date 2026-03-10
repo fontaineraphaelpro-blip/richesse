@@ -74,14 +74,17 @@ def compute_sniper_indicators(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
 
     # Previous candle for breakout check
     prev_high = high.iloc[-2] if len(high) >= 2 else None
+    prev_low = low.iloc[-2] if len(low) >= 2 else None
     prev_close = close.iloc[-2] if len(close) >= 2 else None
 
-    # Highest high over lookback 5-20
+    # Highest high / lowest low over lookback 5-20
     lookback = cfg.BREAKOUT_LOOKBACK_HIGH
     if len(high) >= lookback + 1:
         highest_high_5_20 = high.iloc[-lookback - 1 : -1].max()
+        lowest_low_5_20 = low.iloc[-lookback - 1 : -1].min()
     else:
         highest_high_5_20 = None
+        lowest_low_5_20 = None
 
     # Price 50 candles ago (relative strength)
     if len(close) >= cfg.RELATIVE_STRENGTH_LOOKBACK + 1:
@@ -115,9 +118,11 @@ def compute_sniper_indicators(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     # Distance from EMA50 (%)
     dist_ema50_pct = ((current_price - ema50_val) / ema50_val) * 100 if ema50_val and ema50_val > 0 else None
 
-    # Low touches or crosses EMA20 (within some tolerance)
+    # Low touches or crosses EMA20 (within some tolerance) — LONG pullback
     tol_ema20 = ema20_val * 0.002 if ema20_val else 0
     low_touches_ema20 = current_low <= (ema20_val + tol_ema20) and current_high >= (ema20_val - tol_ema20)
+    # High touches or crosses EMA20 — SHORT pullback
+    high_touches_ema20 = current_high >= (ema20_val - tol_ema20) and current_low <= (ema20_val + tol_ema20)
 
     return {
         "close": current_price,
@@ -135,14 +140,19 @@ def compute_sniper_indicators(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         "adx14": adx_val,
         "volume_ma20": vol_ma20_val,
         "prev_high": prev_high,
+        "prev_low": prev_low,
         "prev_close": prev_close,
         "highest_high_5_20": highest_high_5_20,
+        "lowest_low_5_20": lowest_low_5_20,
         "price_50_ago": price_50_ago,
         "body_pct_of_range": body_pct_of_range,
         "dist_ema50_pct": dist_ema50_pct,
         "low_touches_ema20": low_touches_ema20,
+        "high_touches_ema20": high_touches_ema20,
         "is_bullish_candle": current_price > current_open,
+        "is_bearish_candle": current_price < current_open,
         "close_above_prev_high": prev_high is not None and current_price > prev_high,
+        "close_below_prev_low": prev_low is not None and current_price < prev_low,
         "volume_above_ma20": vol_ma20_val > 0 and current_volume > vol_ma20_val,
         "volume_spike": vol_ma20_val > 0 and current_volume >= (vol_ma20_val * cfg.VOLUME_SPIKE_MULT),
         "atr_contraction": atr5_val < atr20_val if (atr5_val and atr20_val) else False,

@@ -71,20 +71,22 @@ def run_sniper_cycle(
         if df is None or len(df) < 200:
             continue
         try:
-            setup = detect_setup(
+            result = detect_setup(
                 df_primary=df,
                 df_higher=data_higher.get(symbol),
                 btc_regime=btc_regime,
                 btc_price_now=btc_regime.get("close"),
                 btc_price_50_ago=btc_regime.get("close_50_ago"),
             )
-            if setup is None:
-                continue
-            setup = score_setup(setup)
-            setup["_symbol"] = symbol
-            setups_with_symbol.append(setup)
-            stats["candidates"] += 1
-            log_setup_detected(symbol, setup, setup.get("score", 0), setup.get("passed", False))
+            for direction, raw in [("LONG", result.get("long")), ("SHORT", result.get("short"))]:
+                if raw is None:
+                    continue
+                setup = score_setup(raw)
+                setup["_symbol"] = symbol
+                setup["direction"] = direction
+                setups_with_symbol.append(setup)
+                stats["candidates"] += 1
+                log_setup_detected(symbol, setup, setup.get("score", 0), setup.get("passed", False))
         except Exception as e:
             stats["errors"].append("{} detect: {}".format(symbol, str(e)))
             log_setup_rejected(symbol, str(e))
@@ -93,12 +95,13 @@ def run_sniper_cycle(
     stats["passed"] = len(passed)
     ranked = rank_setups(passed)
 
-    # For dashboard: ranked setups (symbol, score, entry)
+    # For dashboard: ranked setups (symbol, score, entry, direction)
     stats["ranked_setups"] = [
         {
             "symbol": s.get("_symbol"),
             "score": s.get("score", 0),
             "entry": (s.get("indicators") or {}).get("close"),
+            "direction": s.get("direction", "LONG"),
         }
         for s in ranked
     ]
@@ -130,6 +133,7 @@ def run_sniper_cycle(
                 stats["executed"] += 1
                 log_trade_entry(
                     symbol=result["symbol"],
+                    direction=result.get("direction", "LONG"),
                     entry=result["entry"],
                     sl=result["stop_loss"],
                     tp=result["take_profit"],
@@ -137,7 +141,7 @@ def run_sniper_cycle(
                     quantity=result["quantity"],
                     score=setup.get("score", 0),
                 )
-                stats["setups"].append({"symbol": symbol, "score": setup.get("score"), "entry": result["entry"]})
+                stats["setups"].append({"symbol": symbol, "direction": setup.get("direction", "LONG"), "score": setup.get("score"), "entry": result["entry"]})
             else:
                 log_setup_rejected(symbol, result.get("reason", "execute failed"))
         except Exception as e:

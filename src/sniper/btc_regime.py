@@ -38,6 +38,7 @@ def get_btc_regime(limit: int = 250) -> Dict:
     if df is None or len(df) < cfg.BTC_EMA200_PERIOD + 5:
         return {
             "is_bullish": False,
+            "is_bearish": False,
             "close": None,
             "close_50_ago": None,
             "ema200": None,
@@ -58,13 +59,16 @@ def get_btc_regime(limit: int = 250) -> Dict:
     above_ema = c > e if (c and e) else False
     rsi_ok = r > cfg.BTC_BULLISH_RSI_MIN if (r is not None and not pd.isna(r)) else False
     is_bullish = above_ema and rsi_ok
+    # Bearish for SHORT: close < EMA200 or RSI < 50
+    below_ema = c < e if (c and e) else False
+    rsi_bear = r is not None and not pd.isna(r) and r < cfg.BTC_BULLISH_RSI_MIN
+    is_bearish = below_ema or rsi_bear
 
-    reason = "Bullish" if is_bullish else "Bearish or weak (close>EMA200={}, RSI>50={})".format(
-        above_ema, rsi_ok
-    )
+    reason = "Bullish" if is_bullish else ("Bearish" if is_bearish else "Weak")
 
     return {
         "is_bullish": is_bullish,
+        "is_bearish": is_bearish,
         "close": float(c),
         "close_50_ago": float(close_50_ago) if close_50_ago is not None else None,
         "ema200": float(e),

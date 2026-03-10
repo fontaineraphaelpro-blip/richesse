@@ -74,10 +74,10 @@ def log_score_details(symbol: str, score_breakdown: Dict, total: int):
     _log("SCORE", "{} total={} breakdown={}".format(symbol, total, score_breakdown), {})
 
 
-def log_trade_entry(symbol: str, entry: float, sl: float, tp: float, amount_usdt: float, quantity: float, score: int):
-    """Log trade entry."""
-    _log("ENTRY", "LONG {} @ {} SL={} TP={} amount=${:.2f} qty={} score={}".format(
-        symbol, entry, sl, tp, amount_usdt, quantity, score), {})
+def log_trade_entry(symbol: str, direction: str, entry: float, sl: float, tp: float, amount_usdt: float, quantity: float, score: int):
+    """Log trade entry (LONG or SHORT)."""
+    _log("ENTRY", "{} {} @ {} SL={} TP={} amount=${:.2f} qty={} score={}".format(
+        direction, symbol, entry, sl, tp, amount_usdt, quantity, score), {})
 
 
 def log_trade_exit(symbol: str, reason: str, entry: float, exit_price: float, pnl: float, pnl_pct: float):

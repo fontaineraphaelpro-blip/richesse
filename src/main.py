@@ -1525,7 +1525,7 @@ def run_loop():
                 shared_data.setdefault('last_prices', {})
                 shared_data['last_prices'].update(stats['last_prices'])
             ranked = stats.get('ranked_setups') or []
-            shared_data['opportunities'] = [{'pair': s.get('symbol') or '', 'price': s.get('entry') or 0, 'entry_signal': 'LONG', 'score': int(s.get('score') or 0), 'rr_ratio': sniper_cfg.TAKE_PROFIT_RR} for s in ranked]
+            shared_data['opportunities'] = [{'pair': s.get('symbol') or '', 'price': s.get('entry') or 0, 'entry_signal': s.get('direction') or 'LONG', 'score': int(s.get('score') or 0), 'rr_ratio': sniper_cfg.TAKE_PROFIT_RR} for s in ranked]
             add_bot_log("Sniper: {} candidats, {} passes, {} executes".format(stats.get('candidates', 0), stats.get('passed', 0), stats.get('executed', 0)), 'INFO')
         except Exception as e:
             import traceback

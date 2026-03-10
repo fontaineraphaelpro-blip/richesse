@@ -41,17 +41,19 @@ def run_backtest(symbols_limit: int = DEFAULT_SYMBOLS, candle_limit: int = DEFAU
         if df is None or len(df) < 220:
             continue
         try:
-            setup = detect_setup(
+            result = detect_setup(
                 df_primary=df,
                 btc_regime=btc_regime,
                 btc_price_now=btc_regime.get("close"),
                 btc_price_50_ago=btc_regime.get("close_50_ago"),
             )
-            if setup is None:
-                continue
-            setup = score_setup(setup)
-            setup["_symbol"] = symbol
-            all_setups.append(setup)
+            for direction, raw in [("LONG", result.get("long")), ("SHORT", result.get("short"))]:
+                if raw is None:
+                    continue
+                setup = score_setup(raw)
+                setup["_symbol"] = symbol
+                setup["direction"] = direction
+                all_setups.append(setup)
         except Exception as e:
             print("  {} error: {}".format(symbol, e))
 
@@ -64,11 +66,12 @@ def run_backtest(symbols_limit: int = DEFAULT_SYMBOLS, candle_limit: int = DEFAU
     print("Top {} setups:".format(len(ranked)))
     for s in ranked:
         sym = s.get("_symbol", "?")
+        direction = s.get("direction", "LONG")
         score = s.get("score", 0)
         ind = s.get("indicators") or {}
         entry = ind.get("close")
-        print("  {} score={} entry={} RSI={} ADX={}".format(
-            sym, score, entry, ind.get("rsi14"), ind.get("adx14")))
+        print("  {} {} score={} entry={} RSI={} ADX={}".format(
+            direction, sym, score, entry, ind.get("rsi14"), ind.get("adx14")))
 
     return ranked
 
