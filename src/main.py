@@ -358,7 +358,7 @@ def add_bot_log(msg: str, level: str = 'INFO'):
         'msg': msg
     }
     shared_data['bot_log'].insert(0, entry)
-    shared_data['bot_log'] = shared_data['bot_log'][:30]  # Garder les 30 derniers
+    shared_data['bot_log'] = shared_data['bot_log'][:50]  # Garder les 50 derniers
     level_pad = level.ljust(5)
     print("  [{}] [{}] {}".format(entry['time'], level_pad, msg))
 
@@ -805,7 +805,7 @@ def api_data():
             'is_scanning': shared_data['is_scanning'],
             'last_update': shared_data['last_update'],
             'scan_count': shared_data['scan_count'],
-            'bot_log': shared_data['bot_log'][:30],
+            'bot_log': shared_data['bot_log'][:50],
             'sniper_stats': shared_data.get('sniper_stats', {}),
             'performance': shared_data.get('performance', {}),
             'market_stats': shared_data.get('market_stats', {}),
@@ -834,7 +834,7 @@ def export_trades_csv():
 @app.route('/api/close/<symbol>', methods=['POST'])
 def close_position_route(symbol):
     """Ferme manuellement une position. Si prix indisponible, ferme au prix d'entree (force)."""
-    trader = PaperTrader()
+    trader = PaperTrader(on_position_closed=_on_position_closed)
     open_pos = trader.get_open_positions()
     if symbol not in open_pos:
         return jsonify({'success': False, 'error': 'Position inexistante'})
@@ -850,8 +850,6 @@ def close_position_route(symbol):
         current_price = open_pos[symbol]['entry_price']
         add_bot_log("Prix {} indisponible (API) — fermeture forcee au prix d'entree.".format(symbol), 'WARN')
     success = trader.close_position(symbol, current_price, "MANUEL")
-    if success:
-        add_bot_log(f"ðŸ’° VENTE MANUELLE {symbol} @ ${current_price:.4f}", 'TRADE')
     return jsonify({'success': success})
 
 
@@ -1445,13 +1443,19 @@ fetch('/api/social/fear_greed')
 AVOID_WEEKENDS = False  # Day trader pro H24: crypto trade 7j/7
 
 
+def _on_position_closed(symbol, direction, reason, pnl_value, pnl_percent):
+    """Callback appele quand une position est fermee (SL/TP/manuel)."""
+    add_bot_log("SORTIE {} {}: {} | PnL {:.2f} USDT ({:+.2f}%)".format(
+        direction, symbol, reason, pnl_value, pnl_percent), 'TRADE')
+
+
 def _sl_tp_watcher_loop():
     """Vérifie SL/TP toutes les 20s avec prix en direct (breakeven, trailing, partial TP, SL/TP)."""
     from trader import PaperTrader
     while True:
         try:
             time.sleep(SL_TP_CHECK_INTERVAL_SEC)
-            trader = PaperTrader()
+            trader = PaperTrader(on_position_closed=_on_position_closed)
             open_pos = trader.get_open_positions()
             if not open_pos:
                 continue
@@ -1524,9 +1528,11 @@ def run_loop():
                     sniper_cfg.TIMEFRAME_PRIMARY, sniper_cfg.MIN_SETUP_SCORE, sniper_cfg.TOP_N_SETUPS), 'INFO')
                 risk_pct = int(sniper_cfg.RISK_PCT_PER_TRADE * 100)
                 add_bot_log("Risk {}% | SL ATRx1.5 | TP 2:1 | Max {} positions".format(risk_pct, sniper_cfg.MAX_SIMULTANEOUS_TRADES), 'INFO')
-            add_bot_log("Scan #{} demarre".format(shared_data['scan_count'] + 1), 'INFO')
-            trader = PaperTrader()
-            stats = run_sniper_cycle(paper_trader=trader, position_manager=run_loop._position_manager)
+            shared_data['scan_count'] += 1
+            add_bot_log("Scan #{} demarre".format(shared_data['scan_count']), 'INFO')
+
+            trader = PaperTrader(on_position_closed=_on_position_closed)
+            stats = run_sniper_cycle(paper_trader=trader, position_manager=run_loop._position_manager, on_log=add_bot_log)
             shared_data['sniper_stats'] = stats
             shared_data['last_update'] = datetime.now().strftime('%H:%M:%S')
             if stats.get('last_prices'):
@@ -1540,11 +1546,8 @@ def run_loop():
             cand = stats.get('candidates', 0)
             passed = stats.get('passed', 0)
             execd = stats.get('executed', 0)
-            add_bot_log("Scan: {} paires demandees, {} avec donnees, {} analysees (200+ candles)".format(req, with_data, analyzed), 'INFO')
-            add_bot_log("Resultat: {} candidats detectes, {} passes (score>={}), {} executes".format(cand, passed, sniper_cfg.MIN_SETUP_SCORE, execd), 'INFO')
-            if ranked:
-                tops = ", ".join(["{} {} ({})".format(s.get('symbol', ''), s.get('direction', ''), s.get('score', 0)) for s in ranked[:5]])
-                add_bot_log("Top setups: {}".format(tops), 'INFO')
+            add_bot_log("Bilan: {} paires scannees, {} analysees, {} candidats, {} passes, {} executes".format(
+                with_data, analyzed, cand, passed, execd), 'INFO')
             if stats.get('errors'):
                 add_bot_log("Erreurs: {}".format("; ".join(stats['errors'][:3])), 'WARN')
         except Exception as e:

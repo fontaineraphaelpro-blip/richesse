@@ -34,6 +34,7 @@ def run_sniper_cycle(
     paper_trader=None,
     position_manager: PositionManager = None,
     symbols: list = None,
+    on_log=None,
 ) -> dict:
     """
     One full cycle: scan → detect → score → rank → execute.
@@ -54,6 +55,13 @@ def run_sniper_cycle(
 
     stats = {"candidates": 0, "passed": 0, "executed": 0, "setups": [], "errors": [], "symbols_requested": 0, "symbols_with_data": 0, "symbols_analyzed": 0}
 
+    def _log(msg, level="INFO"):
+        if on_log:
+            try:
+                on_log(msg, level)
+            except Exception:
+                pass
+
     try:
         result = scan_markets(symbols=symbols)
         if len(result) == 4:
@@ -65,11 +73,19 @@ def run_sniper_cycle(
             stats["symbols_requested"] = len(data_primary)
             stats["symbols_with_data"] = len(data_primary)
         log_scan_start(len(data_primary))
+        _log("Donnees chargees: {} paires avec OHLCV 15m+1h ({} demandees)".format(
+            stats["symbols_with_data"], stats["symbols_requested"]), "INFO")
     except Exception as e:
         stats["errors"].append("scan_markets: " + str(e))
+        _log("Erreur chargement donnees: {}".format(str(e)), "ERROR")
         return stats
 
     btc_regime = get_btc_regime()
+    btc_close = btc_regime.get("close")
+    btc_str = "bullish" if btc_regime.get("is_bullish") else ("bearish" if btc_regime.get("is_bearish") else "neutre")
+    _log("BTC: {} | Prix: {} | RSI: {}".format(
+        btc_str, "{:.0f}".format(btc_close) if btc_close else "N/A",
+        "{:.0f}".format(btc_regime.get("rsi14")) if btc_regime.get("rsi14") is not None else "N/A"), "INFO")
     if not btc_regime.get("is_bullish") and not btc_regime.get("close"):
         # Still continue to detect setups; scoring will penalize missing BTC confirmation
         pass
@@ -104,7 +120,19 @@ def run_sniper_cycle(
     stats["symbols_analyzed"] = symbols_analyzed
     passed = [s for s in setups_with_symbol if s.get("passed")]
     stats["passed"] = len(passed)
+    rejected = [s for s in setups_with_symbol if not s.get("passed")]
+    if rejected and len(rejected) <= 5:
+        for s in rejected[:5]:
+            _log("Rejete: {} {} score {}/10 (min {})".format(
+                s.get("_symbol"), s.get("direction"), s.get("score", 0), cfg.MIN_SETUP_SCORE), "INFO")
+    elif rejected:
+        _log("{} setups rejetes (score < {})".format(len(rejected), cfg.MIN_SETUP_SCORE), "INFO")
     ranked = rank_setups(passed)
+    if not passed:
+        _log("Aucun setup qualifie ce cycle (tous score < {})".format(cfg.MIN_SETUP_SCORE), "INFO")
+    elif ranked:
+        _log("Top {} retenus: {}".format(len(ranked), ", ".join(
+            ["{} {} ({})".format(s.get("_symbol"), s.get("direction"), s.get("score")) for s in ranked])), "INFO")
 
     # For dashboard: ranked setups (symbol, score, entry, direction)
     stats["ranked_setups"] = [
@@ -152,9 +180,14 @@ def run_sniper_cycle(
                     quantity=result["quantity"],
                     score=setup.get("score", 0),
                 )
+                _log("ENTREE {} {} @ {:.4f} | Marge: {:.2f} USDT | SL: {:.4f} | TP: {:.4f} | Score {}".format(
+                    result.get("direction", "LONG"), symbol, result["entry"], result["amount_usdt"],
+                    result["stop_loss"], result["take_profit"], setup.get("score", 0)), "TRADE")
                 stats["setups"].append({"symbol": symbol, "direction": setup.get("direction", "LONG"), "score": setup.get("score"), "entry": result["entry"]})
             else:
-                log_setup_rejected(symbol, result.get("reason", "execute failed"))
+                reason = result.get("reason", "execute failed")
+                log_setup_rejected(symbol, reason)
+                _log("{} non execute: {}".format(symbol, reason), "WARN")
         except Exception as e:
             stats["errors"].append("{} execute: {}".format(symbol, str(e)))
 

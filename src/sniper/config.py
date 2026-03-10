@@ -92,5 +92,5 @@ ONE_TRADE_PER_ASSET = True
 COOLDOWN_MINUTES_PER_ASSET = 30
 
 # Async / scan
-SCAN_INTERVAL_SEC = 60
+SCAN_INTERVAL_SEC = 900  # 15 min (aligné sur le timeframe 15m)
 ASYNC_WORKERS = 5

@@ -113,22 +113,79 @@ h2 { font-size: 0.95rem; color: var(--text-muted); text-transform: uppercase; le
 .strategy-banner strong { color: var(--text); }
 
 /* Activity feed */
+.activity-feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.activity-feed-filters {
+  display: flex;
+  gap: 10px;
+  padding: 4px 8px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+}
+.activity-feed-filters button {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--text-muted);
+}
+.activity-feed-filters button.active { color: var(--accent); }
+.activity-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: livePulse 2s infinite;
+}
+@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .activity-feed {
-  max-height: 280px;
+  max-height: 420px;
   overflow-y: auto;
   font-size: 0.85rem;
+  scroll-behavior: smooth;
 }
+.activity-feed::-webkit-scrollbar { width: 6px; }
+.activity-feed::-webkit-scrollbar-track { background: var(--bg); border-radius: 3px; }
+.activity-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .activity-line {
   display: flex;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  margin-bottom: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
   align-items: flex-start;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
 }
 .activity-line:hover { background: var(--bg-hover); }
-.activity-time { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; min-width: 64px; }
-.activity-msg { flex: 1; word-break: break-word; }
+.activity-line.level-INFO { border-left-color: var(--accent); }
+.activity-line.level-TRADE { border-left-color: var(--green); }
+.activity-line.level-WARN { border-left-color: var(--yellow); }
+.activity-line.level-ERROR { border-left-color: var(--red); }
+.activity-line.new { animation: fadeIn 0.6s ease; }
+@keyframes fadeIn { from { opacity: 0.5; background: var(--accent-dim); } to { opacity: 1; } }
+.activity-level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.activity-line.level-INFO .activity-level { background: var(--accent-dim); color: var(--accent); }
+.activity-line.level-TRADE .activity-level { background: var(--green-dim); color: var(--green); }
+.activity-line.level-WARN .activity-level { background: rgba(210,153,34,0.25); color: var(--yellow); }
+.activity-line.level-ERROR .activity-level { background: var(--red-dim); color: var(--red); }
+.activity-time { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; min-width: 58px; }
+.activity-msg { flex: 1; word-break: break-word; line-height: 1.5; }
 .activity-line.level-INFO .activity-msg { color: var(--text); }
 .activity-line.level-TRADE .activity-msg { color: var(--green); }
 .activity-line.level-WARN .activity-msg { color: var(--yellow); }
@@ -194,14 +251,6 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
 .empty { color: var(--text-muted); padding: 16px; text-align: center; font-size: 0.9rem; }
 .block-reason { margin-bottom: 12px; padding: 10px; background: var(--red-dim); border-radius: 8px; color: var(--red); font-size: 0.85rem; }
 
-/* Refresh indicator */
-.refresh-indicator {
-  position: fixed;
-  bottom: 12px;
-  right: 12px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
 </style>
 </head>
 <body>
@@ -218,6 +267,7 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
         <span>Dernière MAJ: <span id="lastUpdate">{{ last_update or '-' }}</span></span>
       </div>
     </div>
+    <button onclick="location.reload()" class="secondary" style="font-size:0.8rem;padding:6px 10px">Actualiser</button>
     <button onclick="resetWallet()" class="secondary" style="font-size:0.8rem;padding:6px 10px">Réinitialiser (100 USDT)</button>
   </header>
 
@@ -343,18 +393,31 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
 
     <!-- Colonne droite: activité temps réel -->
     <div>
-      <div class="card" style="height:100%;min-height:400px;">
-        <h2>Activité en temps réel</h2>
+      <div class="card" style="height:100%;min-height:480px;">
+        <div class="activity-feed-header">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <h2 style="margin:0;">Activit&eacute; en temps r&eacute;el</h2>
+            <span class="activity-live-dot" id="liveDot" title="Statut" style="background:{% if is_scanning %}var(--yellow){% else %}var(--green){% endif %}"></span>
+          </div>
+          <div class="activity-feed-filters">
+            <button type="button" class="active" data-filter="ALL" onclick="setActivityFilter('ALL')">Tous</button>
+            <button type="button" data-filter="INFO" onclick="setActivityFilter('INFO')">Info</button>
+            <button type="button" data-filter="TRADE" onclick="setActivityFilter('TRADE')">Trades</button>
+            <button type="button" data-filter="WARN" onclick="setActivityFilter('WARN')">Alertes</button>
+            <button type="button" data-filter="ERROR" onclick="setActivityFilter('ERROR')">Erreurs</button>
+          </div>
+        </div>
         <div class="activity-feed" id="activityFeed">
           {% if bot_log %}
           {% for e in bot_log %}
-          <div class="activity-line level-{{ e.level|default('INFO') }}">
+          <div class="activity-line level-{{ e.level|default('INFO') }}" data-level="{{ e.level|default('INFO') }}">
+            <span class="activity-level">{{ (e.level|default('INFO'))[:1] }}</span>
             <span class="activity-time">{{ e.time }}</span>
             <span class="activity-msg">{{ e.msg }}</span>
           </div>
           {% endfor %}
           {% else %}
-          <p class="empty">En attente...</p>
+          <p class="empty">En attente de la premi&egrave;re activit&eacute;...</p>
           {% endif %}
         </div>
       </div>
@@ -362,12 +425,7 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
   </div>
 </div>
 
-<div class="refresh-indicator" id="refreshIndicator">MAJ auto: <span id="countdown">15</span>s</div>
-
 <script>
-  const REFRESH_INTERVAL = 15;
-  let countdown = REFRESH_INTERVAL;
-
   function resetWallet() {
     if (!confirm('Réinitialiser à 100 USDT ? Toutes les positions et l\'historique seront supprimés.')) return;
     fetch('/api/reset', { method: 'POST' })
@@ -383,55 +441,18 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
       .catch(function() { alert('Erreur réseau'); });
   }
 
-  function renderActivityFeed(log) {
-    const el = document.getElementById('activityFeed');
-    if (!el || !log || !log.length) return;
-    el.innerHTML = log.map(function(e) {
-      const level = (e.level || 'INFO');
-      return '<div class="activity-line level-' + level + '"><span class="activity-time">' + (e.time || '') + '</span><span class="activity-msg">' + (e.msg || '').replace(/</g, '&lt;') + '</span></div>';
-    }).join('');
+  let activityFilter = 'ALL';
+  function setActivityFilter(f) {
+    activityFilter = f;
+    document.querySelectorAll('.activity-feed-filters button').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.filter === f);
+    });
+    document.querySelectorAll('.activity-line').forEach(function(line) {
+      const level = line.dataset.level || 'INFO';
+      line.style.display = (f === 'ALL' || level === f) ? '' : 'none';
+    });
   }
 
-  function renderSniperStats(stats) {
-    const container = document.getElementById('sniperStatsBox');
-    if (!container || !stats) return;
-    const scanned = stats.symbols_with_data || 0, c = stats.candidates || 0, p = stats.passed || 0, e = stats.executed || 0;
-    container.innerHTML = '<div class="sniper-stat"><span class="num">' + scanned + '</span><span class="label">paires scannées</span></div>' +
-      '<div class="sniper-stat"><span class="num">' + c + '</span><span class="label">candidats</span></div>' +
-      '<div class="sniper-stat"><span class="num">' + p + '</span><span class="label">passés</span></div>' +
-      '<div class="sniper-stat"><span class="num">' + e + '</span><span class="label">exécutés</span></div>';
-  }
-
-  function refreshData() {
-    fetch('/api/data')
-      .then(r => r.json())
-      .then(function(d) {
-        if (d.error) return;
-        renderActivityFeed(d.bot_log || []);
-        renderSniperStats(d.sniper_stats);
-        var status = document.getElementById('scanStatus');
-        if (status) {
-          status.innerHTML = '<span class="pulse"></span>' + (d.is_scanning ? 'Scan en cours...' : 'Actif');
-          status.className = 'status-badge ' + (d.is_scanning ? 'scanning' : 'idle');
-        }
-        var lu = document.getElementById('lastUpdate');
-        if (lu) lu.textContent = d.last_update || '-';
-        var sc = document.getElementById('scanCount');
-        if (sc) sc.textContent = d.scan_count;
-        countdown = REFRESH_INTERVAL;
-      })
-      .catch(function() { countdown = REFRESH_INTERVAL; });
-  }
-
-  function updateCountdown() {
-    countdown--;
-    var el = document.getElementById('countdown');
-    if (el) el.textContent = countdown;
-    if (countdown <= 0) {
-      refreshData();
-    }
-  }
-  setInterval(updateCountdown, 1000);
 </script>
 </body>
 </html>

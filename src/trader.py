@@ -19,8 +19,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class PaperTrader:
-    def __init__(self, initial_balance=100):
+    def __init__(self, initial_balance=100, on_position_closed=None):
         self.protector = ReversalProtector()  # Protection contre reversals
+        self.on_position_closed = on_position_closed  # callback(symbol, direction, reason, pnl_value, pnl_percent)
         self.short_leverage = 15.0  # Levier 15x (max profit — risque plus élevé)
         self.long_leverage = 15.0  # Levier 15x LONG
         # Frais simulés 0.05% par côté (open/close)
@@ -887,6 +888,12 @@ class PaperTrader:
         status = "[OK] GAIN" if pnl_value > 0 else "[X] PERTE"
         print(f"[MONEY] VENTE {symbol:<12} ({reason}) | {status}: "
               f"${pnl_value:+.2f} ({pnl_percent:+.2f}%)")
+
+        if self.on_position_closed:
+            try:
+                self.on_position_closed(symbol, direction, reason, pnl_value, pnl_percent)
+            except Exception:
+                pass
 
         exit_time_str = datetime.now().strftime('%d/%m %H:%M')
         entry_time_raw = pos.get('entry_time', '')
