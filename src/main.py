@@ -1522,7 +1522,9 @@ def run_loop():
                 run_loop._position_manager = PositionManager()
                 add_bot_log("Setup Sniper demarre — Timeframe: {} | Score>={} | Top {} setups".format(
                     sniper_cfg.TIMEFRAME_PRIMARY, sniper_cfg.MIN_SETUP_SCORE, sniper_cfg.TOP_N_SETUPS), 'INFO')
-                add_bot_log("Risk 1% | SL ATRx1.5 | TP 2:1 | Max {} positions".format(sniper_cfg.MAX_SIMULTANEOUS_TRADES), 'INFO')
+                risk_pct = int(sniper_cfg.RISK_PCT_PER_TRADE * 100)
+                add_bot_log("Risk {}% | SL ATRx1.5 | TP 2:1 | Max {} positions".format(risk_pct, sniper_cfg.MAX_SIMULTANEOUS_TRADES), 'INFO')
+            add_bot_log("Scan #{} demarre".format(shared_data['scan_count'] + 1), 'INFO')
             trader = PaperTrader()
             stats = run_sniper_cycle(paper_trader=trader, position_manager=run_loop._position_manager)
             shared_data['sniper_stats'] = stats
@@ -1532,7 +1534,19 @@ def run_loop():
                 shared_data['last_prices'].update(stats['last_prices'])
             ranked = stats.get('ranked_setups') or []
             shared_data['opportunities'] = [{'pair': s.get('symbol') or '', 'price': s.get('entry') or 0, 'entry_signal': s.get('direction') or 'LONG', 'score': int(s.get('score') or 0), 'rr_ratio': sniper_cfg.TAKE_PROFIT_RR} for s in ranked]
-            add_bot_log("Sniper: {} candidats, {} passes, {} executes".format(stats.get('candidates', 0), stats.get('passed', 0), stats.get('executed', 0)), 'INFO')
+            req = stats.get('symbols_requested', 0) or 500
+            with_data = stats.get('symbols_with_data', 0)
+            analyzed = stats.get('symbols_analyzed', 0)
+            cand = stats.get('candidates', 0)
+            passed = stats.get('passed', 0)
+            execd = stats.get('executed', 0)
+            add_bot_log("Scan: {} paires demandees, {} avec donnees, {} analysees (200+ candles)".format(req, with_data, analyzed), 'INFO')
+            add_bot_log("Resultat: {} candidats detectes, {} passes (score>={}), {} executes".format(cand, passed, sniper_cfg.MIN_SETUP_SCORE, execd), 'INFO')
+            if ranked:
+                tops = ", ".join(["{} {} ({})".format(s.get('symbol', ''), s.get('direction', ''), s.get('score', 0)) for s in ranked[:5]])
+                add_bot_log("Top setups: {}".format(tops), 'INFO')
+            if stats.get('errors'):
+                add_bot_log("Erreurs: {}".format("; ".join(stats['errors'][:3])), 'WARN')
         except Exception as e:
             import traceback
             tb = traceback.format_exc()

@@ -93,4 +93,8 @@ def scan_markets(
     data_higher = {s: data_higher[s] for s in common}
     last_prices = {s: last_prices[s] for s in common}
 
-    return data_primary, data_higher, last_prices
+    scan_info = {
+        "symbols_requested": len(symbols),
+        "symbols_with_data": len(common),
+    }
+    return data_primary, data_higher, last_prices, scan_info

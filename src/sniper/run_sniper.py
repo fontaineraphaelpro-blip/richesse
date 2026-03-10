@@ -52,10 +52,18 @@ def run_sniper_cycle(
         except Exception:
             pass
 
-    stats = {"candidates": 0, "passed": 0, "executed": 0, "setups": [], "errors": []}
+    stats = {"candidates": 0, "passed": 0, "executed": 0, "setups": [], "errors": [], "symbols_requested": 0, "symbols_with_data": 0, "symbols_analyzed": 0}
 
     try:
-        data_primary, data_higher, last_prices = scan_markets(symbols=symbols)
+        result = scan_markets(symbols=symbols)
+        if len(result) == 4:
+            data_primary, data_higher, last_prices, scan_info = result
+            stats["symbols_requested"] = scan_info.get("symbols_requested", 0)
+            stats["symbols_with_data"] = scan_info.get("symbols_with_data", 0)
+        else:
+            data_primary, data_higher, last_prices = result[:3]
+            stats["symbols_requested"] = len(data_primary)
+            stats["symbols_with_data"] = len(data_primary)
         log_scan_start(len(data_primary))
     except Exception as e:
         stats["errors"].append("scan_markets: " + str(e))
@@ -67,9 +75,11 @@ def run_sniper_cycle(
         pass
 
     setups_with_symbol = []
+    symbols_analyzed = 0
     for symbol, df in data_primary.items():
         if df is None or len(df) < 200:
             continue
+        symbols_analyzed += 1
         try:
             result = detect_setup(
                 df_primary=df,
@@ -91,6 +101,7 @@ def run_sniper_cycle(
             stats["errors"].append("{} detect: {}".format(symbol, str(e)))
             log_setup_rejected(symbol, str(e))
 
+    stats["symbols_analyzed"] = symbols_analyzed
     passed = [s for s in setups_with_symbol if s.get("passed")]
     stats["passed"] = len(passed)
     ranked = rank_setups(passed)

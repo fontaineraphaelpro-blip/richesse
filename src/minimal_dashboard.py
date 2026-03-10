@@ -252,8 +252,9 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
       <div class="card" style="margin-bottom: 16px;" id="sniperStatsCard">
         <h2>Dernier scan</h2>
         <div class="sniper-stats" id="sniperStatsBox">
+          <div class="sniper-stat"><span class="num">{{ sniper_stats.symbols_with_data|default(0) if sniper_stats else 0 }}</span><span class="label">paires scannées</span></div>
           <div class="sniper-stat"><span class="num">{{ sniper_stats.candidates|default(0) if sniper_stats else 0 }}</span><span class="label">candidats</span></div>
-          <div class="sniper-stat"><span class="num">{{ sniper_stats.passed|default(0) if sniper_stats else 0 }}</span><span class="label">passés (score &ge;{{ min_score }})</span></div>
+          <div class="sniper-stat"><span class="num">{{ sniper_stats.passed|default(0) if sniper_stats else 0 }}</span><span class="label">passés</span></div>
           <div class="sniper-stat"><span class="num">{{ sniper_stats.executed|default(0) if sniper_stats else 0 }}</span><span class="label">exécutés</span></div>
         </div>
         {% if sniper_stats and sniper_stats.errors %}
@@ -394,8 +395,9 @@ button.secondary { background: var(--bg-hover); color: var(--text); }
   function renderSniperStats(stats) {
     const container = document.getElementById('sniperStatsBox');
     if (!container || !stats) return;
-    const c = stats.candidates || 0, p = stats.passed || 0, e = stats.executed || 0;
-    container.innerHTML = '<div class="sniper-stat"><span class="num">' + c + '</span><span class="label">candidats</span></div>' +
+    const scanned = stats.symbols_with_data || 0, c = stats.candidates || 0, p = stats.passed || 0, e = stats.executed || 0;
+    container.innerHTML = '<div class="sniper-stat"><span class="num">' + scanned + '</span><span class="label">paires scannées</span></div>' +
+      '<div class="sniper-stat"><span class="num">' + c + '</span><span class="label">candidats</span></div>' +
       '<div class="sniper-stat"><span class="num">' + p + '</span><span class="label">passés</span></div>' +
       '<div class="sniper-stat"><span class="num">' + e + '</span><span class="label">exécutés</span></div>';
   }
