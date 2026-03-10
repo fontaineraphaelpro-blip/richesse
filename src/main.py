@@ -282,6 +282,7 @@ ADAPTIVE_OVERRIDE_PARAMS = False
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 shared_data = {
     'opportunities': [],        # Top opportunités du dernier scan
+    'sniper_stats': {},        # Dernier scan: candidates, passed, executed, errors
     'all_scanned': [],          # Toutes les paires analysées
     'last_prices': {},          # Prix actuels
     'last_prices_updated_at': 0,  # timestamp (time.time()) du dernier update — éviter PnL stale
@@ -716,6 +717,9 @@ def dashboard():
     all_trades = trader.get_trades_history()
     trades_history = [t for t in all_trades if 'VENTE' in t.get('type', '')][:50]
 
+    sniper_stats = shared_data.get('sniper_stats') or {}
+    min_score = shared_data.get('min_score') or shared_data.get('adaptive_regime', {}).get('min_score', 7)
+
     return render_template_string(
         get_minimal_dashboard_html(),
         balance=balance,
@@ -723,12 +727,13 @@ def dashboard():
         positions=positions_view,
         total_unrealized_pnl=total_unrealized_pnl,
         opportunities=shared_data['opportunities'],
-        min_score=shared_data.get('min_score', 7),
+        min_score=min_score,
         last_block_reason=shared_data.get('last_block_reason'),
         is_scanning=shared_data['is_scanning'],
         last_update=shared_data['last_update'],
         scan_count=shared_data['scan_count'],
         bot_log=shared_data['bot_log'],
+        sniper_stats=sniper_stats,
         perf=perf,
         trades_history=trades_history,
         drawdown_7d_pct=round(drawdown_7d_pct, 1),
@@ -800,7 +805,8 @@ def api_data():
             'is_scanning': shared_data['is_scanning'],
             'last_update': shared_data['last_update'],
             'scan_count': shared_data['scan_count'],
-            'bot_log': shared_data['bot_log'][:15],
+            'bot_log': shared_data['bot_log'][:30],
+            'sniper_stats': shared_data.get('sniper_stats', {}),
             'performance': shared_data.get('performance', {}),
             'market_stats': shared_data.get('market_stats', {}),
         })
