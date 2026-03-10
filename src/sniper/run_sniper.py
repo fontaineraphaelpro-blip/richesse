@@ -93,6 +93,17 @@ def run_sniper_cycle(
     stats["passed"] = len(passed)
     ranked = rank_setups(passed)
 
+    # For dashboard: ranked setups (symbol, score, entry)
+    stats["ranked_setups"] = [
+        {
+            "symbol": s.get("_symbol"),
+            "score": s.get("score", 0),
+            "entry": (s.get("indicators") or {}).get("close"),
+        }
+        for s in ranked
+    ]
+    stats["last_prices"] = last_prices
+
     # Account equity from paper trader or default
     account_equity = 100.0
     if paper_trader is not None:
