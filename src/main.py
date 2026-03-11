@@ -1503,15 +1503,31 @@ def _get_scan_interval():
         return SCAN_INTERVAL_NIGHT  # 45s — robot: même fréquence 24/7
     return SCAN_INTERVAL  # 90s
 
+def _wait_until_next_candle_close():
+    """Attend la prochaine cloture de bougie 15m (:00, :15, :30, :45 UTC)."""
+    from datetime import timedelta
+    now = datetime.utcnow()
+    next_boundary = ((now.minute // 15) + 1) * 15
+    if next_boundary >= 60:
+        next_time = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    else:
+        next_time = now.replace(minute=next_boundary, second=0, microsecond=0)
+    wait_sec = (next_time - now).total_seconds() + 3
+    return max(1, wait_sec), next_time
+
+
 def run_loop():
-    """Boucle infinie — Setup Sniper uniquement."""
-    add_bot_log("âš¡ Swing Bot dÃ©marrÃ© â€” Timeframe: ", 'INFO')
+    """Boucle infinie — Setup Sniper uniquement. Scan aligne sur cloture bougies 15m."""
+    add_bot_log("Swing Bot demarre — Scan a chaque cloture 15m (:00, :15, :30, :45 UTC)", 'INFO')
     while True:
         now_utc = datetime.utcnow()
         if AVOID_WEEKENDS and now_utc.weekday() >= 5:
             add_bot_log("Weekend: pause trading, volume trop faible.", 'INFO')
             time.sleep(3600)
             continue
+        wait_sec, next_time = _wait_until_next_candle_close()
+        add_bot_log("Prochain scan a {} (cloture 15m)".format(next_time.strftime('%H:%M')), 'INFO')
+        time.sleep(wait_sec)
         try:
             shared_data['sentiment_display'] = fetch_sentiment_for_dashboard()
         except Exception as e:
@@ -1558,11 +1574,6 @@ def run_loop():
         finally:
             shared_data['is_scanning'] = False
 
-        from sniper import config as _sniper_cfg
-        interval = getattr(_sniper_cfg, 'SCAN_INTERVAL_SEC', 60)
-        pause_str = "{} min".format(interval // 60) if interval >= 60 else "{} s".format(interval)
-        add_bot_log("Pause {} — prochain scan a {}".format(pause_str, datetime.now().strftime('%H:%M')), 'INFO')
-        time.sleep(interval)
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
