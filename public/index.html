@@ -1447,7 +1447,9 @@ function selectCoin(sym) {
   if(wlEl) wlEl.classList.add('active');
   updateCoinUI(sym);
   fetchCoinData(sym);
-  generateWhyMoving(sym);
+  fetchWhyMoving(sym);
+  fetchScenarios(sym);
+  fetchTimeline(sym);
   generateAIAnalysis(sym);
   generateDebate(sym);
 }
@@ -1804,8 +1806,8 @@ function computeMarketStress(fgVal) {
   }
 }
 
-// ─── WHY MOVING ENGINE ────────────────────────────────────────
-function generateWhyMoving(sym) {
+// ─── WHY MOVING (live metrics) ─────────────────────────────────
+async function fetchWhyMoving(sym) {
   const reasons = {
     BTC: [
       { label:'Macro / DXY correlation', pct: 38, col:'var(--cyan)' },
@@ -2266,5 +2268,6 @@ async function init() {
   }, 30000);
 }
 
-init().catch(console.error);
 </script>
+<script src="/live-data.js"></script>
+<script>init().catch(console.error);</script>
