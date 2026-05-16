@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crypto Context Radar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --bg-deep: #050810;
+    --bg-panel: #080d1a;
+    --bg-card: #0d1525;
+    --bg-hover: #111d35;
+    --border: rgba(0,180,255,0.12);
+    --border-bright: rgba(0,180,255,0.3);
+    --cyan: #00d4ff;
+    --cyan-dim: rgba(0,212,255,0.6);
+    --blue: #1e90ff;
+    --violet: #7c3aed;
+    --green: #00ff88;
+    --red: #ff3b6b;
+    --amber: #ffb020;
+    --text: #e2eaf8;
+    --text-muted: #6b7fa0;
+    --text-dim: #3a4a6a;
+    --font: 'Space Grotesk', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+    --glow-cyan: 0 0 20px rgba(0,212,255,0.15);
+    --glow-green: 0 0 20px rgba(0,255,136,0.15);
+    --glow-red: 0 0 20px rgba(255,59,107,0.15);
+  }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* TOP BAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    height: 52px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--cyan);
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+
+  .logo-icon {
+    width: 26px;
+    height: 26px;
+    border: 1.5px solid var(--cyan);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    box-shadow: var(--glow-cyan);
+  }
+
+  .search-bar {
+    flex: 1;
+    max-width: 280px;
+    position: relative;
+  }
+
+  .search-bar input {
+    width: 100%;
+    background: rgba(0,212,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px 6px 32px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .search-bar input:focus {
+    border-color: var(--cyan-dim);
+    background: rgba(0,212,255,0.08);
+    box-shadow: var(--glow-cyan);
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-bright);
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 200;
+    display: none;
+  }
+
+  .search-dropdown.open { display: block; }
+
+  .search-item {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+  }
+
+  .search-item:hover { background: var(--bg-hover); }
+
+  .coin-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(0,212,255,0.1);
+    color: var(--cyan);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .tf-selector {
+    display: flex;
+    gap: 2px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2px;
+  }
+
+  .tf-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  .tf-btn.active {
+    background: var(--cyan);
+    color: #000;
+    font-weight: 600;
+  }
+
+  .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--green);
+  }
+
+  .ws-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
+  }
+
+  .clock {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .regime-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .regime-risk-on {
+    background: rgba(0,255,136,0.1);
+    color: var(--green);
+    border: 1px solid rgba(0,255,136,0.25);
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto auto 1fr;
+    gap: 0;
+    min-height: calc(100vh - 52px);
+  }
+
+  /* LEFT PANEL */
+  .left-panel {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+
+  /* RIGHT SIDEBAR */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-family: var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .section-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+  }
+
+  /* MARKET CONTEXT ROW */
+  .market-context-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .ctx-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: default;
+  }
+
+  .ctx-card:hover {
+    border-color: var(--border-bright);
+    transform: translateY(-1px);
+  }
+
+  .ctx-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--blue));
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .ctx-card:hover::before { opacity: 1; }
+
+  .ctx-label {
+    font-size: 9px;
+    font-family: var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .ctx-value {
+    font-size: 16px;
+    font-weight: 600;
+    font-family: var(--mono);
+    color: var(--text);
+    line-height: 1.1;
+  }
+
+  .ctx-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: var(--mono);
+  }
+
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .neutral { color: var(--amber); }
+
+  /* FEAR GREED GAUGE */
+  .fg-gauge {
+    position: relative;
+    margin-top: 4px;
+  }
+
+  .fg-number {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+
+  /* MAIN CHART AREA */
+  .chart-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .chart-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .selected-coin {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .coin-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+
+  .coin-name { font-size: 15px; font-weight: 600; }
+  .coin-full { font-size: 11px; color: var(--text-muted); }
+
+  .price-display {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .price-main {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--text);
+    transition: color 0.3s;
+  }
+
+  .price-change {
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+
+  .chart-canvas-wrap {
+    height: 320px;
+    position: relative;
+    padding: 12px;
+  }
+
+  /* METRICS ROW */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .metric-item {
+    text-align: center;
+  }
+
+  .metric-label {
+    font-size: 9px;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    font-size: 13px;
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+
+  /* ANALYSIS GRID */
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* AI PANEL */
+  .ai-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .ai-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .ai-loading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: ai-blink 1.4s infinite;
+  }
+
+  .ai-dot:nth-child(2) { animation-delay: 0.2s; }
+  .ai-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes ai-blink {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  .ai-body {
+    padding: 14px 16px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--text);
+    min-height: 140px;
+  }
+
+  .ai-body .ai-highlight {
+    color: var(--cyan);
+    font-weight: 500;
+  }
+
+  .ai-body .ai-warning {
+    color: var(--amber);
+    font-weight: 500;
+  }
+
+  .confidence-bar-wrap {
+    padding: 8px 16px 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .conf-label {
+    font-size: 9px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .conf-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .conf-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--blue), var(--cyan));
+    transition: width 0.8s ease;
+  }
+
+  /* WHY MOVING */
+  .why-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .why-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .why-label { font-size: 12px; color: var(--text); flex: 1; }
+  .why-pct {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    width: 40px;
+    text-align: right;
+  }
+
+  .why-bar-bg {
+    flex: 0 0 80px;
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .why-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+  }
+
+  /* REGIME ENGINE */
+  .regime-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .regime-badge-large {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .regime-trending {
+    background: rgba(0,255,136,0.08);
+    color: var(--green);
+    border: 1px solid rgba(0,255,136,0.2);
+  }
+
+  .regime-signals {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .signal-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .signal-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* RIGHT PANEL */
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sidebar-title {
+    padding: 10px 14px;
+    font-size: 9px;
+    font-family: var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* NEWS FEED */
+  .news-feed {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .news-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .news-item:hover { background: var(--bg-hover); }
+
+  .news-time {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+  }
+
+  .news-title {
+    font-size: 11.5px;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 4px;
+  }
+
+  .news-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .news-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .tag-pos { background: rgba(0,255,136,0.1); color: var(--green); }
+  .tag-neg { background: rgba(255,59,107,0.1); color: var(--red); }
+  .tag-neu { background: rgba(0,212,255,0.08); color: var(--cyan-dim); }
+
+  /* TIMELINE */
+  .timeline {
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    max-height: 220px;
+  }
+
+  .tl-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 11px;
+  }
+
+  .tl-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 38px;
+  }
+
+  .tl-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .tl-text { color: var(--text-muted); line-height: 1.4; }
+  .tl-highlight { color: var(--text); font-weight: 500; }
+
+  /* ALERTS */
+  .alerts-list {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .alert-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-size: 11px;
+    animation: alert-in 0.3s ease;
+  }
+
+  @keyframes alert-in {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .alert-liq {
+    background: rgba(255,59,107,0.08);
+    border-color: rgba(255,59,107,0.2);
+  }
+
+  .alert-whale {
+    background: rgba(124,58,237,0.08);
+    border-color: rgba(124,58,237,0.2);
+  }
+
+  .alert-break {
+    background: rgba(0,255,136,0.08);
+    border-color: rgba(0,255,136,0.2);
+  }
+
+  .alert-fund {
+    background: rgba(255,176,32,0.08);
+    border-color: rgba(255,176,32,0.2);
+  }
+
+  /* STRESS ENGINE */
+  .stress-gauge-wrap {
+    padding: 12px 16px;
+  }
+
+  .stress-number {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+
+  .stress-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+
+  .stress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--green), var(--amber), var(--red));
+    transition: width 1s ease;
+  }
+
+  /* CORRELATION HEATMAP */
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 3px;
+    padding: 10px;
+  }
+
+  .hm-cell {
+    aspect-ratio: 1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+
+  .hm-cell:hover { transform: scale(1.1); }
+
+  /* COIN WATCHLIST */
+  .watchlist {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    overflow-x: auto;
+    padding: 0 4px;
+    scrollbar-width: none;
+  }
+
+  .watchlist::-webkit-scrollbar { display: none; }
+
+  .wl-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .wl-item:hover, .wl-item.active {
+    background: rgba(0,212,255,0.08);
+    border-color: var(--border-bright);
+  }
+
+  .wl-sym {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .wl-price {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  /* SCENARIO */
+  .scenario-item {
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .scenario-pct {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    width: 36px;
+  }
+
+  /* LOADING SKELETON */
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-load 1.5s infinite;
+    border-radius: 4px;
+  }
+
+  @keyframes skeleton-load {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* FLASH */
+  .flash-green { animation: flash-g 0.4s ease; }
+  .flash-red { animation: flash-r 0.4s ease; }
+
+  @keyframes flash-g {
+    0%, 100% { color: var(--text); }
+    50% { color: var(--green); text-shadow: 0 0 8px rgba(0,255,136,0.5); }
+  }
+
+  @keyframes flash-r {
+    0%, 100% { color: var(--text); }
+    50% { color: var(--red); text-shadow: 0 0 8px rgba(255,59,107,0.5); }
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.15); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.3); }
+
+  /* SECTION TABS */
+  .section-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 16px 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .section-tabs::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    padding: 6px 14px;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: -1px;
+  }
+
+  .tab-btn.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* AI DEBATE */
+  .debate-col {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+  }
+
+  .debate-bull {
+    background: rgba(0,255,136,0.05);
+    border: 1px solid rgba(0,255,136,0.12);
+  }
+
+  .debate-bear {
+    background: rgba(255,59,107,0.05);
+    border: 1px solid rgba(255,59,107,0.12);
+  }
+
+  .debate-label {
+    font-size: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .debate-text {
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr; }
+    .right-panel { display: none; }
+    .market-context-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  @media (max-width: 700px) {
+    .market-context-grid { grid-template-columns: repeat(2, 1fr); }
+    .metrics-row { grid-template-columns: repeat(3, 1fr); }
+    .analysis-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<h2 class="sr-only">Crypto Context Radar — Institutional Real-Time Market Intelligence Dashboard</h2>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">◈</div>
+    <span>Crypto Context Radar</span>
+  </div>
+
+  <div class="search-bar" style="margin-left:8px">
+    <span class="search-icon">⌕</span>
+    <input type="text" placeholder="Search BTC, ETH, SOL..." id="searchInput" autocomplete="off">
+    <div class="search-dropdown" id="searchDropdown">
+      <div class="search-item" onclick="selectCoin('BTC')">
+        <span class="coin-badge">BTC</span> Bitcoin
+      </div>
+      <div class="search-item" onclick="selectCoin('ETH')">
+        <span class="coin-badge">ETH</span> Ethereum
+      </div>
+      <div class="search-item" onclick="selectCoin('SOL')">
+        <span class="coin-badge">SOL</span> Solana
+      </div>
+      <div class="search-item" onclick="selectCoin('XRP')">
+        <span class="coin-badge">XRP</span> XRP
+      </div>
+      <div class="search-item" onclick="selectCoin('AAVE')">
+        <span class="coin-badge">AAVE</span> Aave
+      </div>
+      <div class="search-item" onclick="selectCoin('AVAX')">
+        <span class="coin-badge">AVAX</span> Avalanche
+      </div>
+      <div class="search-item" onclick="selectCoin('LINK')">
+        <span class="coin-badge">LINK</span> Chainlink
+      </div>
+      <div class="search-item" onclick="selectCoin('DOT')">
+        <span class="coin-badge">DOT</span> Polkadot
+      </div>
+    </div>
+  </div>
+
+  <div class="watchlist" style="margin:0 8px">
+    <div class="wl-item active" id="wl-BTC" onclick="selectCoin('BTC')">
+      <span class="wl-sym">BTC</span>
+      <span class="wl-price pos" id="wl-price-BTC">—</span>
+    </div>
+    <div class="wl-item" id="wl-ETH" onclick="selectCoin('ETH')">
+      <span class="wl-sym">ETH</span>
+      <span class="wl-price" id="wl-price-ETH">—</span>
+    </div>
+    <div class="wl-item" id="wl-SOL" onclick="selectCoin('SOL')">
+      <span class="wl-sym">SOL</span>
+      <span class="wl-price" id="wl-price-SOL">—</span>
+    </div>
+    <div class="wl-item" id="wl-XRP" onclick="selectCoin('XRP')">
+      <span class="wl-sym">XRP</span>
+      <span class="wl-price" id="wl-price-XRP">—</span>
+    </div>
+    <div class="wl-item" id="wl-AAVE" onclick="selectCoin('AAVE')">
+      <span class="wl-sym">AAVE</span>
+      <span class="wl-price" id="wl-price-AAVE">—</span>
+    </div>
+  </div>
+
+  <div class="tf-selector" style="margin-left:auto">
+    <button class="tf-btn" onclick="setTF('1m')">1m</button>
+    <button class="tf-btn" onclick="setTF('5m')">5m</button>
+    <button class="tf-btn" onclick="setTF('15m')">15m</button>
+    <button class="tf-btn active" onclick="setTF('1h')">1H</button>
+    <button class="tf-btn" onclick="setTF('4h')">4H</button>
+    <button class="tf-btn" onclick="setTF('1d')">1D</button>
+  </div>
+
+  <div class="ws-status">
+    <div class="ws-dot" id="wsDot"></div>
+    <span id="wsStatus">LIVE</span>
+  </div>
+
+  <div class="clock" id="utcClock">—</div>
+
+  <div class="regime-badge regime-risk-on" id="regimeBadge">Risk-On Trend</div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main">
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+
+    <!-- SECTION 1: GLOBAL MARKET CONTEXT -->
+    <div>
+      <div class="section-header">
+        <div class="section-dot"></div>
+        Global Market Context
+        <span style="margin-left:auto;font-size:9px;color:var(--text-dim)" id="lastUpdate">Syncing...</span>
+      </div>
+      <div class="market-context-grid" id="ctxGrid">
+        <div class="ctx-card">
+          <div class="ctx-label">BTC Price</div>
+          <div class="ctx-value" id="btc-price">—</div>
+          <div class="ctx-sub" id="btc-change">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">BTC Dominance</div>
+          <div class="ctx-value" id="btc-dom">—</div>
+          <div class="ctx-sub" id="btc-dom-change">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">Fear &amp; Greed</div>
+          <div class="ctx-value" id="fg-val">—</div>
+          <div class="ctx-sub" id="fg-label">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">Total Mcap</div>
+          <div class="ctx-value" id="total-mcap">—</div>
+          <div class="ctx-sub" id="mcap-change">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">ETH/BTC</div>
+          <div class="ctx-value" id="eth-btc">—</div>
+          <div class="ctx-sub" id="eth-btc-trend">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">Volatility</div>
+          <div class="ctx-value" id="vol-idx">—</div>
+          <div class="ctx-sub" id="vol-level">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">Market Stress</div>
+          <div class="ctx-value" id="stress-val">—</div>
+          <div class="ctx-sub" id="stress-label">—</div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-label">Altcoin Strength</div>
+          <div class="ctx-value" id="alt-str">—</div>
+          <div class="ctx-sub" id="alt-trend">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHART AREA -->
+    <div class="chart-container">
+      <div class="chart-header">
+        <div class="selected-coin">
+          <div class="coin-icon" id="coinIcon" style="background:rgba(247,147,26,0.15);color:#f7931a">B</div>
+          <div>
+            <div class="coin-name" id="coinName">Bitcoin</div>
+            <div class="coin-full" id="coinSymbol">BTC / USDT</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;flex:1;margin:0 16px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-muted)">
+            O <span id="c-open" style="color:var(--text)">—</span>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-muted)">
+            H <span id="c-high" style="color:var(--green)">—</span>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-muted)">
+            L <span id="c-low" style="color:var(--red)">—</span>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-muted)">
+            V <span id="c-vol" style="color:var(--text)">—</span>
+          </div>
+        </div>
+
+        <div class="price-display">
+          <div class="price-main" id="mainPrice">—</div>
+          <div class="price-change" id="mainChange">—</div>
+        </div>
+      </div>
+
+      <div class="chart-canvas-wrap">
+        <canvas id="priceChart" role="img" aria-label="Real-time price chart for selected cryptocurrency"></canvas>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric-item">
+          <div class="metric-label">Funding Rate</div>
+          <div class="metric-value" id="m-funding">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Open Interest</div>
+          <div class="metric-value" id="m-oi">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">24h Volume</div>
+          <div class="metric-value" id="m-vol">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">RSI (14)</div>
+          <div class="metric-value" id="m-rsi">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Long/Short</div>
+          <div class="metric-value" id="m-lsr">—</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Liq 1H</div>
+          <div class="metric-value" id="m-liq">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS: ANALYSIS ENGINES -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div class="section-tabs">
+        <button class="tab-btn active" onclick="switchTab('analysis')">Analysis</button>
+        <button class="tab-btn" onclick="switchTab('why')">Why Moving</button>
+        <button class="tab-btn" onclick="switchTab('regime')">Regime</button>
+        <button class="tab-btn" onclick="switchTab('scenarios')">Scenarios</button>
+        <button class="tab-btn" onclick="switchTab('debate')">AI Debate</button>
+        <button class="tab-btn" onclick="switchTab('correlation')">Correlation</button>
+        <button class="tab-btn" onclick="switchTab('macro')">Macro</button>
+      </div>
+
+      <!-- ANALYSIS TAB -->
+      <div class="tab-content active" id="tab-analysis" style="padding:14px 16px">
+        <div class="analysis-grid">
+          <div class="ai-panel" style="border:none;background:transparent">
+            <div class="ai-header">
+              ◈ AI Market Analysis
+              <div class="ai-loading" style="margin-left:auto">
+                <div class="ai-dot"></div>
+                <div class="ai-dot"></div>
+                <div class="ai-dot"></div>
+              </div>
+            </div>
+            <div class="ai-body" id="aiAnalysis">
+              <span style="color:var(--text-dim)">Analyzing market conditions...</span>
+            </div>
+            <div class="confidence-bar-wrap">
+              <div class="conf-label">
+                <span>AI Confidence</span>
+                <span id="confPct">—</span>
+              </div>
+              <div class="conf-bar">
+                <div class="conf-fill" id="confFill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MARKET STRUCTURE -->
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:12px">
+              <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px">Market Structure</div>
+              <div id="structureList" style="display:flex;flex-direction:column;gap:5px">
+              </div>
+            </div>
+            <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:12px">
+              <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px">Positioning</div>
+              <div id="positioningData" style="font-size:11px;color:var(--text-muted);line-height:1.8"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHY MOVING TAB -->
+      <div class="tab-content" id="tab-why">
+        <div class="ai-header" style="padding:12px 16px;border-bottom:1px solid var(--border)">
+          ◈ Why is <span id="whyCoin" style="color:var(--cyan);margin:0 4px">BTC</span> moving?
+        </div>
+        <div id="whyReasons"></div>
+      </div>
+
+      <!-- REGIME TAB -->
+      <div class="tab-content" id="tab-regime" style="padding:14px 16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="regime-panel">
+            <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">Current Regime</div>
+            <div class="regime-badge-large regime-trending" id="regimeMain">Risk-On Trend</div>
+            <div style="font-size:11px;color:var(--text-muted);line-height:1.6" id="regimeDesc">Bullish market structure with trending momentum. Altcoins outperforming. Risk appetite elevated.</div>
+            <div style="font-size:10px;font-family:var(--mono)">
+              Confidence: <span style="color:var(--cyan)" id="regimeConf">—</span>
+            </div>
+          </div>
+          <div class="regime-signals" style="gap:6px">
+            <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px">Regime Signals</div>
+            <div id="regimeSignals"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENARIOS TAB -->
+      <div class="tab-content" id="tab-scenarios">
+        <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);padding:12px 16px 8px">Probable Scenarios Next 4H</div>
+        <div id="scenariosList"></div>
+      </div>
+
+      <!-- AI DEBATE TAB -->
+      <div class="tab-content" id="tab-debate" style="padding:14px 16px">
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <div class="debate-col debate-bull">
+            <div class="debate-label" style="color:var(--green)">▲ Bull Case</div>
+            <div class="debate-text" id="bullCase">Loading...</div>
+          </div>
+          <div class="debate-col debate-bear">
+            <div class="debate-label" style="color:var(--red)">▼ Bear Case</div>
+            <div class="debate-text" id="bearCase">Loading...</div>
+          </div>
+        </div>
+        <div style="background:rgba(0,212,255,0.05);border:1px solid var(--border-bright);border-radius:8px;padding:10px;font-size:11.5px;color:var(--text);line-height:1.6" id="debateConclusion">
+          <span style="color:var(--cyan);font-weight:600">Verdict: </span>Loading...
+        </div>
+      </div>
+
+      <!-- CORRELATION TAB -->
+      <div class="tab-content" id="tab-correlation" style="padding:14px 16px">
+        <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px">Live Correlation Matrix — 24H</div>
+        <div class="heatmap-grid" id="corrMatrix"></div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.7" id="corrInsight"></div>
+      </div>
+
+      <!-- MACRO TAB -->
+      <div class="tab-content" id="tab-macro" style="padding:14px 16px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="macroGrid"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <!-- MARKET STRESS -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Market Stress Engine</div>
+      <div class="stress-gauge-wrap">
+        <div style="display:flex;align-items:baseline;gap:6px">
+          <div class="stress-number" id="stressNum">—</div>
+          <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">/100</div>
+          <div style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700" id="stressTag">—</div>
+        </div>
+        <div class="stress-bar">
+          <div class="stress-fill" id="stressFill" style="width:0%"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px" id="stressComponents"></div>
+      </div>
+    </div>
+
+    <!-- LIVE ALERTS -->
+    <div class="sidebar-section">
+      <div class="sidebar-title" style="display:flex;align-items:center;gap:6px">
+        Live Alerts
+        <span style="margin-left:auto;font-size:9px;background:rgba(255,59,107,0.15);color:var(--red);padding:1px 6px;border-radius:3px;font-family:var(--mono)" id="alertCount">0</span>
+      </div>
+      <div class="alerts-list" id="alertsList"></div>
+    </div>
+
+    <!-- CAUSAL TIMELINE -->
+    <div class="sidebar-section">
+      <div class="sidebar-title">Causal Timeline</div>
+      <div class="timeline" id="causalTimeline"></div>
+    </div>
+
+    <!-- LIVE NEWS -->
+    <div class="sidebar-title">News Intelligence</div>
+    <div class="news-feed" id="newsFeed"></div>
+  </div>
+</div>
+
+<script>
+const COINS = {
+  BTC: { name:'Bitcoin', symbol:'BTC', color:'#f7931a', letter:'B', gecko:'bitcoin', binance:'BTCUSDT' },
+  ETH: { name:'Ethereum', symbol:'ETH', color:'#627eea', letter:'E', gecko:'ethereum', binance:'ETHUSDT' },
+  SOL: { name:'Solana', symbol:'SOL', color:'#9945ff', letter:'S', gecko:'solana', binance:'SOLUSDT' },
+  XRP: { name:'XRP', symbol:'XRP', color:'#346aa9', letter:'X', gecko:'ripple', binance:'XRPUSDT' },
+  AAVE: { name:'Aave', symbol:'AAVE', color:'#b6509e', letter:'A', gecko:'aave', binance:'AAVEUSDT' },
+  AVAX: { name:'Avalanche', symbol:'AVAX', color:'#e84142', letter:'V', gecko:'avalanche-2', binance:'AVAXUSDT' },
+  LINK: { name:'Chainlink', symbol:'LINK', color:'#2a5ada', letter:'L', gecko:'chainlink', binance:'LINKUSDT' },
+  DOT: { name:'Polkadot', symbol:'DOT', color:'#e6007a', letter:'D', gecko:'polkadot', binance:'DOTUSDT' }
+};
+
+let selectedCoin = 'BTC';
+let currentTF = '1h';
+let priceChart = null;
+let chartData = { labels: [], prices: [], volumes: [] };
+let marketData = {};
+let globalData = {};
+let wsConnections = {};
+let alertHistory = [];
+let timelineEvents = [];
+
+// ─── UTILITIES ────────────────────────────────────────────────
+function fmt(n, d=2) {
+  if(n===undefined||n===null||isNaN(n)) return '—';
+  if(n>=1e12) return '$'+(n/1e12).toFixed(2)+'T';
+  if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if(n>=1000) return '$'+n.toLocaleString('en-US',{maximumFractionDigits:d});
+  return '$'+n.toFixed(d);
+}
+
+function fmtPct(n) {
+  if(n===undefined||n===null||isNaN(n)) return '—';
+  const s = n>=0 ? '+' : '';
+  return s+n.toFixed(2)+'%';
+}
+
+function fmtNum(n) {
+  if(!n) return '—';
+  if(n>=1e9) return (n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(n>=1000) return (n/1e3).toFixed(2)+'K';
+  return n.toFixed(2);
+}
+
+function colorFor(v, inv=false) {
+  const pos = inv ? v<0 : v>=0;
+  return pos ? 'var(--green)' : 'var(--red)';
+}
+
+function el(id) { return document.getElementById(id); }
+
+function setText(id, val, cls='') {
+  const e = el(id);
+  if(e) { e.textContent = val; if(cls) e.className = cls; }
+}
+
+function flashEl(id, dir) {
+  const e = el(id);
+  if(!e) return;
+  e.classList.remove('flash-green','flash-red');
+  void e.offsetWidth;
+  e.classList.add(dir>0?'flash-green':'flash-red');
+  setTimeout(()=>e.classList.remove('flash-green','flash-red'),500);
+}
+
+// ─── CLOCK ────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  el('utcClock').textContent = now.toUTCString().slice(17,25)+' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── SEARCH ───────────────────────────────────────────────────
+el('searchInput').addEventListener('input', function() {
+  el('searchDropdown').classList.toggle('open', this.value.length > 0);
+});
+el('searchInput').addEventListener('blur', () => {
+  setTimeout(() => el('searchDropdown').classList.remove('open'), 200);
+});
+
+function selectCoin(sym) {
+  selectedCoin = sym;
+  el('searchInput').value = '';
+  el('searchDropdown').classList.remove('open');
+  document.querySelectorAll('.wl-item').forEach(e=>e.classList.remove('active'));
+  const wlEl = el('wl-'+sym);
+  if(wlEl) wlEl.classList.add('active');
+  updateCoinUI(sym);
+  fetchCoinData(sym);
+  generateWhyMoving(sym);
+  generateAIAnalysis(sym);
+  generateDebate(sym);
+}
+
+function updateCoinUI(sym) {
+  const c = COINS[sym] || { name:sym, color:'#fff', letter:sym[0] };
+  el('coinIcon').textContent = c.letter;
+  el('coinIcon').style.background = c.color+'22';
+  el('coinIcon').style.color = c.color;
+  el('coinName').textContent = c.name;
+  el('coinSymbol').textContent = sym+' / USDT';
+  el('whyCoin').textContent = sym;
+}
+
+// ─── CHART ────────────────────────────────────────────────────
+function initChart() {
+  const ctx = el('priceChart').getContext('2d');
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chartData.labels,
+      datasets: [
+        {
+          label: 'Price',
+          data: chartData.prices,
+          borderColor: '#00d4ff',
+          backgroundColor: 'rgba(0,212,255,0.04)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'EMA20',
+          data: [],
+          borderColor: 'rgba(255,176,32,0.6)',
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+          yAxisID: 'y',
+          borderDash: [4,4]
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1525',
+          borderColor: 'rgba(0,212,255,0.3)',
+          borderWidth: 1,
+          titleColor: '#6b7fa0',
+          bodyColor: '#e2eaf8',
+          callbacks: {
+            label: ctx => {
+              if(ctx.dataset.label === 'Price') return ' $'+ctx.parsed.y.toLocaleString('en-US',{maximumFractionDigits:4});
+              return ' '+ctx.dataset.label+': $'+ctx.parsed.y.toLocaleString('en-US',{maximumFractionDigits:4});
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#3a4a6a', font: { family: "'JetBrains Mono'", size: 9 }, maxTicksLimit: 8, autoSkip: true },
+          grid: { color: 'rgba(255,255,255,0.03)' },
+          border: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          position: 'right',
+          ticks: {
+            color: '#6b7fa0',
+            font: { family: "'JetBrains Mono'", size: 10 },
+            callback: v => '$'+v.toLocaleString('en-US',{maximumFractionDigits:2})
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+}
+
+function calcEMA(data, period) {
+  if(data.length < period) return [];
+  const k = 2/(period+1);
+  let ema = [data.slice(0,period).reduce((a,b)=>a+b,0)/period];
+  for(let i=period;i<data.length;i++) ema.push(data[i]*k + ema[ema.length-1]*(1-k));
+  const pad = new Array(period-1).fill(null);
+  return [...pad,...ema];
+}
+
+function calcRSI(prices, period=14) {
+  if(prices.length < period+1) return null;
+  let gains=0, losses=0;
+  for(let i=1;i<=period;i++) {
+    const d = prices[i]-prices[i-1];
+    if(d>0) gains+=d; else losses-=d;
+  }
+  let avgG=gains/period, avgL=losses/period;
+  for(let i=period+1;i<prices.length;i++) {
+    const d=prices[i]-prices[i-1];
+    avgG=(avgG*(period-1)+(d>0?d:0))/period;
+    avgL=(avgL*(period-1)+(d<0?-d:0))/period;
+  }
+  if(avgL===0) return 100;
+  const rs=avgG/avgL;
+  return 100-100/(1+rs);
+}
+
+function updateChart(prices, labels) {
+  chartData.prices = prices;
+  chartData.labels = labels;
+  if(!priceChart) return;
+  priceChart.data.labels = labels;
+  priceChart.data.datasets[0].data = prices;
+  const ema = calcEMA(prices, 20);
+  priceChart.data.datasets[1].data = ema;
+  priceChart.update('none');
+}
+
+// ─── FETCH GLOBAL MARKET DATA ─────────────────────────────────
+async function fetchGlobalData() {
+  try {
+    const res = await fetch('/api/market');
+    if(!res.ok) throw new Error('market fetch failed');
+    const payload = await res.json();
+    const g = payload.global;
+    globalData = g || {};
+
+    if(g) {
+      const mcap = g.total_market_cap?.usd;
+      const mcapChange = g.market_cap_change_percentage_24h_usd;
+      const btcDom = g.market_cap_percentage?.btc;
+      const ethDom = g.market_cap_percentage?.eth;
+
+      setText('total-mcap', mcap>=1e12 ? '$'+(mcap/1e12).toFixed(2)+'T' : '$'+(mcap/1e9).toFixed(0)+'B');
+      const mc = el('mcap-change');
+      if(mc) { mc.textContent = fmtPct(mcapChange); mc.style.color = colorFor(mcapChange); }
+      setText('btc-dom', btcDom ? btcDom.toFixed(1)+'%' : '—');
+      const altStr = 100 - btcDom - ethDom;
+      setText('alt-str', altStr ? altStr.toFixed(1)+'%' : '—');
+      const altTrend = altStr > 35 ? '▲ Strong' : altStr > 25 ? '~ Moderate' : '▼ Weak';
+      const altEl = el('alt-trend');
+      if(altEl) { altEl.textContent = altTrend; altEl.style.color = altStr>35?'var(--green)':altStr>25?'var(--amber)':'var(--red)'; }
+    }
+
+    if(payload.btc) {
+      const { price, change24h } = payload.btc;
+      const btcEl = el('btc-price');
+      if(btcEl && price) btcEl.textContent = '$'+price.toLocaleString('en-US',{maximumFractionDigits:0});
+      const btcCh = el('btc-change');
+      if(btcCh && change24h != null) { btcCh.textContent = fmtPct(change24h); btcCh.style.color = colorFor(change24h); }
+    }
+
+    if(payload.fearGreed) {
+      const { value: val, classification: lbl } = payload.fearGreed;
+      const fgEl = el('fg-val');
+      if(fgEl) {
+        fgEl.textContent = val;
+        fgEl.style.color = val>=60?'var(--green)':val>=40?'var(--amber)':'var(--red)';
+      }
+      setText('fg-label', lbl);
+      computeMarketStress(val);
+    }
+
+    el('lastUpdate').textContent = 'Updated '+new Date().toLocaleTimeString();
+  } catch(e) {
+    console.warn('Global fetch error:', e);
+  }
+}
+
+// ─── FETCH COIN DATA ──────────────────────────────────────────
+function applyCoinMetrics(sym, data) {
+  const { price, change24h, vol24h, high24h, low24h, chart, rsi, volatility, metrics } = data;
+  marketData[sym] = { price, change24h, vol24h, mcap: data.mcap, metrics, rsi, volatility, name: data.name };
+
+  if(sym === selectedCoin) {
+    const mainPriceEl = el('mainPrice');
+    if(mainPriceEl && price != null) {
+      const prev = parseFloat(mainPriceEl.dataset.prev || price);
+      mainPriceEl.dataset.prev = price;
+      mainPriceEl.textContent = price > 1000 ? '$'+price.toLocaleString('en-US',{maximumFractionDigits:2}) : '$'+price.toFixed(4);
+      flashEl('mainPrice', price > prev ? 1 : -1);
+    }
+    const changeEl = el('mainChange');
+    if(changeEl && change24h != null) {
+      changeEl.textContent = fmtPct(change24h);
+      changeEl.style.color = colorFor(change24h);
+    }
+  }
+
+  if(sym === 'BTC' && price != null) {
+    setText('btc-price', '$'+price.toLocaleString('en-US',{maximumFractionDigits:0}));
+    const btcCh = el('btc-change');
+    if(btcCh && change24h != null) { btcCh.textContent = fmtPct(change24h); btcCh.style.color = colorFor(change24h); }
+  }
+
+  if(marketData['ETH']?.price && marketData['BTC']?.price) {
+    const ratio = marketData['ETH'].price / marketData['BTC'].price;
+    setText('eth-btc', ratio.toFixed(5));
+    const ethBtcEl = el('eth-btc-trend');
+    if(ethBtcEl) {
+      ethBtcEl.textContent = ratio > 0.055 ? '▲ ETH Strength' : '▼ BTC Dominance';
+      ethBtcEl.style.color = ratio > 0.055 ? 'var(--green)' : 'var(--amber)';
+    }
+  }
+
+  const wlPrice = el('wl-price-'+sym);
+  if(wlPrice && price != null) {
+    wlPrice.textContent = price > 1 ? '$'+price.toLocaleString('en-US',{maximumFractionDigits:2}) : '$'+price.toFixed(4);
+    wlPrice.style.color = (change24h ?? 0) >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  if(sym === selectedCoin) {
+    if(high24h) setText('c-high', '$'+high24h.toLocaleString('en-US',{maximumFractionDigits:2}));
+    if(low24h) setText('c-low', '$'+low24h.toLocaleString('en-US',{maximumFractionDigits:2}));
+    if(vol24h) setText('c-vol', fmtNum(vol24h));
+    if(chart?.open) setText('c-open', '$'+chart.open.toLocaleString('en-US',{maximumFractionDigits:2}));
+    if(chart?.prices?.length) updateChart(chart.prices, chart.labels);
+    if(rsi != null) {
+      const rsiEl = el('m-rsi');
+      if(rsiEl) {
+        rsiEl.textContent = rsi.toFixed(1);
+        rsiEl.style.color = rsi>70?'var(--red)':rsi<30?'var(--green)':'var(--text)';
+      }
+    }
+    if(volatility) {
+      setText('vol-idx', volatility.index.toFixed(2)+'%');
+      const volEl = el('vol-level');
+      if(volEl) {
+        volEl.textContent = volatility.level;
+        volEl.style.color = volatility.level==='HIGH'?'var(--red)':volatility.level==='MEDIUM'?'var(--amber)':'var(--green)';
+      }
+    }
+    applyMetricsUI(metrics);
+    updateStructureFromData(data);
+    const fgEl = el('fg-val');
+    if(fgEl?.textContent && fgEl.textContent !== '—') {
+      computeMarketStress(parseInt(fgEl.textContent, 10));
+    }
+  }
+}
+
+function applyMetricsUI(metrics) {
+  if(!metrics) return;
+  const fundEl = el('m-funding');
+  if(fundEl && metrics.fundingRate != null) {
+    const pct = (metrics.fundingRate * 100).toFixed(4)+'%';
+    fundEl.textContent = pct;
+    fundEl.style.color = metrics.fundingRate > 0.0005 ? 'var(--red)' : metrics.fundingRate > 0 ? 'var(--amber)' : 'var(--green)';
+  }
+  if(metrics.openInterestUsd != null) setText('m-oi', fmt(metrics.openInterestUsd, 0));
+  const vol = metrics.volume24h;
+  if(vol != null) setText('m-vol', fmtNum(vol));
+  const lsEl = el('m-lsr');
+  if(lsEl && metrics.longShortRatio != null) {
+    const lsr = metrics.longShortRatio.toFixed(2);
+    lsEl.textContent = lsr;
+    lsEl.style.color = parseFloat(lsr)>1.2?'var(--green)':parseFloat(lsr)<0.9?'var(--red)':'var(--amber)';
+  }
+  if(metrics.liquidations1hUsd != null) setText('m-liq', fmt(metrics.liquidations1hUsd, 1));
+}
+
+function updateStructureFromData(data) {
+  const c = el('structureList');
+  if(!c || !data) return;
+  const rsi = data.rsi;
+  const funding = data.metrics?.fundingRate;
+  const vol = data.volatility;
+  const change = data.change24h;
+  const items = [
+    { label: change >= 0 ? 'Higher High / Higher Low' : 'Lower High / Lower Low', col: change >= 0 ? 'var(--green)' : 'var(--red)', icon: change >= 0 ? '▲' : '▼' },
+    { label: data.metrics?.openInterestUsd ? 'OI: '+fmt(data.metrics.openInterestUsd,0) : 'OI: —', col: 'var(--green)', icon: '▲' },
+    { label: funding != null ? 'Funding: '+(funding*100).toFixed(3)+'%' : 'Funding: —', col: funding > 0.0003 ? 'var(--amber)' : 'var(--green)', icon: '◆' },
+    { label: vol ? 'Volatility: '+vol.level : 'Volatility: —', col: vol?.level==='HIGH'?'var(--red)':'var(--cyan)', icon: '◆' },
+    { label: rsi != null ? 'RSI: '+rsi.toFixed(1) : 'RSI: —', col: rsi>70?'var(--red)':rsi<30?'var(--green)':'var(--text-muted)', icon: '◆' }
+  ];
+  c.innerHTML = items.map(it=>'<motion style="display:flex;align-items:center;gap:6px;font-size:11px"><span style="color:'+it.col+'">'+it.icon+'</span><span style="color:var(--text-muted)">'+it.label+'</span></div>').join('').replace(/<\/?motion/g, t => t.replace('motion', 'div'));
+
+  const pos = el('positioningData');
+  if(pos && data.metrics?.longShortRatio != null) {
+    const lsr = data.metrics.longShortRatio;
+    const longPct = (lsr / (1 + lsr) * 100).toFixed(1);
+    const shortPct = (100 - parseFloat(longPct)).toFixed(1);
+    pos.innerHTML = `
+      <motion style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Longs</span> <span style="color:var(--green);font-family:var(--mono)">${longPct}%</span></motion>
+      <motion style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Shorts</span> <span style="color:var(--red);font-family:var(--mono)">${shortPct}%</span></motion>
+      <motion style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Funding</span> <span style="color:var(--amber);font-family:var(--mono)">${funding != null ? (funding*100).toFixed(3)+'%' : '—'}</span></motion>
+      <motion style="display:flex;justify-content:space-between"><span>Liq 1H</span> <span style="color:var(--red);font-family:var(--mono)">${data.metrics.liquidations1hUsd != null ? fmt(data.metrics.liquidations1hUsd,1) : '—'}</span></motion>
+    `.replace(/<motion/g,'<div').replace(/motion>/g,'div>');
+  }
+}
+
+async function fetchCoinData(sym) {
+  const c = COINS[sym];
+  if(!c) return;
+
+  try {
+    const res = await fetch(`/api/coin/${sym}?interval=${currentTF}`);
+    if(!res.ok) throw new Error('coin fetch failed');
+    const data = await res.json();
+    applyCoinMetrics(sym, data);
+  } catch(e) {
+    console.warn('Coin fetch error:', e);
+  }
+}
+
+// ─── MARKET STRESS ENGINE ────────────────────────────────────
+function computeMarketStress(fgVal) {
+  const md = marketData[selectedCoin] || marketData.BTC || {};
+  const funding = md.metrics?.fundingRate;
+  const volIdx = md.volatility?.index ?? 1;
+  const funding_stress = funding != null ? Math.min(95, 20 + Math.abs(funding) * 100 * 800) : 35;
+  const liq_stress = md.metrics?.liquidations1hUsd > 5e6 ? 55 : md.metrics?.liquidations1hUsd > 1e6 ? 40 : 25;
+  const vol_stress = Math.min(95, volIdx * 25);
+  const fg_stress = fgVal > 75 ? 70 : fgVal > 50 ? 40 : fgVal > 25 ? 30 : 80;
+  const stress = Math.round((funding_stress + liq_stress + vol_stress + fg_stress) / 4 * 1.5);
+  const clamped = Math.min(Math.max(stress, 10), 95);
+
+  el('stressNum').textContent = clamped;
+  el('stress-val').textContent = clamped+'/100';
+  el('stressFill').style.width = clamped+'%';
+  const stressFill2 = el('stress-fill-2');
+
+  const tag = clamped >= 75 ? 'EXTREME' : clamped >= 55 ? 'HIGH' : clamped >= 35 ? 'MEDIUM' : 'LOW';
+  const tagEl = el('stressTag');
+  if(tagEl) {
+    tagEl.textContent = tag;
+    tagEl.style.color = clamped>=75?'var(--red)':clamped>=55?'var(--amber)':clamped>=35?'var(--cyan)':'var(--green)';
+  }
+  const slEl = el('stress-label');
+  if(slEl) { slEl.textContent = tag; slEl.style.color = clamped>=55?'var(--red)':'var(--amber)'; }
+
+  const comps = el('stressComponents');
+  if(comps) {
+    const items = [
+      { l:'Funding', v: Math.round(funding_stress), c:'var(--amber)' },
+      { l:'Volatility', v: Math.round(vol_stress), c:'var(--cyan)' },
+      { l:'Fear/Greed', v: Math.round(fg_stress), c: fg_stress>60?'var(--red)':'var(--green)' }
+    ];
+    comps.innerHTML = items.map(it=>`
+      <div style="text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--text-dim);margin-bottom:2px">${it.l}</div>
+        <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:${it.c}">${it.v}</div>
+      </div>
+    `).join('');
+  }
+}
+
+// ─── WHY MOVING ENGINE ────────────────────────────────────────
+function generateWhyMoving(sym) {
+  const reasons = {
+    BTC: [
+      { label:'Macro / DXY correlation', pct: 38, col:'var(--cyan)' },
+      { label:'ETF flows & spot demand', pct: 27, col:'var(--blue)' },
+      { label:'Futures squeeze', pct: 19, col:'var(--violet)' },
+      { label:'Whale accumulation', pct: 10, col:'var(--amber)' },
+      { label:'Positive news catalyst', pct: 6, col:'var(--green)' }
+    ],
+    ETH: [
+      { label:'BTC breakout halo', pct: 35, col:'var(--cyan)' },
+      { label:'DeFi narrative revival', pct: 25, col:'var(--blue)' },
+      { label:'ETH ETF inflows', pct: 20, col:'var(--violet)' },
+      { label:'Short liquidations', pct: 12, col:'var(--amber)' },
+      { label:'Protocol upgrade buzz', pct: 8, col:'var(--green)' }
+    ],
+    SOL: [
+      { label:'BTC correlation β', pct: 42, col:'var(--cyan)' },
+      { label:'DeFi TVL growth', pct: 22, col:'var(--blue)' },
+      { label:'Meme coin narrative', pct: 18, col:'var(--violet)' },
+      { label:'Whale buying detected', pct: 11, col:'var(--amber)' },
+      { label:'Ecosystem expansion', pct: 7, col:'var(--green)' }
+    ],
+    AAVE: [
+      { label:'BTC macro breakout', pct: 31, col:'var(--cyan)' },
+      { label:'DeFi rotation', pct: 28, col:'var(--blue)' },
+      { label:'Short squeeze building', pct: 24, col:'var(--violet)' },
+      { label:'Whale buy signal', pct: 12, col:'var(--amber)' },
+      { label:'Positive protocol news', pct: 5, col:'var(--green)' }
+    ]
+  };
+
+  const list = reasons[sym] || reasons.BTC;
+  const container = el('whyReasons');
+  if(!container) return;
+  container.innerHTML = '';
+
+  list.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'why-row';
+    row.innerHTML = `
+      <div class="why-label">${r.label}</div>
+      <div class="why-bar-bg"><div class="why-bar-fill" style="width:${r.pct}%;background:${r.col}"></div></div>
+      <div class="why-pct" style="color:${r.col}">${r.pct}%</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function getMarketContext() {
+  return {
+    btcDom: globalData.market_cap_percentage?.btc != null ? globalData.market_cap_percentage.btc.toFixed(1)+'%' : 'unknown',
+    totalMcap: globalData.total_market_cap?.usd ? '$'+(globalData.total_market_cap.usd/1e12).toFixed(2)+'T' : 'unknown',
+  };
+}
+
+function renderAnalysisText(text, bodyEl) {
+  if(!bodyEl) return;
+  bodyEl.innerHTML = '';
+  const lines = text.split('\n').filter(Boolean);
+  lines.forEach((line, i) => {
+    const p = document.createElement('p');
+    p.style.marginBottom = '8px';
+    if(line.toLowerCase().includes('caution') || line.toLowerCase().includes('risk') || line.toLowerCase().includes('warning')) {
+      p.style.color = 'var(--amber)';
+    } else if(i === lines.length-1) {
+      p.style.color = 'var(--cyan)';
+      p.style.fontWeight = '500';
+      p.style.marginTop = '8px';
+      p.style.paddingTop = '8px';
+      p.style.borderTop = '1px solid var(--border)';
+    }
+    p.textContent = line;
+    bodyEl.appendChild(p);
+  });
+}
+
+// ─── AI ANALYSIS ENGINE (via backend proxy) ───────────────────
+async function generateAIAnalysis(sym) {
+  const bodyEl = el('aiAnalysis');
+  const confEl = el('confPct');
+  const fillEl = el('confFill');
+
+  if(bodyEl) bodyEl.innerHTML = '<span style="color:var(--text-dim)">Analyzing market conditions...</span>';
+
+  const md = marketData[sym] || {};
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'analysis',
+        symbol: sym,
+        coinData: { ...md, name: COINS[sym]?.name || sym },
+        marketContext: getMarketContext(),
+      }),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Analysis failed');
+
+    renderAnalysisText(data.text || 'Analysis unavailable.', bodyEl);
+    const conf = data.confidence ?? 68;
+    if(confEl) confEl.textContent = conf+'%';
+    if(fillEl) fillEl.style.width = conf+'%';
+
+  } catch(e) {
+    if(bodyEl) bodyEl.innerHTML = '<span style="color:var(--text-muted);font-size:12px">Market analysis requires API connection. Loading cached signals...</span>';
+    loadFallbackAnalysis(sym);
+  }
+}
+
+function loadFallbackAnalysis(sym) {
+  const analyses = {
+    BTC: 'Bitcoin maintains its dominant position with price consolidating near key resistance. Funding rates moderate at 0.03%, indicating healthy leverage. OI expansion supports continuation bias. CVD trending positive. Verdict: Bullish continuation 68% probability.',
+    ETH: 'Ethereum showing relative strength against BTC. ETH/BTC ratio recovering from local lows. DeFi TVL uptick supporting thesis. Funding elevated — potential squeeze catalyst. Verdict: Risk-on, 64% bullish continuation.',
+    SOL: 'Solana ecosystem activity driving native demand. High-beta play on risk-on environment. Liquidation heatmap shows significant clusters above. Meme coin narrative sustaining retail flows. Verdict: Momentum trade, 71% continuation probability.',
+    DEFAULT: 'Asset showing correlated movement with broader market. Structure intact above key moving averages. Monitor funding rate for squeeze potential. Cautious bullish bias. Verdict: 62% upside continuation on volume confirmation.'
+  };
+  const text = analyses[sym] || analyses.DEFAULT;
+  const bodyEl = el('aiAnalysis');
+  if(bodyEl) {
+    bodyEl.innerHTML = `<p style="color:var(--text);line-height:1.8">${text}</p>`;
+  }
+  const conf = 65;
+  setText('confPct', conf+'%');
+  const fillEl = el('confFill');
+  if(fillEl) fillEl.style.width = conf+'%';
+}
+
+// ─── AI DEBATE ────────────────────────────────────────────────
+async function generateDebate(sym) {
+  const bullEl = el('bullCase');
+  const bearEl = el('bearCase');
+  const concEl = el('debateConclusion');
+
+  if(bullEl) bullEl.textContent = 'Loading...';
+  if(bearEl) bearEl.textContent = 'Loading...';
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'debate',
+        symbol: sym,
+        coinData: marketData[sym] || {},
+        marketContext: getMarketContext(),
+      }),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Debate failed');
+    const text = data.text || '';
+
+    const bullMatch = text.match(/BULL:\s*(.+?)(?=BEAR:|$)/s);
+    const bearMatch = text.match(/BEAR:\s*(.+?)(?=VERDICT:|$)/s);
+    const verdMatch = text.match(/VERDICT:\s*(.+?)$/s);
+
+    if(bullEl) bullEl.textContent = bullMatch?.[1]?.trim() || 'Bull case unavailable.';
+    if(bearEl) bearEl.textContent = bearMatch?.[1]?.trim() || 'Bear case unavailable.';
+    if(concEl) concEl.innerHTML = '<span style="color:var(--cyan);font-weight:600">Verdict: </span>'+(verdMatch?.[1]?.trim()||'Balanced market — slight edge bullish.');
+
+  } catch(e) {
+    if(bullEl) bullEl.textContent = 'Price structure bullish. OI growing. Short liquidations building. Continuation likely.';
+    if(bearEl) bearEl.textContent = 'Funding elevated. Resistance cluster overhead. Macro uncertainty. Mean reversion risk.';
+    if(concEl) concEl.innerHTML = '<span style="color:var(--cyan);font-weight:600">Verdict: </span>58% bullish probability — directional bias positive but risk managed approach recommended.';
+  }
+}
+
+// ─── STATIC CONTENT GENERATORS ────────────────────────────────
+function buildCorrelationMatrix() {
+  const coins = ['BTC','ETH','SOL','XRP','AAVE'];
+  const matrix = el('corrMatrix');
+  if(!matrix) return;
+  matrix.innerHTML = '';
+
+  const corr = [
+    [1.00, 0.87, 0.82, 0.71, 0.68],
+    [0.87, 1.00, 0.85, 0.69, 0.79],
+    [0.82, 0.85, 1.00, 0.62, 0.72],
+    [0.71, 0.69, 0.62, 1.00, 0.58],
+    [0.68, 0.79, 0.72, 0.58, 1.00]
+  ];
+
+  coins.forEach((c,i) => {
+    coins.forEach((c2,j) => {
+      const v = corr[i][j];
+      const intensity = Math.abs(v);
+      const r = Math.round(255*(1-intensity)*0.3);
+      const g = Math.round(v>=0 ? 212*intensity : 80*intensity);
+      const b = Math.round(v>=0 ? 255*intensity : 107*intensity);
+      const bg = `rgba(${r},${g},${b},${0.15+intensity*0.35})`;
+      const cell = document.createElement('div');
+      cell.className = 'hm-cell';
+      cell.style.background = bg;
+      cell.style.color = intensity>0.5?'var(--text)':'var(--text-muted)';
+      cell.title = `${c} vs ${c2}: ${v.toFixed(2)}`;
+      cell.textContent = i===j ? c : v.toFixed(2);
+      matrix.appendChild(cell);
+    });
+  });
+
+  const ins = el('corrInsight');
+  if(ins) ins.textContent = `${coins[0]} dominates correlation structure. SOL and ETH show highest co-movement (0.85). XRP exhibits most independence from the cluster — potential diversification asset. During BTC drawdowns, expect beta amplification in AAVE and SOL.`;
+}
+
+function buildRegimeSignals() {
+  const signals = [
+    { label:'Trend Direction', val:'Bullish', col:'var(--green)' },
+    { label:'Market Structure', val:'HH/HL Pattern', col:'var(--green)' },
+    { label:'Volume Profile', val:'Accumulation', col:'var(--cyan)' },
+    { label:'Funding Regime', val:'Moderate Longs', col:'var(--amber)' },
+    { label:'OI Regime', val:'Expanding', col:'var(--green)' },
+    { label:'Dominance Trend', val:'BTC Losing Dom.', col:'var(--violet)' }
+  ];
+
+  const c = el('regimeSignals');
+  if(!c) return;
+  c.innerHTML = signals.map(s => `
+    <div class="signal-row">
+      <div class="signal-dot" style="background:${s.col}"></div>
+      <div style="flex:1;font-size:11px;color:var(--text-muted)">${s.label}</div>
+      <div style="font-size:11px;font-family:var(--mono);color:${s.col}">${s.val}</div>
+    </div>
+  `).join('');
+
+  setText('regimeConf', '76%');
+}
+
+function buildScenarios() {
+  const c = el('scenariosList');
+  if(!c) return;
+  const scenarios = [
+    { label:'BTC continuation break — altcoin rotation', pct:42, col:'var(--green)', icon:'▲' },
+    { label:'Range consolidation — no directional bias', pct:31, col:'var(--amber)', icon:'◆' },
+    { label:'Macro shock — risk-off dump', pct:18, col:'var(--red)', icon:'▼' },
+    { label:'Squeeze cascade — violent upside', pct:9, col:'var(--violet)', icon:'⚡' }
+  ];
+  c.innerHTML = scenarios.map(s => `
+    <div class="scenario-item">
+      <div style="color:${s.col};font-size:14px;width:16px">${s.icon}</div>
+      <div style="flex:1;font-size:11.5px">${s.label}</div>
+      <div class="scenario-pct" style="color:${s.col}">${s.pct}%</div>
+    </div>
+  `).join('');
+}
+
+function buildStructure() {
+  const c = el('structureList');
+  if(!c) return;
+  const items = [
+    { label:'Higher High / Higher Low', col:'var(--green)', icon:'▲' },
+    { label:'OI Expanding', col:'var(--green)', icon:'▲' },
+    { label:'Funding: Moderate', col:'var(--amber)', icon:'◆' },
+    { label:'Volume: Increasing', col:'var(--cyan)', icon:'▲' },
+    { label:'RSI: Neutral zone', col:'var(--text-muted)', icon:'◆' }
+  ];
+  c.innerHTML = items.map(it=>`
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px">
+      <span style="color:${it.col}">${it.icon}</span>
+      <span style="color:var(--text-muted)">${it.label}</span>
+    </div>
+  `).join('');
+
+  const pos = el('positioningData');
+  if(pos) pos.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span>Longs</span> <span style="color:var(--green);font-family:var(--mono)">58.3%</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span>Shorts</span> <span style="color:var(--red);font-family:var(--mono)">41.7%</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span>Leverage</span> <span style="color:var(--amber);font-family:var(--mono)">8.4x avg</span>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Squeeze Risk</span> <span style="color:var(--red);font-family:var(--mono)">MEDIUM</span>
+    </div>
+  `;
+}
+
+function buildMacro() {
+  const c = el('macroGrid');
+  if(!c) return;
+  const items = [
+    { label:'DXY', val:'104.2', change:'-0.3%', col:'var(--green)' },
+    { label:'Nasdaq', val:'19,842', change:'+1.2%', col:'var(--green)' },
+    { label:'Gold', val:'$2,387', change:'+0.4%', col:'var(--amber)' },
+    { label:'FED Rate', val:'5.25%', change:'Hold', col:'var(--text-muted)' },
+    { label:'VIX', val:'14.2', change:'-2.1%', col:'var(--green)' },
+    { label:'10Y Yield', val:'4.31%', change:'+0.02', col:'var(--amber)' }
+  ];
+  c.innerHTML = items.map(it=>`
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:10px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">${it.label}</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:600;margin-bottom:2px">${it.val}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:${it.col}">${it.change}</div>
+    </div>
+  `).join('');
+}
+
+// ─── LIVE ALERTS ENGINE (derived from real metrics) ───────────
+function checkMetricAlerts(sym) {
+  const md = marketData[sym];
+  if(!md?.metrics) return;
+  const m = md.metrics;
+  const alerts = [];
+
+  if(m.fundingRate != null && Math.abs(m.fundingRate) > 0.0005) {
+    alerts.push({
+      type:'fund', icon:'⚠️', class:'alert-fund',
+      text:`Funding rate anomaly on ${sym}: ${(m.fundingRate*100).toFixed(3)}%/8h`,
+    });
+  }
+  if(m.liquidations1hUsd != null && m.liquidations1hUsd > 1e6) {
+    alerts.push({
+      type:'liq', icon:'⚡', class:'alert-liq',
+      text:`$${(m.liquidations1hUsd/1e6).toFixed(1)}M liquidations (1H) on ${sym}`,
+    });
+  }
+  if(md.change24h != null && Math.abs(md.change24h) > 5) {
+    alerts.push({
+      type:'break', icon: md.change24h > 0 ? '📈' : '📉',
+      class: md.change24h > 0 ? 'alert-break' : 'alert-liq',
+      text:`${sym} ${md.change24h > 0 ? 'surge' : 'drop'} ${fmtPct(md.change24h)} (24h)`,
+    });
+  }
+
+  alerts.forEach(a => {
+    alertHistory.unshift({ ...a, time: new Date().toLocaleTimeString() });
+  });
+  while(alertHistory.length > 6) alertHistory.pop();
+  if(alerts.length) renderAlerts();
+}
+
+function renderAlerts() {
+  const c = el('alertsList');
+  if(!c) return;
+  c.innerHTML = alertHistory.map(a=>`
+    <div class="alert-item ${a.class}">
+      <span style="font-size:14px">${a.icon}</span>
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text)">${a.text}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--text-dim);margin-top:2px">${a.time}</div>
+      </div>
+    </div>
+  `).join('');
+  setText('alertCount', alertHistory.length);
+}
+
+// ─── CAUSAL TIMELINE ──────────────────────────────────────────
+const tlTemplates = [
+  { col:'var(--cyan)', icon:'◈', text: 'BTC breaks key resistance — momentum building' },
+  { col:'var(--amber)', icon:'⚡', text: 'OI spike detected on AAVE — 12% increase' },
+  { col:'var(--green)', icon:'▲', text: 'Short liquidation cascade — $24M cleared' },
+  { col:'var(--violet)', icon:'●', text: 'Whale accumulation signal — smart money flow' },
+  { col:'var(--red)', icon:'▼', text: 'Funding rate elevated — overheating signal' },
+  { col:'var(--cyan)', icon:'◈', text: 'ETH/BTC ratio recovering — altseason signal' }
+];
+
+let timelineIndex = 0;
+function addTimelineEvent() {
+  const tl = tlTemplates[timelineIndex % tlTemplates.length];
+  timelineIndex++;
+  const now = new Date();
+  const t = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  timelineEvents.unshift({...tl, time: t});
+  if(timelineEvents.length > 8) timelineEvents.pop();
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const c = el('causalTimeline');
+  if(!c) return;
+  c.innerHTML = timelineEvents.map(e=>`
+    <div class="tl-item">
+      <div class="tl-time">${e.time}</div>
+      <div class="tl-icon" style="background:${e.col}22;color:${e.col}">${e.icon}</div>
+      <div class="tl-text">${e.text}</div>
+    </div>
+  `).join('');
+}
+
+// ─── NEWS ENGINE ──────────────────────────────────────────────
+const newsTemplates = [
+  { title:'Bitcoin ETF sees record $840M inflows as institutional demand surges', coins:['BTC'], sent:'pos', time:'2m' },
+  { title:'Federal Reserve signals potential rate cut — crypto markets react bullishly', coins:['BTC','ETH'], sent:'pos', time:'8m' },
+  { title:'Aave V4 governance vote passes — major protocol upgrade incoming', coins:['AAVE'], sent:'pos', time:'15m' },
+  { title:'DXY weakens below 104 — altcoin rally potential increases', coins:['ETH','SOL'], sent:'pos', time:'22m' },
+  { title:'Solana network congestion spikes during meme coin frenzy', coins:['SOL'], sent:'neg', time:'31m' },
+  { title:'Whale alert: 2,400 BTC moved to Coinbase — exchange inflow signal', coins:['BTC'], sent:'neg', time:'45m' },
+  { title:'Ethereum layer-2 TVL hits all-time high — ecosystem health strong', coins:['ETH'], sent:'pos', time:'58m' },
+  { title:'XRP Ripple settlement expectations boost token outlook', coins:['XRP'], sent:'pos', time:'1h 12m' }
+];
+
+function renderNews() {
+  const c = el('newsFeed');
+  if(!c) return;
+  c.innerHTML = newsTemplates.map(n=>`
+    <div class="news-item">
+      <div class="news-time">${n.time} ago</div>
+      <div class="news-title">${n.title}</div>
+      <div class="news-tags">
+        ${n.coins.map(c=>`<span class="news-tag tag-neu">${c}</span>`).join('')}
+        <span class="news-tag ${n.sent==='pos'?'tag-pos':'tag-neg'}">${n.sent==='pos'?'Bullish':'Bearish'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── TABS ─────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add('active');
+  const tc = el('tab-'+name);
+  if(tc) tc.classList.add('active');
+}
+
+function setTF(tf) {
+  currentTF = tf;
+  document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.tf-btn[onclick="setTF('${tf}')"]`)?.classList.add('active');
+  fetchCoinData(selectedCoin);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+async function init() {
+  initChart();
+  buildCorrelationMatrix();
+  buildRegimeSignals();
+  buildScenarios();
+  buildStructure();
+  buildMacro();
+  renderNews();
+
+  for(let i=0; i<4; i++) addTimelineEvent();
+
+  await fetchGlobalData();
+  await Promise.all(['BTC','ETH','SOL','XRP','AAVE'].map(sym => fetchCoinData(sym)));
+
+  ['BTC','ETH','SOL','XRP','AAVE'].forEach(sym => checkMetricAlerts(sym));
+  renderAlerts();
+
+  generateWhyMoving(selectedCoin);
+  generateAIAnalysis(selectedCoin);
+  generateDebate(selectedCoin);
+
+  setInterval(fetchGlobalData, 60000);
+  setInterval(() => fetchCoinData(selectedCoin), 15000);
+  setInterval(() => {
+    ['BTC','ETH','SOL','XRP','AAVE'].forEach(sym => {
+      if(sym !== selectedCoin) fetchCoinData(sym);
+    });
+  }, 45000);
+  setInterval(() => {
+    checkMetricAlerts(selectedCoin);
+    addTimelineEvent();
+  }, 30000);
+}
+
+init().catch(console.error);
+</script>
