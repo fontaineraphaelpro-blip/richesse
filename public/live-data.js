@@ -264,6 +264,20 @@ selectCoin = function (sym) {
   fetchTimeline(sym);
 };
 
+function setAIProviderLabel(provider, model) {
+  const hdr = document.querySelector('#tab-analysis .ai-header');
+  if (!hdr) return;
+  let badge = hdr.querySelector('.ai-provider-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'ai-provider-badge';
+    badge.style.cssText = 'margin-left:8px;font-size:9px;font-family:var(--mono);color:var(--text-dim);text-transform:uppercase';
+    hdr.appendChild(badge);
+  }
+  const labels = { groq: 'Groq · Llama', anthropic: 'Claude', computed: 'Rule-based' };
+  badge.textContent = (labels[provider] || provider) + (model && provider !== 'computed' ? ' · ' + model.split('-').slice(0, 2).join('-') : '');
+}
+
 generateAIAnalysis = async function (sym) {
   const bodyEl = el('aiAnalysis');
   if (bodyEl) bodyEl.textContent = 'Analyzing from live data...';
@@ -280,13 +294,14 @@ generateAIAnalysis = async function (sym) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
+    setAIProviderLabel(data.provider, data.model);
     renderAnalysisText(data.text, bodyEl);
     if (data.confidence) {
       setText('confPct', data.confidence + '%');
       if (el('confFill')) el('confFill').style.width = data.confidence + '%';
     }
   } catch (e) {
-    if (bodyEl) bodyEl.textContent = 'AI unavailable — configure ANTHROPIC_API_KEY on Railway.';
+    if (bodyEl) bodyEl.textContent = 'AI unavailable — add GROQ_API_KEY (free) or ANTHROPIC_API_KEY on Railway.';
   }
 };
 
@@ -307,7 +322,7 @@ generateDebate = async function (sym) {
     if (bearEl) bearEl.textContent = t.match(/BEAR:\s*(.+?)(?=VERDICT:|$)/s)?.[1]?.trim() || '—';
     if (concEl) concEl.innerHTML = '<span style="color:var(--cyan);font-weight:600">Verdict: </span>' + (t.match(/VERDICT:\s*(.+?)$/s)?.[1]?.trim() || '—');
   } catch (e) {
-    if (bullEl) bullEl.textContent = 'Configure ANTHROPIC_API_KEY.';
+    if (bullEl) bullEl.textContent = 'Add GROQ_API_KEY or ANTHROPIC_API_KEY on server.';
     if (bearEl) bearEl.textContent = '—';
     if (concEl) concEl.textContent = 'Verdict: —';
   }
@@ -315,6 +330,10 @@ generateDebate = async function (sym) {
 
 init = async function () {
   initChart();
+  try {
+    const ai = await fetch('/api/ai/status').then((r) => r.json());
+    setAIProviderLabel(ai.provider, ai.model);
+  } catch (_) {}
   await fetchGlobalData();
   await Promise.all(['BTC', 'ETH', 'SOL', 'XRP', 'AAVE'].map((s) => fetchCoinData(s)));
   await Promise.all([fetchCorrelation(), fetchMacro(), fetchNews()]);

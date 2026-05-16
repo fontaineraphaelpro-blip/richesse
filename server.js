@@ -9,7 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const CACHE_TTL_MS = 60_000;
 const CACHE_LONG_MS = 300_000;
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const WATCHLIST = ['BTC', 'ETH', 'SOL', 'XRP', 'AAVE'];
 
 const COIN_MAP = {
@@ -682,6 +683,52 @@ function parseConfidence(text) {
   return nums.length ? nums[nums.length - 1] : null;
 }
 
+function resolveAIProvider() {
+  const mode = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+  if (mode === 'groq' && process.env.GROQ_API_KEY) return 'groq';
+  if (mode === 'anthropic' && process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (mode === 'computed') return 'computed';
+  if (process.env.GROQ_API_KEY) return 'groq';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  return 'computed';
+}
+
+function getAIStatus() {
+  const active = resolveAIProvider();
+  return {
+    provider: active,
+    model: active === 'groq' ? GROQ_MODEL : active === 'anthropic' ? ANTHROPIC_MODEL : 'rule-based',
+    available: {
+      groq: Boolean(process.env.GROQ_API_KEY),
+      anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+      computed: true,
+    },
+  };
+}
+
+async function callGroq(userPrompt) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY is not configured');
+
+  const { data } = await axios.post(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      model: GROQ_MODEL,
+      messages: [{ role: 'user', content: userPrompt }],
+      max_tokens: 1000,
+      temperature: 0.3,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 60_000,
+    }
+  );
+  return data.choices?.[0]?.message?.content || '';
+}
+
 async function callAnthropic(userPrompt) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured');
@@ -705,37 +752,115 @@ async function callAnthropic(userPrompt) {
   return data.content?.map((b) => b.text || '').join('') || '';
 }
 
+function buildAnalysisPrompt(type, sym, cd, mc) {
+  const price = cd.price != null ? (cd.price > 1000 ? `$${cd.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : `$${Number(cd.price).toFixed(4)}`) : 'unknown';
+  const change = cd.change24h != null ? `${cd.change24h >= 0 ? '+' : ''}${Number(cd.change24h).toFixed(2)}%` : 'unknown';
+  const dataBlock = JSON.stringify({ coin: cd, market: { btcDom: mc.global?.market_cap_percentage?.btc, fearGreed: mc.fearGreed, btc: mc.btc } }, null, 0);
+  const rules = 'CRITICAL: Use ONLY the numeric data provided below. Do not invent prices, percentages, or events. If a metric is missing, say "data unavailable".';
+
+  if (type === 'debate') {
+    return `${rules}\n\nAI debate for ${sym}.\nLive JSON: ${dataBlock}\n\nFormat EXACTLY:\nBULL: [2-3 sentences using only provided data]\nBEAR: [2-3 sentences using only provided data]\nVERDICT: [one sentence with % probability]`;
+  }
+  if (type === 'why') {
+    return `${rules}\n\nExplain why ${sym} is moving using ONLY this JSON: ${dataBlock}\n\nReturn 4-5 drivers as lines: "Driver | estimated weight%". Weights must sum to ~100. No markdown.`;
+  }
+  return `${rules}\n\nInstitutional analysis for ${sym} (${cd.name || sym}).\nPrice: ${price}, 24h: ${change}\nFull JSON: ${dataBlock}\n\n3-4 sentences: price action, key driver from data, risk, verdict with confidence %. Plain text, no bullets.`;
+}
+
+function buildComputedAnalysis(sym, cd, mc) {
+  const change = cd.change24h ?? 0;
+  const rsi = cd.rsi ?? 50;
+  const vol = cd.volatility?.level ?? 'n/a';
+  const funding = cd.metrics?.fundingRate;
+  const lsr = cd.metrics?.longShortRatio;
+  const liq = cd.metrics?.liquidations1hUsd;
+  const fg = mc.fearGreed?.value ?? 50;
+  const price = cd.price != null ? `$${Number(cd.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : 'n/a';
+
+  const bias = change > 1.5 ? 'bullish' : change < -1.5 ? 'bearish' : 'neutral';
+  const conf = Math.min(85, Math.max(45, Math.round(50 + Math.abs(change) * 2 + (rsi > 40 && rsi < 65 ? 8 : 0))));
+
+  const lines = [
+    `${sym} trades at ${price} (${change >= 0 ? '+' : ''}${change.toFixed(2)}% 24h). RSI ${rsi.toFixed(1)}, volatility ${vol}.`,
+    `Derivatives: funding ${funding != null ? (funding * 100).toFixed(4) + '%' : 'n/a'}, long/short ${lsr != null ? lsr.toFixed(2) : 'n/a'}, 1h liquidations ${liq != null ? '$' + (liq / 1e6).toFixed(2) + 'M' : 'n/a'}.`,
+    `Macro: Fear & Greed ${fg}, BTC dominance ${mc.global?.market_cap_percentage?.btc?.toFixed(1) ?? 'n/a'}%.`,
+    `Risk: ${Math.abs(funding || 0) > 0.0005 ? 'elevated funding — squeeze risk' : 'funding contained'}. Watch BTC correlation.`,
+    `Verdict: ${bias} bias from live metrics — ${conf}% confidence (rule-based, no LLM).`,
+  ];
+  return { text: lines.join('\n'), confidence: conf };
+}
+
+function buildComputedDebate(sym, cd, mc) {
+  const change = cd.change24h ?? 0;
+  const rsi = cd.rsi ?? 50;
+  const funding = cd.metrics?.fundingRate ?? 0;
+  const fg = mc.fearGreed?.value ?? 50;
+  const bullPct = Math.min(72, Math.max(28, Math.round(50 + change * 2 + (rsi < 70 ? 5 : 0) + (fg > 45 ? 5 : 0))));
+  const bearPct = 100 - bullPct;
+
+  return {
+    text: [
+      `BULL: ${sym} ${change >= 0 ? 'positive' : 'muted'} 24h (${change.toFixed(2)}%) with RSI ${rsi.toFixed(1)}. Funding ${(funding * 100).toFixed(3)}% supports ${funding >= 0 ? 'long' : 'short'} positioning if trend holds.`,
+      `BEAR: Fear & Greed at ${fg} caps risk appetite. ${Math.abs(funding) > 0.0004 ? 'Funding elevated — mean reversion risk.' : 'Low volatility may precede expansion.'}`,
+      `VERDICT: ${bullPct}% ${bullPct >= 50 ? 'bullish' : 'bearish'} probability from live Binance/CoinGecko metrics (rule-based).`,
+    ].join('\n'),
+    confidence: bullPct,
+  };
+}
+
+async function callLLM(userPrompt, type, sym, cd, mc) {
+  const primary = resolveAIProvider();
+
+  if (primary === 'computed') {
+    const result = type === 'debate' ? buildComputedDebate(sym, cd, mc) : buildComputedAnalysis(sym, cd, mc);
+    return { ...result, provider: 'computed' };
+  }
+
+  const providers = [];
+  if (process.env.GROQ_API_KEY) providers.push('groq');
+  if (process.env.ANTHROPIC_API_KEY) providers.push('anthropic');
+  const order = primary === 'groq' ? ['groq', 'anthropic'] : ['anthropic', 'groq'];
+  const tryOrder = [...new Set([primary, ...order])].filter((p) => providers.includes(p));
+
+  for (const p of tryOrder) {
+    try {
+      const text = p === 'groq' ? await callGroq(userPrompt) : await callAnthropic(userPrompt);
+      return { text, confidence: parseConfidence(text), provider: p };
+    } catch (err) {
+      console.warn(`AI provider ${p} failed:`, err.response?.data?.error?.message || err.message);
+    }
+  }
+
+  const result = type === 'debate' ? buildComputedDebate(sym, cd, mc) : buildComputedAnalysis(sym, cd, mc);
+  return { ...result, provider: 'computed' };
+}
+
+app.get('/api/ai/status', (req, res) => {
+  res.json(getAIStatus());
+});
+
 app.post('/api/analyze', async (req, res) => {
   try {
     const { type = 'analysis', symbol, coinData, marketContext, prompt } = req.body || {};
     if (!symbol && !prompt) return res.status(400).json({ error: 'symbol or prompt is required' });
 
-    let userPrompt = prompt;
-    if (!userPrompt) {
-      const sym = String(symbol).toUpperCase();
-      const cd = coinData || (await fetchCoinSnapshot(sym)) || {};
-      const mc = marketContext || (await getMarketPayload());
-      const price = cd.price != null ? (cd.price > 1000 ? `$${cd.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : `$${Number(cd.price).toFixed(4)}`) : 'unknown';
-      const change = cd.change24h != null ? `${cd.change24h >= 0 ? '+' : ''}${Number(cd.change24h).toFixed(2)}%` : 'unknown';
-      const dataBlock = JSON.stringify({ coin: cd, market: { btcDom: mc.global?.market_cap_percentage?.btc, fearGreed: mc.fearGreed, btc: mc.btc } }, null, 0);
+    const sym = String(symbol || 'BTC').toUpperCase();
+    const cd = coinData || (await fetchCoinSnapshot(sym)) || {};
+    const mc = marketContext || (await getMarketPayload());
 
-      const rules = 'CRITICAL: Use ONLY the numeric data provided below. Do not invent prices, percentages, or events. If a metric is missing, say "data unavailable".';
+    const userPrompt = prompt || buildAnalysisPrompt(type, sym, cd, mc);
+    const result = await callLLM(userPrompt, type, sym, cd, mc);
 
-      if (type === 'debate') {
-        userPrompt = `${rules}\n\nAI debate for ${sym}.\nLive JSON: ${dataBlock}\n\nFormat EXACTLY:\nBULL: [2-3 sentences using only provided data]\nBEAR: [2-3 sentences using only provided data]\nVERDICT: [one sentence with % probability]`;
-      } else if (type === 'why') {
-        userPrompt = `${rules}\n\nExplain why ${sym} is moving using ONLY this JSON: ${dataBlock}\n\nReturn 4-5 drivers as lines: "Driver | estimated weight%". Weights must sum to ~100. No markdown.`;
-      } else {
-        userPrompt = `${rules}\n\nInstitutional analysis for ${sym} (${cd.name || sym}).\nPrice: ${price}, 24h: ${change}\nFull JSON: ${dataBlock}\n\n3-4 sentences: price action, key driver from data, risk, verdict with confidence %. Plain text, no bullets.`;
-      }
-    }
-
-    const text = await callAnthropic(userPrompt);
-    res.json({ text, confidence: parseConfidence(text), type });
+    res.json({
+      text: result.text,
+      confidence: result.confidence ?? parseConfidence(result.text),
+      type,
+      provider: result.provider,
+      model: result.provider === 'groq' ? GROQ_MODEL : result.provider === 'anthropic' ? ANTHROPIC_MODEL : 'rule-based',
+    });
   } catch (err) {
     console.error('POST /api/analyze:', err.response?.data || err.message);
-    const status = err.message?.includes('ANTHROPIC_API_KEY') ? 503 : 502;
-    res.status(status).json({ error: err.response?.data?.error?.message || err.message || 'Analysis failed' });
+    res.status(502).json({ error: err.response?.data?.error?.message || err.message || 'Analysis failed' });
   }
 });
 
@@ -745,5 +870,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+  const ai = getAIStatus();
   console.log(`Crypto Context Radar listening on port ${PORT}`);
+  console.log(`AI: ${ai.provider} (${ai.model})`);
 });
